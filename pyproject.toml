@@ -1,0 +1,17 @@
+[project]
+name = "offkai-manager"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "audioop-lts>=0.2.2",
+    "py-cord>=2.6.1",
+    "python-dotenv>=1.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.5",  # uv run ruff check --fix
+    "ty>=0.0.1a26",  # uv run ty check
+]
