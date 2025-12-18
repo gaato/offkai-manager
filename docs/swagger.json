@@ -1,0 +1,3897 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NocoDB v3",
+    "version": "3.0",
+    "description": "NocoDB API Documentation"
+  },
+  "servers": [
+    {
+      "url": "https://noco.gaato.net"
+    },
+    {
+      "url": "{customUrl}",
+      "variables": {
+        "customUrl": {
+          "default": "https://noco.gaato.net",
+          "description": "Provide custom nocodb app base url"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/api/v3/data/p5539hv9f4qzq7j/mnhp5wiu0o6dfcq/records": {
+      "get": {
+        "summary": "event list",
+        "operationId": "event-db-table-row-list",
+        "description": "List all rows from **event** table. Fields to be included in the response can be refined through query parameters. Additionally, filtering, sorting, and pagination can be applied to the results.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "nestedPage",
+            "description": "Controls pagination of nested (linked) records in the API response by specifying the page number. By default, the first page is returned; increment the page number to retrieve subsequent pages.\n\nExample: nestedPage=`2` will return the second page of nested data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vwokamja42d972ql"
+              ]
+            },
+            "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwokamja42d972ql - Default view",
+            "name": "viewId",
+            "in": "query",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/eventResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "event create",
+        "description": "Insert a new row in table by providing a key value pair object where key refers to the column alias. All the required fields should be included with payload excluding `autoincrement` and column with default value.",
+        "operationId": "event-create",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/eventResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "event"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/eventRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/eventRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "event update",
+        "operationId": "event-update",
+        "description": "Partial update row in table by providing a key value pair object where key refers to the column alias. You need to only include columns which you want to update.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/eventResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "event"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/eventUpdateRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/eventUpdateRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "event delete",
+        "operationId": "event-delete",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "event"
+        ],
+        "description": "Delete a row by using the **primary key** column value.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/eventIdRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/eventIdRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mnhp5wiu0o6dfcq/records/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        },
+        {
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "in": "query",
+          "name": "fields",
+          "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+        }
+      ],
+      "get": {
+        "summary": "event read",
+        "description": "Read a row data by using the **primary key** column value.",
+        "operationId": "event-read",
+        "tags": [
+          "event"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/eventResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mnhp5wiu0o6dfcq/count": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "vwokamja42d972ql"
+            ]
+          },
+          "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwokamja42d972ql - Default view",
+          "name": "viewId",
+          "in": "query",
+          "required": false
+        }
+      ],
+      "get": {
+        "summary": "event count",
+        "operationId": "event-count",
+        "description": "Get rows count of a table by applying optional filters.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "examples": {
+                  "Example 1": {
+                    "value": {
+                      "count": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mnhp5wiu0o6dfcq/links/{linkFieldId}/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "cq4gdyqypdqqeed",
+              "cnfurne9c82gyst"
+            ]
+          },
+          "name": "linkFieldId",
+          "in": "path",
+          "required": true,
+          "description": "**Links Field Identifier** corresponding to the relation field **Links** or **LinkToAnotherRecord** established between tables.\n\nLink Columns:\n* cq4gdyqypdqqeed - panels\n* cnfurne9c82gyst - registrations"
+        },
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        }
+      ],
+      "get": {
+        "summary": "Link Records list",
+        "operationId": "event-nested-list",
+        "description": "This API endpoint allows you to retrieve list of linked records for a specific `Link field` and `Record ID`. The response is an array of objects containing Primary Key and its corresponding display value.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/eventResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      },
+      "post": {
+        "summary": "Link Records",
+        "operationId": "event-nested-link",
+        "responses": {
+          "200": {
+            "description": "Records successfully linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the linking operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "event"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be linked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Link a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Link multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to link records to a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for linking purposes. Note that any existing links, if present, will be unaffected during this operation.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Unlink Records",
+        "operationId": "event-nested-unlink",
+        "responses": {
+          "200": {
+            "description": "Records successfully unlinked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the unlink operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "event"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be unlinked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Unlink a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Unlink multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to unlink records from a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for unlinking purposes. Note that, \n- duplicated record-ids will be ignored.\n- non-existent record-ids will be ignored.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/m3xxabd0f8esojw/records": {
+      "get": {
+        "summary": "panel list",
+        "operationId": "panel-db-table-row-list",
+        "description": "List all rows from **panel** table. Fields to be included in the response can be refined through query parameters. Additionally, filtering, sorting, and pagination can be applied to the results.",
+        "tags": [
+          "panel"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "nestedPage",
+            "description": "Controls pagination of nested (linked) records in the API response by specifying the page number. By default, the first page is returned; increment the page number to retrieve subsequent pages.\n\nExample: nestedPage=`2` will return the second page of nested data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vwm7ixgipvwrnipu"
+              ]
+            },
+            "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwm7ixgipvwrnipu - Default view",
+            "name": "viewId",
+            "in": "query",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/panelResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "panel create",
+        "description": "Insert a new row in table by providing a key value pair object where key refers to the column alias. All the required fields should be included with payload excluding `autoincrement` and column with default value.",
+        "operationId": "panel-create",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/panelResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "panel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/panelRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/panelRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "panel update",
+        "operationId": "panel-update",
+        "description": "Partial update row in table by providing a key value pair object where key refers to the column alias. You need to only include columns which you want to update.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/panelResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "panel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/panelUpdateRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/panelUpdateRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "panel delete",
+        "operationId": "panel-delete",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "panel"
+        ],
+        "description": "Delete a row by using the **primary key** column value.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/panelIdRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/panelIdRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/m3xxabd0f8esojw/records/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        },
+        {
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "in": "query",
+          "name": "fields",
+          "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+        }
+      ],
+      "get": {
+        "summary": "panel read",
+        "description": "Read a row data by using the **primary key** column value.",
+        "operationId": "panel-read",
+        "tags": [
+          "panel"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/panelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/m3xxabd0f8esojw/count": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "vwm7ixgipvwrnipu"
+            ]
+          },
+          "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwm7ixgipvwrnipu - Default view",
+          "name": "viewId",
+          "in": "query",
+          "required": false
+        }
+      ],
+      "get": {
+        "summary": "panel count",
+        "operationId": "panel-count",
+        "description": "Get rows count of a table by applying optional filters.",
+        "tags": [
+          "panel"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "examples": {
+                  "Example 1": {
+                    "value": {
+                      "count": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/m3xxabd0f8esojw/links/{linkFieldId}/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "cf3hfcfdu8glzs8",
+              "cdonpwvv8hzcr35"
+            ]
+          },
+          "name": "linkFieldId",
+          "in": "path",
+          "required": true,
+          "description": "**Links Field Identifier** corresponding to the relation field **Links** or **LinkToAnotherRecord** established between tables.\n\nLink Columns:\n* cf3hfcfdu8glzs8 - event\n* cdonpwvv8hzcr35 - registrations"
+        },
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        }
+      ],
+      "get": {
+        "summary": "Link Records list",
+        "operationId": "panel-nested-list",
+        "description": "This API endpoint allows you to retrieve list of linked records for a specific `Link field` and `Record ID`. The response is an array of objects containing Primary Key and its corresponding display value.",
+        "tags": [
+          "panel"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/panelResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      },
+      "post": {
+        "summary": "Link Records",
+        "operationId": "panel-nested-link",
+        "responses": {
+          "200": {
+            "description": "Records successfully linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the linking operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "panel"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be linked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Link a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Link multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to link records to a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for linking purposes. Note that any existing links, if present, will be unaffected during this operation.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Unlink Records",
+        "operationId": "panel-nested-unlink",
+        "responses": {
+          "200": {
+            "description": "Records successfully unlinked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the unlink operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "panel"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be unlinked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Unlink a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Unlink multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to unlink records from a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for unlinking purposes. Note that, \n- duplicated record-ids will be ignored.\n- non-existent record-ids will be ignored.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mfua4r5icujt108/records": {
+      "get": {
+        "summary": "registration list",
+        "operationId": "registration-db-table-row-list",
+        "description": "List all rows from **registration** table. Fields to be included in the response can be refined through query parameters. Additionally, filtering, sorting, and pagination can be applied to the results.",
+        "tags": [
+          "registration"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "nestedPage",
+            "description": "Controls pagination of nested (linked) records in the API response by specifying the page number. By default, the first page is returned; increment the page number to retrieve subsequent pages.\n\nExample: nestedPage=`2` will return the second page of nested data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vwagc24vmum8cacz",
+                "vw5iyb63jyna6b0a"
+              ]
+            },
+            "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwagc24vmum8cacz - Default view\n* vw5iyb63jyna6b0a - 参加者名簿",
+            "name": "viewId",
+            "in": "query",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/registrationResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "registration create",
+        "description": "Insert a new row in table by providing a key value pair object where key refers to the column alias. All the required fields should be included with payload excluding `autoincrement` and column with default value.",
+        "operationId": "registration-create",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/registrationResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "registration"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/registrationRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/registrationRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "registration update",
+        "operationId": "registration-update",
+        "description": "Partial update row in table by providing a key value pair object where key refers to the column alias. You need to only include columns which you want to update.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/registrationResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "registration"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/registrationUpdateRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/registrationUpdateRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "registration delete",
+        "operationId": "registration-delete",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "registration"
+        ],
+        "description": "Delete a row by using the **primary key** column value.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/registrationIdRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/registrationIdRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mfua4r5icujt108/records/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        },
+        {
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "in": "query",
+          "name": "fields",
+          "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+        }
+      ],
+      "get": {
+        "summary": "registration read",
+        "description": "Read a row data by using the **primary key** column value.",
+        "operationId": "registration-read",
+        "tags": [
+          "registration"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/registrationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mfua4r5icujt108/count": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "vwagc24vmum8cacz",
+              "vw5iyb63jyna6b0a"
+            ]
+          },
+          "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwagc24vmum8cacz - Default view\n* vw5iyb63jyna6b0a - 参加者名簿",
+          "name": "viewId",
+          "in": "query",
+          "required": false
+        }
+      ],
+      "get": {
+        "summary": "registration count",
+        "operationId": "registration-count",
+        "description": "Get rows count of a table by applying optional filters.",
+        "tags": [
+          "registration"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "examples": {
+                  "Example 1": {
+                    "value": {
+                      "count": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mfua4r5icujt108/links/{linkFieldId}/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "cz2s4qo8plmk3ho",
+              "cnpanf36kgeq2jm",
+              "cu10sjkqveihooa"
+            ]
+          },
+          "name": "linkFieldId",
+          "in": "path",
+          "required": true,
+          "description": "**Links Field Identifier** corresponding to the relation field **Links** or **LinkToAnotherRecord** established between tables.\n\nLink Columns:\n* cz2s4qo8plmk3ho - panel\n* cnpanf36kgeq2jm - member\n* cu10sjkqveihooa - event"
+        },
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        }
+      ],
+      "get": {
+        "summary": "Link Records list",
+        "operationId": "registration-nested-list",
+        "description": "This API endpoint allows you to retrieve list of linked records for a specific `Link field` and `Record ID`. The response is an array of objects containing Primary Key and its corresponding display value.",
+        "tags": [
+          "registration"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/registrationResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      },
+      "post": {
+        "summary": "Link Records",
+        "operationId": "registration-nested-link",
+        "responses": {
+          "200": {
+            "description": "Records successfully linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the linking operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "registration"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be linked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Link a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Link multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to link records to a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for linking purposes. Note that any existing links, if present, will be unaffected during this operation.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Unlink Records",
+        "operationId": "registration-nested-unlink",
+        "responses": {
+          "200": {
+            "description": "Records successfully unlinked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the unlink operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "registration"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be unlinked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Unlink a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Unlink multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to unlink records from a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for unlinking purposes. Note that, \n- duplicated record-ids will be ignored.\n- non-existent record-ids will be ignored.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mt91osuydj2jya2/records": {
+      "get": {
+        "summary": "member list",
+        "operationId": "member-db-table-row-list",
+        "description": "List all rows from **member** table. Fields to be included in the response can be refined through query parameters. Additionally, filtering, sorting, and pagination can be applied to the results.",
+        "tags": [
+          "member"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "nestedPage",
+            "description": "Controls pagination of nested (linked) records in the API response by specifying the page number. By default, the first page is returned; increment the page number to retrieve subsequent pages.\n\nExample: nestedPage=`2` will return the second page of nested data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vwtmbp1vstnc381l"
+              ]
+            },
+            "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwtmbp1vstnc381l - Default view",
+            "name": "viewId",
+            "in": "query",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/memberResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "member create",
+        "description": "Insert a new row in table by providing a key value pair object where key refers to the column alias. All the required fields should be included with payload excluding `autoincrement` and column with default value.",
+        "operationId": "member-create",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/memberResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "member"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/memberRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/memberRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "member update",
+        "operationId": "member-update",
+        "description": "Partial update row in table by providing a key value pair object where key refers to the column alias. You need to only include columns which you want to update.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/memberResponse"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "member"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/memberUpdateRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/memberUpdateRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "member delete",
+        "operationId": "member-delete",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "member"
+        ],
+        "description": "Delete a row by using the **primary key** column value.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/memberIdRequest"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/memberIdRequest"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mt91osuydj2jya2/records/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        },
+        {
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "in": "query",
+          "name": "fields",
+          "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+        }
+      ],
+      "get": {
+        "summary": "member read",
+        "description": "Read a row data by using the **primary key** column value.",
+        "operationId": "member-read",
+        "tags": [
+          "member"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/memberResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mt91osuydj2jya2/count": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "vwtmbp1vstnc381l"
+            ]
+          },
+          "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwtmbp1vstnc381l - Default view",
+          "name": "viewId",
+          "in": "query",
+          "required": false
+        }
+      ],
+      "get": {
+        "summary": "member count",
+        "operationId": "member-count",
+        "description": "Get rows count of a table by applying optional filters.",
+        "tags": [
+          "member"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "examples": {
+                  "Example 1": {
+                    "value": {
+                      "count": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/v3/data/p5539hv9f4qzq7j/mt91osuydj2jya2/links/{linkFieldId}/{recordId}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "c6elf5yvj50hudi"
+            ]
+          },
+          "name": "linkFieldId",
+          "in": "path",
+          "required": true,
+          "description": "**Links Field Identifier** corresponding to the relation field **Links** or **LinkToAnotherRecord** established between tables.\n\nLink Columns:\n* c6elf5yvj50hudi - registrations"
+        },
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "recordId",
+          "in": "path",
+          "required": true,
+          "example": 1,
+          "description": "Primary key of the record you want to read."
+        }
+      ],
+      "get": {
+        "summary": "Link Records list",
+        "operationId": "member-nested-list",
+        "description": "This API endpoint allows you to retrieve list of linked records for a specific `Link field` and `Record ID`. The response is an array of objects containing Primary Key and its corresponding display value.",
+        "tags": [
+          "member"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "fields",
+            "description": "Specify fields to include in the API response. \n\nExample: fields=`field1` will include only field1 in the response."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sort",
+            "description": "Allows you to specify the fields by which you want to sort the records in your API response. Each sort object must have a 'field' property specifying the field name and a 'direction' property with value 'asc' or 'desc'. If **viewId** query parameter is also included, the sort included here will take precedence over any sorting configuration defined in the view. \n\nExample: sort=`{\"direction\":\"asc\", \"field\":\"field1\"}` will sort records in ascending order based on field1."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "where",
+            "description": "Enables defining conditions to filter records in the API response. Multiple conditions can be combined using the logical operators 'and' or 'or'. Each condition consists of three components: a field name, a comparison operator, and a value.\n\nExample: where=`(field1,eq,value1)~and(field2,eq,value2)` will filter records where field1 equals value1 AND field2 equals value2.\n\nIf **viewId** parameter is also included, these filters are applied on top of the view’s predefined filter configuration. \n\n**NOTE**: Maintain the specified format; do not include spaces between components of a condition. For further information on this please see [the documentation](https://nocodb.com/docs/product-docs/developer-resources/rest-apis#v3-where-query-parameter)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "page",
+            "description": "Controls pagination of the API response by specifying the page number to retrieve. By default, the first page is returned. Increment the page number to retrieve subsequent pages.\n\nExample: page=`2` will return the second page of data records in the dataset."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query",
+            "name": "pageSize",
+            "description": "Sets a limit on the number of records returned in the API response. By default, all available records are returned, but this parameter allows you to control the quantity.\n\nExample: pageSize=`100` will limit the response to 100 records per page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/memberResponse"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for next page"
+                    },
+                    "prev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Pagination token for previous page"
+                    },
+                    "nestedNext": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for next page"
+                    },
+                    "nestedPrev": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Nested pagination token for previous page"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      },
+      "post": {
+        "summary": "Link Records",
+        "operationId": "member-nested-link",
+        "responses": {
+          "200": {
+            "description": "Records successfully linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the linking operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "member"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be linked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Link a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Link multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to link records to a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for linking purposes. Note that any existing links, if present, will be unaffected during this operation.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Unlink Records",
+        "operationId": "member-nested-unlink",
+        "responses": {
+          "200": {
+            "description": "Records successfully unlinked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indicates whether the unlink operation was successful"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                },
+                "examples": {
+                  "Success Response": {
+                    "value": {
+                      "success": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "tags": [
+          "member"
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Record objects to be unlinked, each containing an id field",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Unique identifier for the record"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Unique identifier for the record"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "Single Record": {
+                  "summary": "Unlink a single record",
+                  "value": {
+                    "id": "22"
+                  }
+                },
+                "Multiple Records": {
+                  "summary": "Unlink multiple records",
+                  "value": [
+                    {
+                      "id": "43"
+                    },
+                    {
+                      "id": "44"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "This API endpoint allows you to unlink records from a specific `Link field` and `Record ID`. The request payload is an array of record-ids from the adjacent table for unlinking purposes. Note that, \n- duplicated record-ids will be ignored.\n- non-existent record-ids will be ignored.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "name": "recordId",
+            "in": "path",
+            "required": true,
+            "example": 1,
+            "description": "Primary key of the record you want to read."
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Attachment": {
+        "title": "Attachment",
+        "type": "object",
+        "properties": {
+          "mimetype": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          }
+        }
+      },
+      "eventResponse": {
+        "title": "event Response",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value)"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data (excluding primary key)",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "capacity": {
+                "type": "number"
+              },
+              "participant_role_id": {
+                "type": "string"
+              },
+              "pending_role_id": {
+                "type": "string"
+              },
+              "guild_id": {
+                "type": "string"
+              },
+              "panels": {
+                "type": "integer"
+              },
+              "log_channel_id": {
+                "type": "string"
+              },
+              "registrations": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "eventRequest": {
+        "title": "event Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be created/updated",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "capacity": {
+                "type": "number"
+              },
+              "participant_role_id": {
+                "type": "string"
+              },
+              "pending_role_id": {
+                "type": "string"
+              },
+              "guild_id": {
+                "type": "string"
+              },
+              "log_channel_id": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "fields"
+        ]
+      },
+      "eventUpdateRequest": {
+        "title": "event Update Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be updated"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be updated",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "capacity": {
+                "type": "number"
+              },
+              "participant_role_id": {
+                "type": "string"
+              },
+              "pending_role_id": {
+                "type": "string"
+              },
+              "guild_id": {
+                "type": "string"
+              },
+              "log_channel_id": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "fields"
+        ]
+      },
+      "eventIdRequest": {
+        "title": "event Id Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be deleted"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "panelResponse": {
+        "title": "panel Response",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value)"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data (excluding primary key)",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message_id": {
+                "type": "string"
+              },
+              "channel_id": {
+                "type": "string"
+              },
+              "event": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "registrations": {
+                "type": "integer"
+              },
+              "embed": {
+                "type": "object"
+              },
+              "language": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "panelRequest": {
+        "title": "panel Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be created/updated",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message_id": {
+                "type": "string"
+              },
+              "channel_id": {
+                "type": "string"
+              },
+              "event": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "embed": {
+                "type": "object"
+              },
+              "language": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "fields"
+        ]
+      },
+      "panelUpdateRequest": {
+        "title": "panel Update Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be updated"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be updated",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message_id": {
+                "type": "string"
+              },
+              "channel_id": {
+                "type": "string"
+              },
+              "event": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "embed": {
+                "type": "object"
+              },
+              "language": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "fields"
+        ]
+      },
+      "panelIdRequest": {
+        "title": "panel Id Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be deleted"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "registrationResponse": {
+        "title": "registration Response",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value)"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data (excluding primary key)",
+            "properties": {
+              "display_name": {
+                "type": "string"
+              },
+              "twitter_id": {
+                "type": "string"
+              },
+              "requests": {
+                "type": "string"
+              },
+              "panel": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "is_confirmed": {
+                "type": "boolean"
+              },
+              "has_paid": {
+                "type": "boolean"
+              },
+              "member": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "tickets": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              },
+              "event": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "residence": {
+                "type": "string"
+              },
+              "language (from panel)": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "registrationRequest": {
+        "title": "registration Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be created/updated",
+            "properties": {
+              "display_name": {
+                "type": "string"
+              },
+              "twitter_id": {
+                "type": "string"
+              },
+              "requests": {
+                "type": "string"
+              },
+              "panel": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "is_confirmed": {
+                "type": "boolean"
+              },
+              "has_paid": {
+                "type": "boolean"
+              },
+              "member": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "notes": {
+                "type": "string"
+              },
+              "event": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "residence": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "fields"
+        ]
+      },
+      "registrationUpdateRequest": {
+        "title": "registration Update Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be updated"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be updated",
+            "properties": {
+              "display_name": {
+                "type": "string"
+              },
+              "twitter_id": {
+                "type": "string"
+              },
+              "requests": {
+                "type": "string"
+              },
+              "panel": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "is_confirmed": {
+                "type": "boolean"
+              },
+              "has_paid": {
+                "type": "boolean"
+              },
+              "member": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "notes": {
+                "type": "string"
+              },
+              "event": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Record identifier for linking"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "residence": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "fields"
+        ]
+      },
+      "registrationIdRequest": {
+        "title": "registration Id Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be deleted"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "memberResponse": {
+        "title": "member Response",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value)"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data (excluding primary key)",
+            "properties": {
+              "display_name": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              },
+              "guild_id": {
+                "type": "string"
+              },
+              "tickets": {
+                "type": "string"
+              },
+              "registrations": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "memberRequest": {
+        "title": "member Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be created/updated",
+            "properties": {
+              "display_name": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              },
+              "guild_id": {
+                "type": "string"
+              },
+              "tickets": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "fields"
+        ]
+      },
+      "memberUpdateRequest": {
+        "title": "member Update Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be updated"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Record fields data to be updated",
+            "properties": {
+              "display_name": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              },
+              "guild_id": {
+                "type": "string"
+              },
+              "tickets": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "fields"
+        ]
+      },
+      "memberIdRequest": {
+        "title": "member Id Request",
+        "type": "object",
+        "description": "",
+        "x-internal": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Record identifier (primary key value) for the record to be deleted"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "xcToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "xc-token",
+        "description": "API token"
+      },
+      "bearerAuth": {
+        "name": "Authorization",
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Bearer token authentication. Use 'Authorization: Bearer <token>' header format. This is an alternative to the xc-token header."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "BadRequest",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "msg": {
+                  "type": "string",
+                  "example": "BadRequest [Error]: <ERROR MESSAGE>"
+                }
+              },
+              "required": [
+                "msg"
+              ]
+            },
+            "examples": {
+              "Example 1": {
+                "value": {
+                  "msg": "BadRequest [Error]: <ERROR MESSAGE>"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "xcToken": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ]
+}

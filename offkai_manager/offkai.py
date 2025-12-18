@@ -1,0 +1,2063 @@
+from __future__ import annotations
+
+import json
+import logging
+import secrets
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Iterable, Optional
+
+import discord
+from discord import IntegrationType, InteractionContextType, Option, OptionChoice
+from discord.ext import commands
+
+from offkai_manager.nocodb_repo import OffkaiNocoDbRepo
+
+log = logging.getLogger(__name__)
+
+
+# py-cord / discord.py compatibility (stubs sometimes differ)
+_TextInput = getattr(discord.ui, "TextInput", getattr(discord.ui, "InputText"))
+_TextStyle = getattr(discord, "TextStyle", None)
+if _TextStyle is not None:
+    _PARAGRAPH_STYLE = _TextStyle.paragraph
+else:
+    _PARAGRAPH_STYLE = discord.InputTextStyle.long
+
+STATUS_CONFIRMED = "confirmed"
+STATUS_WAITLIST = "waitlist"
+STATUS_CANCELLED = "cancelled"
+
+
+def _parse_role_id(value: Optional[str]) -> Optional[int]:
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _ensure_manage_guild(ctx: discord.ApplicationContext) -> bool:
+    guild = ctx.guild
+    member = ctx.author
+    if guild is None or not isinstance(member, discord.Member):
+        return False
+    # 「サーバー管理者のみ」= Administrator 権限(またはサーバーオーナー)に限定。
+    return bool(member.id == guild.owner_id or member.guild_permissions.administrator)
+
+
+_PANEL_CONTENT_CACHE: Optional[dict[str, Any]] = None
+
+
+def _load_panel_content() -> dict[str, Any]:
+    """Load the registration panel text from a JSON file.
+
+    We intentionally avoid taking long multi-line text via slash command arguments.
+    """
+    global _PANEL_CONTENT_CACHE
+    if _PANEL_CONTENT_CACHE is not None:
+        return _PANEL_CONTENT_CACHE
+
+    path = Path(__file__).resolve().parent.parent / "data" / "offkai_panel_content.json"
+    raw = path.read_text(encoding="utf-8")
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"panel content JSON must be an object: {path}")
+    _PANEL_CONTENT_CACHE = parsed
+    return _PANEL_CONTENT_CACHE
+
+
+def _build_registration_panel_embeds_for(
+    *,
+    lang: str,
+    override_title: Optional[str] = None,
+) -> list[discord.Embed]:
+    """Build embeds for a single language.
+
+    - lang: 'ja' or 'en'
+    """
+    content = _load_panel_content()
+    block = content.get(lang)
+    if not isinstance(block, dict):
+        raise RuntimeError(f"panel content missing language block: lang={lang!r}")
+
+    # New format only: store embed payloads directly (compatible with discord.Embed.from_dict()).
+    # One message, multiple embeds (split by section).
+    embeds_payload = block.get("embeds")
+    if not isinstance(embeds_payload, list) or not embeds_payload:
+        raise RuntimeError(
+            f"panel content missing 'embeds' payload list for lang={lang!r} (data/offkai_panel_content.json)"
+        )
+
+    embeds: list[discord.Embed] = []
+    for idx, payload in enumerate(embeds_payload):
+        if not isinstance(payload, dict):
+            raise RuntimeError(
+                f"panel content embeds[{idx}] must be an object for lang={lang!r} (data/offkai_panel_content.json)"
+            )
+        try:
+            e = discord.Embed.from_dict(payload)
+        except Exception as ex:
+            log.exception(
+                "Failed to build Embed from panel content JSON (lang=%s, idx=%s)",
+                lang,
+                idx,
+            )
+            raise RuntimeError(
+                f"invalid embed payload for lang={lang!r} embeds[{idx}] (data/offkai_panel_content.json)"
+            ) from ex
+        embeds.append(e)
+
+    if override_title and embeds:
+        embeds[0].title = override_title
+    return embeds
+
+
+async def _fetch_event(con: Any, event_id: int):
+    raise RuntimeError("_fetch_event is PostgreSQL-only and should not be used")
+
+
+def _nc_fields(record: Optional[dict[str, Any]]) -> dict[str, Any]:
+    if not record:
+        return {}
+    fields = record.get("fields")
+    return fields if isinstance(fields, dict) else {}
+
+
+def _nc_int(value: Any, *, default: int | None = None) -> int | None:
+    if value is None:
+        return default
+    try:
+        # NocoDB sometimes returns numbers as float/decimal.
+        return int(value)
+    except Exception:
+        try:
+            return int(str(value))
+        except Exception:
+            return default
+
+
+def _locale_code(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _is_ja_locale(value: Any) -> bool:
+    return _locale_code(value).lower().startswith("ja")
+
+
+def _msg(is_ja: bool, ja: str, en: str) -> str:
+    return ja if is_ja else en
+
+
+def _interaction_ids(
+    interaction: discord.Interaction,
+) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]:
+    """Return (interaction_id, guild_id, channel_id, message_id, user_id)."""
+    interaction_id = getattr(interaction, "id", None)
+    guild_id = interaction.guild.id if interaction.guild else None
+    channel_id = getattr(getattr(interaction, "channel", None), "id", None)
+    message_id = getattr(getattr(interaction, "message", None), "id", None)
+    user_id = interaction.user.id if interaction.user else None
+    return interaction_id, guild_id, channel_id, message_id, user_id
+
+
+def _custom_id_from_interaction(interaction: discord.Interaction) -> str:
+    # component interactions: interaction.data may contain custom_id
+    data = getattr(interaction, "data", None)
+    if isinstance(data, dict):
+        cid = data.get("custom_id")
+        if isinstance(cid, str):
+            return cid
+    return ""
+
+
+async def _apply_roles_to_member(
+    member: discord.Member,
+    *,
+    confirmed_role_id: Optional[int],
+    waitlist_role_id: Optional[int],
+    status: str,
+) -> None:
+    guild = member.guild
+    confirmed_role = (
+        guild.get_role(int(confirmed_role_id)) if confirmed_role_id else None
+    )
+    waitlist_role = guild.get_role(int(waitlist_role_id)) if waitlist_role_id else None
+
+    try:
+        to_remove = [
+            r for r in (confirmed_role, waitlist_role) if r and r in member.roles
+        ]
+        if to_remove:
+            await member.remove_roles(*to_remove, reason="Sync registration status")
+
+        if status == STATUS_CONFIRMED and confirmed_role:
+            await member.add_roles(confirmed_role, reason="Registration confirmed")
+        elif status == STATUS_WAITLIST and waitlist_role:
+            await member.add_roles(waitlist_role, reason="Registration waitlist")
+    except discord.HTTPException:
+        log.exception("Failed to sync roles")
+
+
+async def _apply_roles(
+    interaction: discord.Interaction,
+    *,
+    confirmed_role_id: Optional[int],
+    waitlist_role_id: Optional[int],
+    status: str,
+) -> None:
+    guild = interaction.guild
+    if guild is None:
+        return
+
+    user = interaction.user
+    if user is None:
+        return
+
+    try:
+        if isinstance(user, discord.Member):
+            member = user
+        else:
+            member = await guild.fetch_member(user.id)
+    except discord.HTTPException:
+        log.exception("Failed to fetch member for role sync")
+        return
+
+    await _apply_roles_to_member(
+        member,
+        confirmed_role_id=confirmed_role_id,
+        waitlist_role_id=waitlist_role_id,
+        status=status,
+    )
+
+
+async def _respond_ephemeral(interaction: discord.Interaction, content: str) -> None:
+    if interaction.response.is_done():
+        await interaction.followup.send(content, ephemeral=True)
+    else:
+        await interaction.response.send_message(content, ephemeral=True)
+
+
+class RegistrationModal(discord.ui.Modal):
+    def __init__(
+        self,
+        *,
+        view: "RegistrationView",
+        locale_code: Optional[str],
+    ) -> None:
+        is_ja = bool(locale_code and locale_code.startswith("ja"))
+        super().__init__(title=("参加登録" if is_ja else "Registration"))
+        self._view = view
+        self._locale_code = locale_code
+
+        self.twitter = _TextInput(
+            label=("X (Twitter) ID" if is_ja else "X handle"),
+            placeholder=("例：@tanigox" if is_ja else "e.g. @tanigox"),
+            required=True,
+            max_length=64,
+        )
+
+        self.residence = _TextInput(
+            label=("居住地" if is_ja else "Residence"),
+            placeholder=("例：日本" if is_ja else "e.g. Japan"),
+            required=True,
+            max_length=64,
+        )
+        self.requests = _TextInput(
+            label=("質問・要望" if is_ja else "Requests"),
+            placeholder=(
+                "例：豚肉が食べられません" if is_ja else "e.g. I don't eat pork."
+            ),
+            required=False,
+            style=_PARAGRAPH_STYLE,
+            max_length=400,
+        )
+        self.add_item(self.twitter)
+        self.add_item(self.residence)
+        self.add_item(self.requests)
+
+    async def _submit_impl(self, interaction: discord.Interaction) -> None:
+        """Handle modal submission.
+
+        py-cord has historically differed on whether `on_submit` or `callback` is used.
+        We funnel both into this method to be safe.
+        """
+        guild_id = interaction.guild.id if interaction.guild else None
+        user_id = interaction.user.id if interaction.user else None
+        log.info(
+            "RegistrationModal.submit received guild_id=%s user_id=%s event_id=%s panel_id=%s",
+            guild_id,
+            user_id,
+            getattr(self._view.panel, "event_id", None),
+            getattr(self._view.panel, "panel_id", None),
+        )
+        try:
+            await self._view.handle_registration_submit(
+                interaction,
+                twitter=self.twitter.value,
+                residence=self.residence.value,
+                requests=self.requests.value,
+                locale_code=self._locale_code,
+            )
+        except Exception as e:
+            # py-cordの既定ログだけだと拾えないケースがあるので、確実にログへ。
+            await self.on_error(e, interaction)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self._submit_impl(interaction)
+
+    async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+        # Some py-cord versions use callback() for Modals.
+        await self._submit_impl(interaction)
+
+    async def on_error(
+        self,
+        error: Exception,
+        interaction: discord.Interaction,
+    ) -> None:
+        err_id = secrets.token_hex(4)
+        guild_id = interaction.guild.id if interaction.guild else None
+        user_id = interaction.user.id if interaction.user else None
+        event_id = getattr(self._view.panel, "event_id", None)
+        panel_id = getattr(self._view.panel, "panel_id", None)
+
+        log.error(
+            "RegistrationModal failed error_id=%s guild_id=%s user_id=%s event_id=%s panel_id=%s",
+            err_id,
+            guild_id,
+            user_id,
+            event_id,
+            panel_id,
+            exc_info=error,
+        )
+
+        # 可能ならユーザーにもエラーIDを返して、運営がログと突き合わせられるようにする。
+        is_ja = _is_ja_locale(getattr(interaction, "locale", None))
+        msg = _msg(
+            is_ja,
+            f"登録処理でエラーが発生しました。運営に連絡してください (error_id={err_id})",
+            f"Registration failed. Please contact an organizer. (error_id={err_id})",
+        )
+        try:
+            await _respond_ephemeral(interaction, msg)
+        except Exception:
+            # 既に応答済み/ネットワークエラー等で返信できない場合でも、ログは残っている。
+            pass
+
+
+@dataclass(frozen=True)
+class PanelConfig:
+    panel_id: int
+    event_id: int
+    custom_id_prefix: str
+    lang: str
+
+
+def _normalize_lang(value: Optional[str]) -> str:
+    v = (value or "").strip().lower()
+    return "ja" if v.startswith("ja") else "en" if v.startswith("en") else "ja"
+
+
+def _registration_button_label(lang: str) -> str:
+    # Keep labels short; Discord button label limit is 80 chars.
+    return "同意して参加登録" if _normalize_lang(lang) == "ja" else "Agree & Register"
+
+
+def _registration_custom_id_prefix_for_panel(panel_id: int) -> str:
+    """Deterministic custom_id prefix.
+
+    This allows us to reconstruct component custom_id values after a restart
+    without storing random tokens in NocoDB.
+    """
+
+    # Discord custom_id limit is 100 chars.
+    return f"offkai:panel:{int(panel_id)}"
+
+
+class RegistrationView(discord.ui.View):
+    def __init__(
+        self,
+        *,
+        repo: OffkaiNocoDbRepo,
+        panel: PanelConfig,
+        button_label_register: str,
+    ) -> None:
+        super().__init__(timeout=None)
+        self.repo = repo
+        self.panel = panel
+
+        register = discord.ui.Button(
+            label=button_label_register,
+            style=discord.ButtonStyle.primary,
+            custom_id=f"{panel.custom_id_prefix}:register",
+        )
+        register.callback = self._on_register  # type: ignore[assignment]
+
+        self.add_item(register)
+
+    async def _on_register(self, interaction: discord.Interaction) -> None:
+        interaction_id, guild_id, channel_id, message_id, user_id = _interaction_ids(
+            interaction
+        )
+        log.info(
+            "register_click interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s event_id=%s panel_id=%s custom_id=%s locale=%s",
+            interaction_id,
+            guild_id,
+            channel_id,
+            message_id,
+            user_id,
+            getattr(self.panel, "event_id", None),
+            getattr(self.panel, "panel_id", None),
+            _custom_id_from_interaction(interaction),
+            _locale_code(getattr(interaction, "locale", None)),
+        )
+
+        # モーダルの言語は「パネルの言語」に固定する。
+        locale_code = _normalize_lang(getattr(self.panel, "lang", "ja"))
+        is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
+
+        user = interaction.user
+        if interaction.guild is None or user is None:
+            await _respond_ephemeral(
+                interaction,
+                _msg(
+                    is_ja_client,
+                    "サーバー内でのみ利用できます。",
+                    "This can only be used in a server.",
+                ),
+            )
+            return
+
+        try:
+            # NocoDB: resolve member record and check existing registration for this event.
+            member_rec = await self.repo.get_or_create_member(
+                guild_id=interaction.guild.id,
+                user_id=user.id,
+                display_name=(
+                    user.display_name
+                    if isinstance(user, discord.Member)
+                    else str(user.id)
+                ),
+            )
+            member_id = _nc_int(member_rec.get("id"))
+            if member_id is None:
+                log.warning(
+                    "register_click failed to resolve member_id guild_id=%s user_id=%s event_id=%s panel_id=%s",
+                    guild_id,
+                    user_id,
+                    getattr(self.panel, "event_id", None),
+                    getattr(self.panel, "panel_id", None),
+                )
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        "内部エラー: member_id を取得できませんでした。",
+                        "Internal error: failed to resolve member_id.",
+                    ),
+                )
+                return
+
+            existing = await self.repo.find_registration_for_event(
+                event_id=self.panel.event_id,
+                member_id=member_id,
+            )
+            if existing:
+                existing_id = _nc_int(existing.get("id"))
+                log.info(
+                    "register_click already_registered guild_id=%s user_id=%s member_id=%s event_id=%s panel_id=%s registration_id=%s",
+                    guild_id,
+                    user_id,
+                    member_id,
+                    getattr(self.panel, "event_id", None),
+                    getattr(self.panel, "panel_id", None),
+                    existing_id,
+                )
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        "すでに登録済みです。変更・キャンセルは幹事に連絡してください。",
+                        "You are already registered. Please contact an organizer for changes/cancellation.",
+                    ),
+                )
+                return
+
+            await interaction.response.send_modal(
+                RegistrationModal(view=self, locale_code=locale_code),
+            )
+            log.info(
+                "register_click modal_shown guild_id=%s user_id=%s member_id=%s event_id=%s panel_id=%s",
+                guild_id,
+                user_id,
+                member_id,
+                getattr(self.panel, "event_id", None),
+                getattr(self.panel, "panel_id", None),
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "Register button failed error_id=%s guild_id=%s user_id=%s event_id=%s panel_id=%s",
+                err_id,
+                guild_id,
+                user_id,
+                getattr(self.panel, "event_id", None),
+                getattr(self.panel, "panel_id", None),
+            )
+            msg = _msg(
+                is_ja_client,
+                f"登録画面を開けませんでした。運営に連絡してください (error_id={err_id})",
+                f"Failed to open registration form. Please contact an organizer. (error_id={err_id})",
+            )
+            try:
+                await _respond_ephemeral(interaction, msg)
+            except Exception:
+                pass
+
+    async def handle_registration_submit(
+        self,
+        interaction: discord.Interaction,
+        *,
+        twitter: str,
+        residence: str,
+        requests: str,
+        locale_code: Optional[str],
+    ) -> None:
+        err_id = secrets.token_hex(4)
+        step = "start"
+
+        interaction_id, guild_id, channel_id, message_id, user_id = _interaction_ids(
+            interaction
+        )
+        log.info(
+            "registration_submit start error_id=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s event_id=%s panel_id=%s locale=%s",
+            err_id,
+            interaction_id,
+            guild_id,
+            channel_id,
+            message_id,
+            user_id,
+            getattr(self.panel, "event_id", None),
+            getattr(self.panel, "panel_id", None),
+            _locale_code(getattr(interaction, "locale", None)),
+        )
+
+        try:
+            is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
+            if interaction.guild is None:
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ利用できます。",
+                        "This can only be used in a server.",
+                    ),
+                )
+                return
+
+            user = interaction.user
+            if user is None:
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        "ユーザー情報を取得できませんでした。",
+                        "Failed to resolve your user information.",
+                    ),
+                )
+                return
+
+            # 3秒制限回避のため、できるだけ早くACKする。
+            if not interaction.response.is_done():
+                step = "defer"
+                await interaction.response.defer(ephemeral=True)
+
+            step = "validate"
+
+            twitter_value = (twitter or "").strip() or None
+            residence_value = (residence or "").strip() or None
+            requests_value = (requests or "").strip() or None
+
+            if not twitter_value:
+                await interaction.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "X (Twitter) ID は必須です。",
+                        "X handle is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            if not residence_value:
+                await interaction.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "居住地は必須です。",
+                        "Residence is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            # Load event
+            step = "get_event"
+            ev = await self.repo.get_event(self.panel.event_id)
+            if not ev:
+                await interaction.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "イベント設定が見つかりません。",
+                        "Event configuration was not found.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            evf = _nc_fields(ev)
+            capacity = _nc_int(evf.get("capacity"), default=0) or 0
+
+            log.info(
+                "registration_submit event_loaded error_id=%s event_id=%s capacity=%s",
+                err_id,
+                getattr(self.panel, "event_id", None),
+                capacity,
+            )
+
+            # Resolve member + existing registration
+            step = "resolve_member"
+            display_name: str
+            if isinstance(user, discord.Member):
+                display_name = user.display_name
+            else:
+                m = await interaction.guild.fetch_member(user.id)
+                display_name = m.display_name
+
+            member_rec = await self.repo.get_or_create_member(
+                guild_id=interaction.guild.id,
+                user_id=user.id,
+                display_name=display_name,
+            )
+            member_id = _nc_int(member_rec.get("id"))
+            if member_id is None:
+                await interaction.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "内部エラー: member_id を取得できませんでした。",
+                        "Internal error: failed to resolve member_id.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            log.info(
+                "registration_submit member_resolved error_id=%s guild_id=%s user_id=%s member_id=%s",
+                err_id,
+                guild_id,
+                user_id,
+                member_id,
+            )
+
+            step = "check_existing"
+            existing = await self.repo.find_registration_for_event(
+                event_id=self.panel.event_id,
+                member_id=member_id,
+            )
+
+            if existing:
+                await interaction.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "すでに登録済みです。変更・キャンセルは幹事に連絡してください。",
+                        "You are already registered. Please contact an organizer for changes/cancellation.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            step = "count_confirmed"
+            confirmed_count = await self.repo.count_confirmed_for_event(
+                event_id=self.panel.event_id
+            )
+            if capacity <= 0:
+                new_is_confirmed = True
+            else:
+                new_is_confirmed = int(confirmed_count) < int(capacity)
+
+            log.info(
+                "registration_submit capacity_decision error_id=%s event_id=%s member_id=%s confirmed_count=%s capacity=%s is_confirmed=%s",
+                err_id,
+                getattr(self.panel, "event_id", None),
+                member_id,
+                int(confirmed_count),
+                int(capacity),
+                bool(new_is_confirmed),
+            )
+
+            step = "create_registration"
+            created_registration_id = await self.repo.create_registration(
+                event_id=self.panel.event_id,
+                panel_id=self.panel.panel_id,
+                member_id=member_id,
+                display_name=display_name,
+                twitter_id=twitter_value,
+                residence=residence_value,
+                requests=requests_value,
+                is_confirmed=bool(new_is_confirmed),
+            )
+
+            log.info(
+                "registration_submit created error_id=%s registration_id=%s event_id=%s panel_id=%s member_id=%s is_confirmed=%s",
+                err_id,
+                int(created_registration_id),
+                getattr(self.panel, "event_id", None),
+                getattr(self.panel, "panel_id", None),
+                member_id,
+                bool(new_is_confirmed),
+            )
+
+            # Race safety: if lookup filtering is unreliable or multiple submissions happen,
+            # ensure there is only one registration per (event, member).
+            try:
+                step = "dedupe"
+                regs = await self.repo.list_registrations_for_event_member(
+                    event_id=self.panel.event_id,
+                    member_id=member_id,
+                    limit=50,
+                )
+                ids: list[int] = []
+                for r in regs:
+                    rid = _nc_int(r.get("id"))
+                    if rid is not None:
+                        ids.append(int(rid))
+                if len(ids) >= 2:
+                    keep_id = min(ids)
+                    delete_ids = [x for x in ids if x != keep_id]
+
+                    log.warning(
+                        "registration_submit duplicate_detected error_id=%s event_id=%s member_id=%s ids=%s keep_id=%s delete_ids=%s",
+                        err_id,
+                        getattr(self.panel, "event_id", None),
+                        member_id,
+                        ids,
+                        keep_id,
+                        delete_ids,
+                    )
+
+                    for did in delete_ids:
+                        try:
+                            await self.repo.delete_registration(registration_id=did)
+                        except Exception:
+                            log.exception(
+                                "Failed to delete duplicate registration id=%s event_id=%s member_id=%s",
+                                did,
+                                self.panel.event_id,
+                                member_id,
+                            )
+
+                    # If an older registration exists, prefer it and treat this submission as a duplicate.
+                    if int(keep_id) != int(created_registration_id):
+                        log.info(
+                            "registration_submit treated_as_duplicate error_id=%s created_id=%s keep_id=%s event_id=%s member_id=%s",
+                            err_id,
+                            int(created_registration_id),
+                            int(keep_id),
+                            getattr(self.panel, "event_id", None),
+                            member_id,
+                        )
+                        await interaction.followup.send(
+                            _msg(
+                                is_ja_client,
+                                "すでに登録済みです。変更・キャンセルは幹事に連絡してください。",
+                                "You are already registered. Please contact an organizer for changes/cancellation.",
+                            ),
+                            ephemeral=True,
+                        )
+                        return
+            except Exception:
+                # Best-effort only; don't block the user flow.
+                log.exception(
+                    "Failed to dedupe registrations event_id=%s member_id=%s",
+                    self.panel.event_id,
+                    member_id,
+                )
+
+            # Apply roles based on confirmed/pending
+            step = "apply_roles"
+            participant_role_id = evf.get("participant_role_id")
+            pending_role_id = evf.get("pending_role_id")
+            status = STATUS_CONFIRMED if new_is_confirmed else STATUS_WAITLIST
+            await _apply_roles(
+                interaction,
+                confirmed_role_id=_parse_role_id(
+                    str(participant_role_id) if participant_role_id else None
+                ),
+                waitlist_role_id=_parse_role_id(
+                    str(pending_role_id) if pending_role_id else None
+                ),
+                status=status,
+            )
+
+            log.info(
+                "registration_submit roles_applied error_id=%s guild_id=%s user_id=%s event_id=%s member_id=%s status=%s participant_role_id=%s pending_role_id=%s",
+                err_id,
+                guild_id,
+                user_id,
+                getattr(self.panel, "event_id", None),
+                member_id,
+                status,
+                str(participant_role_id or ""),
+                str(pending_role_id or ""),
+            )
+
+            # Best-effort audit log to event.log_channel_id
+            log_channel_id = _parse_role_id(
+                str(evf.get("log_channel_id")) if evf.get("log_channel_id") else None
+            )
+            if interaction.guild and log_channel_id:
+                ch = interaction.guild.get_channel(int(log_channel_id))
+                if isinstance(ch, discord.TextChannel):
+                    try:
+                        await ch.send(
+                            f"registration: event_id={self.panel.event_id} panel_id={self.panel.panel_id} user_id={user.id} confirmed={new_is_confirmed} twitter={twitter_value or ''}"
+                        )
+                    except discord.HTTPException:
+                        log.warning(
+                            "registration_submit failed to send audit log to channel guild_id=%s channel_id=%s",
+                            interaction.guild.id,
+                            int(log_channel_id),
+                        )
+
+            msg = (
+                "参加確定しました / Registered"
+                if new_is_confirmed
+                else "ウェイトリストに入りました / You are on the waitlist"
+            )
+            if not participant_role_id and not pending_role_id:
+                msg += "\n※イベントのロールが未設定のため、ロール付与は行われません。"
+            await interaction.followup.send(msg, ephemeral=True)
+
+            log.info(
+                "registration_submit success error_id=%s guild_id=%s user_id=%s event_id=%s panel_id=%s member_id=%s registration_id=%s is_confirmed=%s",
+                err_id,
+                guild_id,
+                user_id,
+                getattr(self.panel, "event_id", None),
+                getattr(self.panel, "panel_id", None),
+                member_id,
+                int(created_registration_id),
+                bool(new_is_confirmed),
+            )
+
+        except Exception:
+            log.exception(
+                "registration_submit failed error_id=%s step=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s event_id=%s panel_id=%s",
+                err_id,
+                step,
+                interaction_id,
+                guild_id,
+                channel_id,
+                message_id,
+                user_id,
+                getattr(self.panel, "event_id", None),
+                getattr(self.panel, "panel_id", None),
+            )
+
+            is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
+            msg = _msg(
+                is_ja_client,
+                f"登録処理でエラーが発生しました。運営に連絡してください (error_id={err_id})",
+                f"Registration failed. Please contact an organizer. (error_id={err_id})",
+            )
+            try:
+                await _respond_ephemeral(interaction, msg)
+            except Exception:
+                pass
+
+
+@dataclass(frozen=True)
+class TicketRoleSpec:
+    key: str
+    nocodb_value: str
+    label_ja: str
+    label_en: str
+    role_name_candidates: tuple[str, ...]
+    row: int
+
+
+def _iter_ticket_role_specs() -> Iterable[TicketRoleSpec]:
+    # 参加登録とは独立した「アンケ/コミュニケーション用」ロール。
+    # ロール名はサーバーに合わせて作る前提。候補を複数用意して当てにいく。
+    return (
+        TicketRoleSpec(
+            key="fes_stage1",
+            nocodb_value="fes-1",
+            label_ja="Fes Stage 1",
+            label_en="Fes Stage 1",
+            role_name_candidates=(
+                "fes. stage 1",
+                "fes. stage1",
+                "fes stage1",
+                "fes stage 1",
+                "fes-stage1",
+                "fes_stage1",
+                "Fes Stage 1",
+            ),
+            row=0,
+        ),
+        TicketRoleSpec(
+            key="fes_stage2",
+            nocodb_value="fes-2",
+            label_ja="Fes Stage 2",
+            label_en="Fes Stage 2",
+            role_name_candidates=(
+                "fes. stage 2",
+                "fes. stage2",
+                "fes stage2",
+                "fes stage 2",
+                "fes-stage2",
+                "fes_stage2",
+                "Fes Stage 2",
+            ),
+            row=0,
+        ),
+        TicketRoleSpec(
+            key="fes_stage3",
+            nocodb_value="fes-3",
+            label_ja="Fes Stage 3",
+            label_en="Fes Stage 3",
+            role_name_candidates=(
+                "fes. stage 3",
+                "fes. stage3",
+                "fes stage3",
+                "fes stage 3",
+                "fes-stage3",
+                "fes_stage3",
+                "Fes Stage 3",
+            ),
+            row=0,
+        ),
+        TicketRoleSpec(
+            key="fes_stage4",
+            nocodb_value="fes-4",
+            label_ja="Fes Stage 4",
+            label_en="Fes Stage 4",
+            role_name_candidates=(
+                "fes. stage 4",
+                "fes. stage4",
+                "fes stage4",
+                "fes stage 4",
+                "fes-stage4",
+                "fes_stage4",
+                "Fes Stage 4",
+            ),
+            row=0,
+        ),
+        TicketRoleSpec(
+            key="expo_day1",
+            nocodb_value="expo-1",
+            label_ja="EXPO Day 1",
+            label_en="EXPO Day 1",
+            role_name_candidates=(
+                "EXPO day 1",
+                "expo day 1",
+                "expo day1",
+                "expo-day1",
+                "expo_day1",
+                "EXPO Day 1",
+            ),
+            row=1,
+        ),
+        TicketRoleSpec(
+            key="expo_day2",
+            nocodb_value="expo-2",
+            label_ja="EXPO Day 2",
+            label_en="EXPO Day 2",
+            role_name_candidates=(
+                "EXPO day 2",
+                "expo day 2",
+                "expo day2",
+                "expo-day2",
+                "expo_day2",
+                "EXPO Day 2",
+            ),
+            row=1,
+        ),
+        TicketRoleSpec(
+            key="expo_day3",
+            nocodb_value="expo-3",
+            label_ja="EXPO Day 3",
+            label_en="EXPO Day 3",
+            role_name_candidates=(
+                "EXPO day 3",
+                "expo day 3",
+                "expo day3",
+                "expo-day3",
+                "expo_day3",
+                "EXPO Day 3",
+            ),
+            row=1,
+        ),
+        # All-lost (no ticket) marker. This must be mutually exclusive with other ticket/day roles.
+        TicketRoleSpec(
+            key="zenloss",
+            nocodb_value="zenloss",
+            label_ja="zenloss",
+            label_en="zenloss",
+            role_name_candidates=(
+                "zenloss",
+                "Zenloss",
+                "zen loss",
+                "zen-loss",
+                "zen_loss",
+            ),
+            row=2,
+        ),
+    )
+
+
+def _find_role_by_candidates(
+    guild: discord.Guild, candidates: tuple[str, ...]
+) -> Optional[discord.Role]:
+    # Prefer exact match first, then case-insensitive.
+    for c in candidates:
+        r = discord.utils.get(guild.roles, name=c)
+        if r is not None:
+            return r
+
+    lowered = {c.lower() for c in candidates}
+    for r in guild.roles:
+        if (r.name or "").lower() in lowered:
+            return r
+    return None
+
+
+class TicketRolesView(discord.ui.View):
+    """Self-assign roles for ticket status (survey/communication).
+
+    This is intentionally independent from registration.
+    """
+
+    def __init__(self, *, repo: Optional[OffkaiNocoDbRepo] = None) -> None:
+        super().__init__(timeout=None)
+        self._repo = repo
+
+        for spec in _iter_ticket_role_specs():
+            if spec.nocodb_value.startswith("fes-"):
+                style = discord.ButtonStyle.primary  # blue
+            elif spec.nocodb_value.startswith("expo-"):
+                style = discord.ButtonStyle.success  # green
+            elif spec.key == "zenloss":
+                style = discord.ButtonStyle.danger  # red
+            else:
+                style = discord.ButtonStyle.secondary
+
+            label = spec.label_ja
+            if spec.key == "fes_stage1":
+                label = "STAGE1"
+            elif spec.key == "fes_stage2":
+                label = "STAGE2"
+            elif spec.key == "fes_stage3":
+                label = "STAGE3"
+            elif spec.key == "fes_stage4":
+                label = "STAGE4"
+            elif spec.key == "expo_day1":
+                label = "EXPO Day 1"
+            elif spec.key == "expo_day2":
+                label = "EXPO Day 2"
+            elif spec.key == "expo_day3":
+                label = "EXPO Day 3"
+            elif spec.key == "zenloss":
+                label = "zenloss 全ロス"
+
+            btn = discord.ui.Button(
+                label=label,
+                style=style,
+                custom_id=f"offkai:ticketrole:{spec.key}",
+                row=spec.row,
+            )
+            btn.callback = self._make_callback(spec)  # type: ignore[assignment]
+            self.add_item(btn)
+
+    def _make_callback(self, spec: TicketRoleSpec):
+        async def _cb(interaction: discord.Interaction) -> None:
+            if interaction.guild is None:
+                await _respond_ephemeral(interaction, "サーバー内でのみ利用できます。")
+                return
+            if interaction.user is None:
+                await _respond_ephemeral(
+                    interaction, "ユーザー情報を取得できませんでした。"
+                )
+                return
+
+            try:
+                if isinstance(interaction.user, discord.Member):
+                    member = interaction.user
+                else:
+                    member = await interaction.guild.fetch_member(interaction.user.id)
+            except discord.HTTPException:
+                log.exception("Failed to fetch member for ticket role toggle")
+                await _respond_ephemeral(
+                    interaction, "ユーザー情報を取得できませんでした。"
+                )
+                return
+
+            role = _find_role_by_candidates(
+                interaction.guild, spec.role_name_candidates
+            )
+            if role is None:
+                await _respond_ephemeral(
+                    interaction,
+                    "ロールが見つかりません。\n"
+                    f"候補: {', '.join(spec.role_name_candidates)}",
+                )
+                return
+
+            # Compute current ticket keys based on currently-held roles.
+            resolved_roles: dict[str, discord.Role] = {}
+            specs_by_key: dict[str, TicketRoleSpec] = {
+                s.key: s for s in _iter_ticket_role_specs()
+            }
+            for s in _iter_ticket_role_specs():
+                r = _find_role_by_candidates(interaction.guild, s.role_name_candidates)
+                if r is not None:
+                    resolved_roles[s.key] = r
+
+            current_keys: set[str] = {
+                k
+                for (k, r) in resolved_roles.items()
+                if r in getattr(member, "roles", [])
+            }
+            next_keys = set(current_keys)
+
+            try:
+                if role in member.roles:
+                    await member.remove_roles(role, reason="Self-assign ticket role")
+                    next_keys.discard(spec.key)
+                    await _respond_ephemeral(interaction, f"外しました: {role.name}")
+                else:
+                    # Enforce mutual exclusivity:
+                    # - If adding zenloss: remove all other ticket/day roles first.
+                    # - If adding any other role: remove zenloss first.
+                    if spec.key == "zenloss":
+                        to_remove: list[discord.Role] = []
+                        for other in _iter_ticket_role_specs():
+                            if other.key == spec.key:
+                                continue
+                            other_role = _find_role_by_candidates(
+                                interaction.guild, other.role_name_candidates
+                            )
+                            if other_role and other_role in member.roles:
+                                to_remove.append(other_role)
+                        if to_remove:
+                            await member.remove_roles(
+                                *to_remove,
+                                reason="Self-assign zenloss (exclusive)",
+                            )
+                        # zenloss is exclusive; keep only it.
+                        next_keys = {"zenloss"}
+                    else:
+                        zen_spec = next(
+                            (
+                                s
+                                for s in _iter_ticket_role_specs()
+                                if s.key == "zenloss"
+                            ),
+                            None,
+                        )
+                        if zen_spec is not None:
+                            zen_role = _find_role_by_candidates(
+                                interaction.guild, zen_spec.role_name_candidates
+                            )
+                            if zen_role and zen_role in member.roles:
+                                await member.remove_roles(
+                                    zen_role,
+                                    reason="Self-assign ticket role (exclusive with zenloss)",
+                                )
+                        next_keys.discard("zenloss")
+
+                    next_keys.add(spec.key)
+
+                    await member.add_roles(role, reason="Self-assign ticket role")
+                    await _respond_ephemeral(interaction, f"付けました: {role.name}")
+
+                # Persist ticket keys to NocoDB (best-effort).
+                if self._repo is not None:
+                    try:
+                        nocodb_values: list[str] = []
+                        for k in sorted(next_keys):
+                            s = specs_by_key.get(k)
+                            if s is None:
+                                continue
+                            nocodb_values.append(s.nocodb_value)
+                        await self._repo.set_member_tickets(
+                            guild_id=int(interaction.guild.id),
+                            user_id=int(member.id),
+                            display_name=str(member.display_name),
+                            ticket_keys=nocodb_values,
+                        )
+                    except Exception:
+                        log.exception(
+                            "Failed to persist ticket roles to NocoDB guild_id=%s user_id=%s",
+                            interaction.guild.id,
+                            member.id,
+                        )
+            except discord.Forbidden:
+                await _respond_ephemeral(
+                    interaction,
+                    "権限不足でロールを変更できません（Botのロール階層/権限を確認してください）。",
+                )
+            except discord.HTTPException:
+                log.exception("Failed to toggle ticket role")
+                await _respond_ephemeral(interaction, "ロール変更に失敗しました。")
+
+        return _cb
+
+
+def _build_ticket_roles_embed(
+    *, title: str, description: Optional[str]
+) -> discord.Embed:
+    embed = discord.Embed(
+        title=title,
+        description=description
+        or (
+            "どのチケットを確保していますか？\n"
+            "（ロールはいつでも付け外しできます。参加登録とは無関係です）\n\n"
+            "Which tickets do you currently have?\n"
+            "(You can add/remove roles anytime. Independent from registration.)"
+        ),
+        colour=discord.Colour.dark_teal(),
+    )
+    return embed
+
+
+def _build_panel_embed(*, title: str, description: Optional[str]) -> discord.Embed:
+    # NOTE: 規約/注意事項の「更新日」は Embed に書かず、Discordの送信日時そのものを証跡にする。
+    # そのためパネル内容を変えたい場合は message.edit ではなく「削除→再投稿」で運用する。
+    embed = discord.Embed(
+        title=title,
+        description=description
+        or (
+            "下のボタンから参加登録できます。\n"
+            "You can register using the button below.\n\n"
+            "**押下＝同意 / Pressing the button means you agree**"
+        ),
+        colour=discord.Colour.blurple(),
+    )
+    return embed
+
+
+class OffkaiCog(commands.Cog):
+    offkai = discord.SlashCommandGroup(
+        "offkai",
+        "Off-Kai 参加登録を管理します",
+        # サーバー管理者(Administrator)のみ。
+        default_member_permissions=discord.Permissions(administrator=True),
+        contexts=[InteractionContextType.guild],
+        integration_types=[IntegrationType.guild_install],
+    )
+
+    def __init__(self, bot: discord.Bot, *, repo: OffkaiNocoDbRepo) -> None:
+        self.bot = bot
+        self.repo = repo
+
+    @offkai.command(description="イベントを作成します")
+    async def event_create(
+        self,
+        ctx: discord.ApplicationContext,
+        name: str = Option(str, "表示名", min_length=1, max_length=200),  # type: ignore[assignment]
+        capacity_confirmed: int = Option(
+            int, "確定枠の定員", min_value=0, max_value=10000
+        ),  # type: ignore[assignment]
+        is_open: bool = Option(bool, "受付を開始する", default=False),  # type: ignore[assignment]
+        confirmed_role_id: Optional[str] = Option(
+            str, "確定ロールID(任意)", required=False, default=None
+        ),  # type: ignore[assignment]
+        waitlist_role_id: Optional[str] = Option(
+            str, "ウェイトリストロールID(任意)", required=False, default=None
+        ),  # type: ignore[assignment]
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if ctx.guild is None:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ実行できます。",
+                        "This can only be used in a server.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            conf_role = _parse_role_id(confirmed_role_id)
+            wait_role = _parse_role_id(waitlist_role_id)
+
+            event_id = await self.repo.create_event(
+                title=name,
+                capacity=capacity_confirmed,
+                guild_id=ctx.guild.id,
+                participant_role_id=conf_role,
+                pending_role_id=wait_role,
+            )
+
+            await ctx.followup.send(
+                f"イベントを作成しました: id={event_id}",
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "event_create failed error_id=%s guild_id=%s user_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Request failed. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    @offkai.command(description="イベントの確定/ウェイトリストのロールIDを設定します")
+    async def event_set_roles(
+        self,
+        ctx: discord.ApplicationContext,
+        event_id: int = Option(int, "対象イベントID"),  # type: ignore[assignment]
+        confirmed_role_id: Optional[str] = Option(
+            str,
+            "確定ロールID (未設定にする場合は空欄/省略)",
+            required=False,
+            default=None,
+        ),  # type: ignore[assignment]
+        waitlist_role_id: Optional[str] = Option(
+            str,
+            "ウェイトリストロールID (未設定にする場合は空欄/省略)",
+            required=False,
+            default=None,
+        ),  # type: ignore[assignment]
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            conf_role = _parse_role_id(confirmed_role_id)
+            wait_role = _parse_role_id(waitlist_role_id)
+
+            ev = await self.repo.get_event(event_id)
+            if not ev:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "イベントが見つかりません。",
+                        "Event was not found.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            await self.repo.update_event(
+                event_id=event_id,
+                fields={
+                    "participant_role_id": str(conf_role) if conf_role else "",
+                    "pending_role_id": str(wait_role) if wait_role else "",
+                },
+            )
+
+            await ctx.followup.send(
+                f"更新しました: id={event_id} participant_role_id={conf_role} pending_role_id={wait_role}\n"
+                "※既存参加者への反映は /offkai roles_sync を実行してください。",
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "event_set_roles failed error_id=%s guild_id=%s user_id=%s event_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+                event_id,
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Request failed. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    @offkai.command(description="イベントの受付を開始/停止します")
+    async def event_set_open(
+        self,
+        ctx: discord.ApplicationContext,
+        event_id: int = Option(int, "対象イベントID"),  # type: ignore[assignment]
+        is_open: bool = Option(bool, "受付を開始するか", default=True),  # type: ignore[assignment]
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            # NocoDBの現行スキーマには is_open フィールドが無いため、互換維持のために明示メッセージだけ返す。
+            # 必要なら event テーブルに Checkbox の is_open を追加して、ここで update_event する実装に拡張可能。
+            _ = (event_id, is_open)
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    "NocoDB側の event テーブルに is_open が無いので、このコマンドは現在無効です。\n"
+                    "(必要なら event に Checkbox: is_open を追加してください)",
+                    "This command is currently disabled because the NocoDB 'event' table has no 'is_open' field.\n"
+                    "(If needed, add a Checkbox field 'is_open' to the event table.)",
+                ),
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "event_set_open failed error_id=%s guild_id=%s user_id=%s event_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+                event_id,
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Request failed. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    @offkai.command(description="確定枠の定員を変更します")
+    async def event_set_capacity(
+        self,
+        ctx: discord.ApplicationContext,
+        event_id: int = Option(int, "対象イベントID"),  # type: ignore[assignment]
+        capacity_confirmed: int = Option(
+            int, "確定枠の定員", min_value=0, max_value=10000
+        ),  # type: ignore[assignment]
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            ev = await self.repo.get_event(event_id)
+            if not ev:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "イベントが見つかりません。",
+                        "Event was not found.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            await self.repo.update_event(
+                event_id=event_id,
+                fields={"capacity": capacity_confirmed},
+            )
+
+            await ctx.followup.send(
+                f"更新しました: id={event_id} capacity={capacity_confirmed}",
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "event_set_capacity failed error_id=%s guild_id=%s user_id=%s event_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+                event_id,
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Request failed. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    @offkai.command(description="登録ステータスに基づきロールを一括同期します")
+    async def roles_sync(
+        self,
+        ctx: discord.ApplicationContext,
+        event_id: int = Option(int, "対象イベントID"),  # type: ignore[assignment]
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if ctx.guild is None:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ実行できます。",
+                        "This can only be used in a server.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            ev = await self.repo.get_event(event_id)
+            if not ev:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "イベントが見つかりません。",
+                        "Event was not found.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            evf = _nc_fields(ev)
+            participant_role_id = _parse_role_id(
+                str(evf.get("participant_role_id"))
+                if evf.get("participant_role_id")
+                else None
+            )
+            pending_role_id = _parse_role_id(
+                str(evf.get("pending_role_id")) if evf.get("pending_role_id") else None
+            )
+
+            regs = await self.repo.list_registrations_for_event(event_id=event_id)
+            member_ids: list[int] = []
+            for r in regs:
+                mf = _nc_fields(r).get("member")
+                if (
+                    isinstance(mf, list)
+                    and mf
+                    and isinstance(mf[0], dict)
+                    and "id" in mf[0]
+                ):
+                    mid = _nc_int(mf[0].get("id"))
+                    if mid is not None:
+                        member_ids.append(mid)
+
+            members_by_id = await self.repo.list_members_by_ids(
+                member_ids=list(sorted(set(member_ids)))
+            )
+
+            ok = 0
+            missing = 0
+            failed = 0
+
+            for r in regs:
+                rf = _nc_fields(r)
+                is_confirmed = bool(rf.get("is_confirmed"))
+
+                # Resolve discord user id via linked member.
+                mf = rf.get("member")
+                member_rec: Optional[dict[str, Any]] = None
+                if (
+                    isinstance(mf, list)
+                    and mf
+                    and isinstance(mf[0], dict)
+                    and "id" in mf[0]
+                ):
+                    mid = _nc_int(mf[0].get("id"))
+                    if mid is not None:
+                        member_rec = members_by_id.get(mid)
+
+                user_id_raw = (
+                    _nc_fields(member_rec).get("user_id") if member_rec else None
+                )
+                user_id = _nc_int(user_id_raw)
+                if user_id is None:
+                    failed += 1
+                    continue
+
+                try:
+                    member = await ctx.guild.fetch_member(int(user_id))
+                except discord.NotFound:
+                    missing += 1
+                    continue
+                except discord.HTTPException:
+                    failed += 1
+                    continue
+
+                try:
+                    await _apply_roles_to_member(
+                        member,
+                        confirmed_role_id=participant_role_id,
+                        waitlist_role_id=pending_role_id,
+                        status=(STATUS_CONFIRMED if is_confirmed else STATUS_WAITLIST),
+                    )
+                    ok += 1
+                except Exception:
+                    failed += 1
+                    log.exception("roles_sync failed for user_id=%s", user_id)
+
+            await ctx.followup.send(
+                f"ロール同期完了: ok={ok} missing={missing} failed={failed}",
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "roles_sync failed error_id=%s guild_id=%s user_id=%s event_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+                event_id,
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Request failed. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    @offkai.command(description="参加登録パネル(ボタン)を設置します")
+    async def panel_create(
+        self,
+        ctx: discord.ApplicationContext,
+        event_id: int = Option(int, "対象イベントID"),  # type: ignore[assignment]
+        channel: Optional[discord.TextChannel] = Option(  # type: ignore[assignment]
+            discord.TextChannel,
+            "設置先チャンネル (省略時は現在のチャンネル)",
+            required=False,
+            default=None,
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+        ),
+        lang: str = Option(
+            str,
+            "言語 (ja/en)",
+            required=False,
+            default="ja",
+            choices=[
+                OptionChoice(name="ja (日本語)", value="ja"),
+                OptionChoice(name="en (English)", value="en"),
+            ],
+        ),  # type: ignore[assignment]
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if ctx.guild is None:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ実行できます。",
+                        "This can only be used in a server.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            target_channel = channel or ctx.channel
+            if target_channel is None or not isinstance(
+                target_channel, discord.TextChannel
+            ):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "テキストチャンネルを指定してください。",
+                        "Please specify a text channel.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            ev = await self.repo.get_event(event_id)
+            if not ev:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "イベントが見つかりません。",
+                        "Event was not found.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            log.info(
+                "panel_create start guild_id=%s user_id=%s event_id=%s channel_id=%s lang=%s",
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+                event_id,
+                target_channel.id,
+                _normalize_lang(lang),
+            )
+
+            # Insert panel first to get id, then send message, then update message_id.
+            # パネル本文は長文になりがちなので、スラッシュコマンド引数で入力させずに
+            # data/offkai_panel_content.json から読み込みます。
+            lang_norm = _normalize_lang(lang)
+
+            # Build embeds -> JSON (discord expects this shape). We store this JSON in NocoDB panel.embed.
+            embed_objs = _build_registration_panel_embeds_for(
+                lang=lang_norm,
+                override_title=None,
+            )
+
+            # Embed.to_dict() returns the payload dict Discord expects (keys like 'title', 'description', 'color', ...).
+            embeds_json: list[dict[str, Any]] = []
+            for idx, e in enumerate(embed_objs):
+                # Some stubs type this loosely; coerce to a plain dict for mypy/pyright friendliness.
+                payload: dict[str, Any] = dict(e.to_dict())  # type: ignore[arg-type]
+                if not isinstance(payload, dict):
+                    raise RuntimeError(
+                        f"Embed.to_dict() did not return a dict (idx={idx})"
+                    )
+                embeds_json.append(payload)
+
+            embed_blob: dict[str, Any] = {"embeds": embeds_json}
+            first_title = str(
+                embed_objs[0].title
+                or ("参加申し込み" if lang_norm == "ja" else "Registration")
+            )
+
+            panel_id, _panel = await self.repo.create_panel(
+                event_id=event_id,
+                channel_id=target_channel.id,
+                title=first_title,
+                description="",
+                language=lang_norm,
+                embed=embed_blob,  # type: ignore[arg-type]
+            )
+
+            log.info(
+                "panel_create db_created guild_id=%s event_id=%s panel_id=%s channel_id=%s lang=%s",
+                ctx.guild.id if ctx.guild else None,
+                event_id,
+                int(panel_id),
+                target_channel.id,
+                lang_norm,
+            )
+
+            custom_id_prefix = _registration_custom_id_prefix_for_panel(panel_id)
+
+            view = RegistrationView(
+                repo=self.repo,
+                panel=PanelConfig(
+                    panel_id=panel_id,
+                    event_id=event_id,
+                    custom_id_prefix=custom_id_prefix,
+                    lang=lang_norm,
+                ),
+                button_label_register=_registration_button_label(lang_norm),
+            )
+
+            # Send using JSON->Embed so we're guaranteed it's round-trippable.
+            message_embeds = [discord.Embed.from_dict(p) for p in embeds_json]
+            message = await target_channel.send(embeds=message_embeds, view=view)
+
+            log.info(
+                "panel_create message_sent guild_id=%s channel_id=%s message_id=%s panel_id=%s",
+                ctx.guild.id if ctx.guild else None,
+                target_channel.id,
+                message.id,
+                int(panel_id),
+            )
+
+            await self.repo.set_panel_message_id(
+                panel_id=panel_id, message_id=message.id
+            )
+
+            log.info(
+                "panel_create message_id_saved panel_id=%s message_id=%s",
+                int(panel_id),
+                message.id,
+            )
+
+            self.bot.add_view(view, message_id=message.id)
+            await ctx.followup.send(
+                f"パネルを設置しました: <#{target_channel.id}> (lang={lang}, message_id={message.id})",
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "panel_create failed error_id=%s guild_id=%s user_id=%s event_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+                event_id,
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"パネルの設置に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Failed to create the panel. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    @offkai.command(description="アンケート(チケット/日程)パネルを設置します")
+    async def ticket_roles_panel_create(
+        self,
+        ctx: discord.ApplicationContext,
+        channel: Optional[discord.TextChannel] = Option(  # type: ignore[assignment]
+            discord.TextChannel,
+            "設置先チャンネル (省略時は現在のチャンネル)",
+            required=False,
+            default=None,
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+        ),
+        embed_title: str = Option(
+            str,
+            "埋め込みタイトル",
+            required=False,
+            default="アンケート / Survey",
+            max_length=100,
+        ),  # type: ignore[assignment]
+        description: Optional[str] = Option(
+            str,
+            "説明(任意)",
+            required=False,
+            default=None,
+            max_length=400,
+        ),  # type: ignore[assignment]
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if ctx.guild is None:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ実行できます。",
+                        "This can only be used in a server.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            target_channel = channel or ctx.channel
+            if target_channel is None or not isinstance(
+                target_channel, discord.TextChannel
+            ):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "テキストチャンネルを指定してください。",
+                        "Please specify a text channel.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            view = TicketRolesView(repo=self.repo)
+            message = await target_channel.send(
+                embed=_build_ticket_roles_embed(
+                    title=embed_title, description=description
+                ),
+                view=view,
+            )
+            await ctx.followup.send(
+                f"アンケートパネルを設置しました: <#{target_channel.id}> (message_id={message.id})",
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "ticket_roles_panel_create failed error_id=%s guild_id=%s user_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"パネルの設置に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Failed to create the panel. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    # NOTE: CSV出力/集計/ダッシュボード等の「便利機能」はNocoDB側で完結できるため、
+    # Discord Bot 側からは撤去しました。
+
+
+async def register_persistent_views(
+    bot: discord.Bot, *, repo: OffkaiNocoDbRepo
+) -> None:
+    # DBに紐づかないセルフロールViewはグローバルに永続登録しておく。
+    # （過去に送ったメッセージでも、custom_id が一致すれば動く）
+    bot.add_view(TicketRolesView(repo=repo))
+
+    panels = await repo.list_panels()
+
+    log.info(
+        "register_persistent_views start panels=%s",
+        len(panels),
+    )
+
+    registered = 0
+    skipped = 0
+
+    for p in panels:
+        pf = _nc_fields(p)
+        message_id = _nc_int(pf.get("message_id"), default=0) or 0
+        panel_id = _nc_int(p.get("id"))
+        if panel_id is None:
+            log.warning(
+                "register_persistent_views skip missing panel_id message_id=%s",
+                message_id,
+            )
+            skipped += 1
+            continue
+
+        custom_id_prefix = _registration_custom_id_prefix_for_panel(int(panel_id))
+
+        # panel table has stable ForeignKey column event_id.
+        event_id: Optional[int] = _nc_int(pf.get("event_id"))
+        if not event_id:
+            log.warning(
+                "register_persistent_views skip missing event_id panel_id=%s message_id=%s",
+                int(panel_id),
+                message_id,
+            )
+            skipped += 1
+            continue
+
+        lang = _normalize_lang(str(pf.get("language") or ""))
+
+        panel = PanelConfig(
+            panel_id=int(panel_id),
+            event_id=int(event_id),
+            custom_id_prefix=custom_id_prefix,
+            lang=lang,
+        )
+        view = RegistrationView(
+            repo=repo,
+            panel=panel,
+            button_label_register=_registration_button_label(panel.lang),
+        )
+
+        try:
+            if message_id > 0:
+                bot.add_view(view, message_id=int(message_id))
+            else:
+                # Fallback: still register as persistent without message binding.
+                bot.add_view(view)
+            registered += 1
+
+            log.info(
+                "register_persistent_views registered panel_id=%s event_id=%s message_id=%s lang=%s",
+                panel.panel_id,
+                panel.event_id,
+                message_id,
+                panel.lang,
+            )
+        except Exception:
+            skipped += 1
+            log.exception(
+                "Failed to register persistent RegistrationView panel_id=%s event_id=%s message_id=%s",
+                panel.panel_id,
+                panel.event_id,
+                message_id,
+            )
+
+    log.info(
+        "Persistent views registered: registration_panels=%s skipped=%s",
+        registered,
+        skipped,
+    )

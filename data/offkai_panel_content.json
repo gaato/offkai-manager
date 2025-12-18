@@ -1,0 +1,40 @@
+{
+  "ja": {
+    "embeds": [
+      {
+        "title": "[Expo/7th fes.] hololive ID&EN fans Off-Kai",
+        "description": "__重要（必読）__\n- **このボタンを押した時点で、サーバー/イベントのルールに同意したものとみなします。**\n- **当日20歳以上の方のみ参加可能**\n- **返金：原則不可**\n\n**日程**：2026/03/07（土）21:00–23:30（途中退店OK）\n**会場**：大衆酒場 ちばちゃん 海浜幕張店\n**URL**：<https://chibachan-kaihinmakuhariten.owst.jp/>\n**MAP**：<https://maps.app.goo.gl/zaquGt2Lmq9YTqnE8>\n\n**定員**：180席（店舗貸切）\n**料理**：コース料理＋飲み放題（アルコール/ソフトドリンク）\n\n**参加費**：**4,500円**（手数料込み／一部メニュー変更あり）\n**支払**：**Peatix**（販売時期は2月中旬予定・詳細は後日告知）\n**返金**：**原則不可**（旅程が中止となる等の不測の事態のみ個別対応）",
+        "color": 5793266
+      },
+      {
+        "title": "【参加方法】",
+        "description": "- Discordサーバー内の参加登録パネルより登録（完了後、ロール付与）\n- 定員に達した場合、登録は一時停止\n- キャンセルは<#1450118231216881706>にコメント\n- 支払期間終了後、未払いキャンセル枠が出た場合は再募集\n- 再募集する場合は開始日時をDiscordで事前告知\n- Peatixでチケット購入完了後、別ロール付与\n- 当日はPeatixチケットのQRコードを店舗入口でスタッフへ提示",
+        "color": 5793266
+      },
+      {
+        "title": "【注意事項・規約】",
+        "description": "- 当日20歳以上の方のみ参加可能\n- 厳格なハラル/ビーガン対応は不可（食材は可能な範囲で考慮）\n- 店内全面禁煙（喫煙所は駅前）\n- 写真撮影は他のお客様の映り込み等に配慮\n- Vlog撮影/リアルタイム配信予定の方は事前にスタッフへ申請\n- ゴミ（お土産等）は各自持ち帰り\n- 落とし物はスタッフが一時預かり（Discord連絡の上、日曜夕方までに受取）\n- 荷物は最小限で（駅前にコインロッカーあり）\n- Discord内/当日は英語コミュニケーションが多めの想定\n- チケット関連（譲渡/交換/募集/相談など）は <#1450869639956529173> のみで行ってください\n- チケットやグッズの個人間取引で発生した金銭的トラブルについて、運営は責任を負いません",
+        "color": 5793266
+      }
+    ]
+  },
+  "en": {
+    "embeds": [
+      {
+        "title": "[Expo/7th fes.] hololive ID&EN fans Off-Kai",
+        "description": "__IMPORTANT (please read)__\n- **By pressing the button, you agree to the server/event rules.**\n- **20+ only (on the event day)**\n- **Refunds: generally not available**\n\n**Date/Time**: Mar 7, 2026 (Sat) 21:00–23:30 (early departure OK)\n**Venue**: Taishu Sakaba Chibachan Kaihin Makuhari\n**URL**: <https://chibachan-kaihinmakuhariten.owst.jp/>\n**Map**: <https://maps.app.goo.gl/zaquGt2Lmq9YTqnE8>\n\n**Capacity**: 180 seats (private booking)\n**Food/Drink**: course meal + all-you-can-drink (alcohol/soft drinks)\n\n**Fee**: **4,500 JPY** (incl. fees / minor menu adjustments)\n**Payment**: **Peatix** (sales planned mid-Feb; details later)\n**Refunds**: **generally not available** (handled individually only if your itinerary is canceled due to unforeseen circumstances)",
+        "color": 1752220
+      },
+      {
+        "title": "[Participation Method]",
+        "description": "- Register via the Discord registration panel (a role will be assigned after registration)\n- Registration pauses when capacity is reached\n- To cancel, leave a comment in <#1450118231216881706>\n- After the payment term ends, we may reopen registration if spots free up (unpaid cancellations)\n- Reopen date will be announced in advance on Discord\n- After buying a Peatix ticket, a separate role will be assigned\n- On the day, show your Peatix QR code to staff at the entrance",
+        "color": 1752220
+      },
+      {
+        "title": "[Notes and Regulations]",
+        "description": "- 20+ only (on the event day)\n- Strict halal/vegan meals are not available (we will consider ingredients where possible)\n- Non-smoking venue (nearest smoking area is near the station)\n- Be mindful of other attendees when taking photos\n- If you plan to vlog / live stream, please ask staff in advance\n- Take your trash (souvenirs, etc.) home\n- Lost items will be held temporarily by staff (contact us on Discord; pick up by Sunday evening)\n- Please keep luggage minimal (coin lockers available near the station)\n- English will likely be the primary language on Discord and on-site\n- All ticket-related matters (transfer/trade/recruitment/questions, etc.) must be handled only in <#1450869639956529173>\n- Organizers are not responsible for any financial disputes arising from attendee-to-attendee transactions (tickets or merchandise).",
+        "color": 1752220
+      }
+    ]
+  }
+}
