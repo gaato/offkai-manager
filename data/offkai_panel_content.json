@@ -8,7 +8,7 @@
       },
       {
         "title": "【参加方法】",
-        "description": "- Discordサーバー内の参加登録パネルより登録（完了後、ロール付与）\n- 定員に達した場合、登録は一時停止\n- キャンセルは<#1450118231216881706>にコメント\n- 支払期間終了後、未払いキャンセル枠が出た場合は再募集\n- 再募集する場合は開始日時をDiscordで事前告知\n- Peatixでチケット購入完了後、別ロール付与\n- 当日はPeatixチケットのQRコードを店舗入口でスタッフへ提示",
+        "description": "- Discordサーバー内の参加登録パネルより登録（完了後、ロール付与）\n- 定員に達した場合、登録は一時停止\n- キャンセルは<#1450118231216881706>にコメント\n- 支払期間終了後、未払い等によるキャンセル枠が出た場合は再募集を行う場合があります\n- 再募集を行う場合は開始日時（JST）をDiscordで事前告知します\n- Peatixでチケット購入完了後、別ロール付与\n- 当日はPeatixチケットのQRコードを店舗入口でスタッフへ提示",
         "color": 5793266
       },
       {
@@ -27,7 +27,7 @@
       },
       {
         "title": "[Participation Method]",
-        "description": "- Register via the Discord registration panel (a role will be assigned after registration)\n- Registration pauses when capacity is reached\n- To cancel, leave a comment in <#1450118231216881706>\n- After the payment term ends, we may reopen registration if spots free up (unpaid cancellations)\n- Reopen date will be announced in advance on Discord\n- After buying a Peatix ticket, a separate role will be assigned\n- On the day, show your Peatix QR code to staff at the entrance",
+        "description": "- Register via the Discord registration panel (a role will be assigned after registration)\n- Registration pauses when capacity is reached\n- To cancel, leave a comment in <#1450118231216881706>\n- After the payment deadline, we may reopen registration if spots become available due to unpaid cancellations\n- If we reopen, the start date/time (JST) will be announced in advance on Discord\n- After buying a Peatix ticket, a separate role will be assigned\n- On the day, show your Peatix QR code to staff at the entrance",
         "color": 1752220
       },
       {

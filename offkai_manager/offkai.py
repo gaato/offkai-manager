@@ -250,11 +250,16 @@ class RegistrationModal(discord.ui.Modal):
         *,
         view: "RegistrationView",
         locale_code: Optional[str],
+        is_edit: bool = False,
     ) -> None:
         is_ja = bool(locale_code and locale_code.startswith("ja"))
-        super().__init__(title=("参加登録" if is_ja else "Registration"))
+        title = "登録情報編集" if is_edit else "参加登録"
+        if not is_ja:
+            title = "Edit Registration" if is_edit else "Registration"
+        super().__init__(title=title)
         self._view = view
         self._locale_code = locale_code
+        self._is_edit = is_edit
 
         self.twitter = _TextInput(
             label=("X (Twitter) ID" if is_ja else "X handle"),
@@ -291,11 +296,12 @@ class RegistrationModal(discord.ui.Modal):
         guild_id = interaction.guild.id if interaction.guild else None
         user_id = interaction.user.id if interaction.user else None
         log.info(
-            "RegistrationModal.submit received guild_id=%s user_id=%s event_id=%s panel_id=%s",
+            "RegistrationModal.submit received guild_id=%s user_id=%s event_id=%s panel_id=%s is_edit=%s",
             guild_id,
             user_id,
             getattr(self._view.panel, "event_id", None),
             getattr(self._view.panel, "panel_id", None),
+            self._is_edit,
         )
         try:
             await self._view.handle_registration_submit(
@@ -304,6 +310,7 @@ class RegistrationModal(discord.ui.Modal):
                 residence=self.residence.value,
                 requests=self.requests.value,
                 locale_code=self._locale_code,
+                is_edit=self._is_edit,
             )
         except Exception as e:
             # py-cordの既定ログだけだと拾えないケースがあるので、確実にログへ。
@@ -328,12 +335,13 @@ class RegistrationModal(discord.ui.Modal):
         panel_id = getattr(self._view.panel, "panel_id", None)
 
         log.error(
-            "RegistrationModal failed error_id=%s guild_id=%s user_id=%s event_id=%s panel_id=%s",
+            "RegistrationModal failed error_id=%s guild_id=%s user_id=%s event_id=%s panel_id=%s is_edit=%s",
             err_id,
             guild_id,
             user_id,
             event_id,
             panel_id,
+            self._is_edit,
             exc_info=error,
         )
 
@@ -341,14 +349,172 @@ class RegistrationModal(discord.ui.Modal):
         is_ja = _is_ja_locale(getattr(interaction, "locale", None))
         msg = _msg(
             is_ja,
-            f"登録処理でエラーが発生しました。運営に連絡してください (error_id={err_id})",
-            f"Registration failed. Please contact an organizer. (error_id={err_id})",
+            f"処理でエラーが発生しました。運営に連絡してください (error_id={err_id})",
+            f"Operation failed. Please contact an organizer. (error_id={err_id})",
         )
         try:
             await _respond_ephemeral(interaction, msg)
         except Exception:
             # 既に応答済み/ネットワークエラー等で返信できない場合でも、ログは残っている。
             pass
+
+
+class SayModal(discord.ui.Modal):
+    def __init__(
+        self,
+        *,
+        target_channel_id: int,
+        allow_mentions: bool,
+        locale_code: Optional[str],
+    ) -> None:
+        is_ja = bool(locale_code and locale_code.startswith("ja"))
+        super().__init__(title=("Botとして送信" if is_ja else "Send as Bot"))
+
+        self._target_channel_id = int(target_channel_id)
+        self._allow_mentions = bool(allow_mentions)
+        self._locale_code = locale_code
+
+        self.message = _TextInput(
+            label=("送信内容" if is_ja else "Message"),
+            placeholder=(
+                "ここに送信したいメッセージを入力"
+                if is_ja
+                else "Type the message to send"
+            ),
+            required=True,
+            style=_PARAGRAPH_STYLE,
+            max_length=2000,
+        )
+        self.add_item(self.message)
+
+    async def _submit_impl(self, interaction: discord.Interaction) -> None:
+        err_id = secrets.token_hex(4)
+        interaction_id, guild_id, channel_id, message_id, user_id = _interaction_ids(
+            interaction
+        )
+        log.info(
+            "say_modal submit start error_id=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s target_channel_id=%s allow_mentions=%s",
+            err_id,
+            interaction_id,
+            guild_id,
+            channel_id,
+            message_id,
+            user_id,
+            int(self._target_channel_id),
+            bool(self._allow_mentions),
+        )
+
+        is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
+
+        try:
+            if interaction.guild is None:
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ利用できます。",
+                        "This can only be used in a server.",
+                    ),
+                )
+                return
+
+            content = (self.message.value or "").strip()
+            if not content:
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        "送信内容を入力してください。",
+                        "Please enter a message.",
+                    ),
+                )
+                return
+
+            # Resolve target channel (prefer cache; fall back to fetch).
+            ch = interaction.guild.get_channel(int(self._target_channel_id))
+            if ch is None:
+                try:
+                    ch = await interaction.guild.fetch_channel(
+                        int(self._target_channel_id)
+                    )
+                except discord.HTTPException:
+                    ch = None
+
+            if ch is None or not hasattr(ch, "send"):
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        "送信先チャンネルが見つかりません。",
+                        "Target channel was not found.",
+                    ),
+                )
+                return
+
+            allowed_mentions = (
+                discord.AllowedMentions.all()
+                if self._allow_mentions
+                else discord.AllowedMentions.none()
+            )
+            await ch.send(content, allowed_mentions=allowed_mentions)
+
+            await _respond_ephemeral(
+                interaction,
+                _msg(is_ja_client, "送信しました。", "Sent."),
+            )
+            log.info(
+                "say_modal submit success error_id=%s guild_id=%s user_id=%s target_channel_id=%s",
+                err_id,
+                interaction.guild.id,
+                interaction.user.id if interaction.user else None,
+                int(self._target_channel_id),
+            )
+        except discord.Forbidden:
+            await _respond_ephemeral(
+                interaction,
+                _msg(
+                    is_ja_client,
+                    "権限不足で送信できません（Botの権限/チャンネル設定を確認してください）。",
+                    "Permission denied (please check the bot permissions / channel settings).",
+                ),
+            )
+        except Exception as e:
+            log.exception(
+                "say_modal submit failed error_id=%s guild_id=%s user_id=%s target_channel_id=%s",
+                err_id,
+                guild_id,
+                user_id,
+                int(self._target_channel_id),
+            )
+            try:
+                await _respond_ephemeral(
+                    interaction,
+                    _msg(
+                        is_ja_client,
+                        f"送信に失敗しました。運営に連絡してください (error_id={err_id})",
+                        f"Failed to send. Please contact an organizer. (error_id={err_id})",
+                    ),
+                )
+            except Exception:
+                pass
+            await self.on_error(e, interaction)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self._submit_impl(interaction)
+
+    async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+        await self._submit_impl(interaction)
+
+    async def on_error(
+        self, error: Exception, interaction: discord.Interaction
+    ) -> None:
+        log.error(
+            "SayModal on_error guild_id=%s user_id=%s target_channel_id=%s",
+            interaction.guild.id if interaction.guild else None,
+            interaction.user.id if interaction.user else None,
+            int(self._target_channel_id),
+            exc_info=error,
+        )
 
 
 @dataclass(frozen=True)
@@ -479,14 +645,15 @@ class RegistrationView(discord.ui.View):
                     getattr(self.panel, "panel_id", None),
                     existing_id,
                 )
-                await _respond_ephemeral(
-                    interaction,
-                    _msg(
-                        is_ja_client,
-                        "すでに登録済みです。変更・キャンセルは幹事に連絡してください。",
-                        "You are already registered. Please contact an organizer for changes/cancellation.",
-                    ),
+                # Show edit modal for existing registration
+                existing_fields = _nc_fields(existing)
+                modal = RegistrationModal(
+                    view=self, locale_code=locale_code, is_edit=True
                 )
+                modal.twitter.value = str(existing_fields.get("twitter_id") or "")
+                modal.residence.value = str(existing_fields.get("residence") or "")
+                modal.requests.value = str(existing_fields.get("requests") or "")
+                await interaction.response.send_modal(modal)
                 return
 
             await interaction.response.send_modal(
@@ -528,6 +695,7 @@ class RegistrationView(discord.ui.View):
         residence: str,
         requests: str,
         locale_code: Optional[str],
+        is_edit: bool = False,
     ) -> None:
         err_id = secrets.token_hex(4)
         step = "start"
@@ -536,7 +704,7 @@ class RegistrationView(discord.ui.View):
             interaction
         )
         log.info(
-            "registration_submit start error_id=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s event_id=%s panel_id=%s locale=%s",
+            "registration_submit start error_id=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s event_id=%s panel_id=%s locale=%s is_edit=%s",
             err_id,
             interaction_id,
             guild_id,
@@ -546,6 +714,7 @@ class RegistrationView(discord.ui.View):
             getattr(self.panel, "event_id", None),
             getattr(self.panel, "panel_id", None),
             _locale_code(getattr(interaction, "locale", None)),
+            is_edit,
         )
 
         try:
@@ -670,14 +839,87 @@ class RegistrationView(discord.ui.View):
                 member_id=member_id,
             )
 
-            if existing:
+            if existing and not is_edit:
+                # Found existing registration but this is a new submission attempt
                 await interaction.followup.send(
                     _msg(
                         is_ja_client,
-                        "すでに登録済みです。変更・キャンセルは幹事に連絡してください。",
-                        "You are already registered. Please contact an organizer for changes/cancellation.",
+                        "すでに登録済みです。変更には登録ボタンを再度押してください。",
+                        "You are already registered. Press the register button again to edit.",
                     ),
                     ephemeral=True,
+                )
+                return
+
+            # If this is an edit, use the existing registration ID
+            if is_edit:
+                if not existing:
+                    await interaction.followup.send(
+                        _msg(
+                            is_ja_client,
+                            "登録情報が見つかりません。",
+                            "Registration not found.",
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                registration_id = _nc_int(existing.get("id"))
+                if registration_id is None:
+                    await interaction.followup.send(
+                        _msg(
+                            is_ja_client,
+                            "内部エラー: registration_id を取得できませんでした。",
+                            "Internal error: failed to resolve registration_id.",
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                step = "update_registration"
+                existing_fields = _nc_fields(existing)
+                is_confirmed = bool(existing_fields.get("is_confirmed"))
+                await self.repo.update_registration(
+                    registration_id=int(registration_id),
+                    fields={
+                        "twitter_id": twitter_value,
+                        "residence": residence_value,
+                        "requests": requests_value,
+                    },
+                )
+                log.info(
+                    "registration_submit updated error_id=%s registration_id=%s event_id=%s member_id=%s",
+                    err_id,
+                    int(registration_id),
+                    getattr(self.panel, "event_id", None),
+                    member_id,
+                )
+                # Use existing confirmed status for role sync
+                status = STATUS_CONFIRMED if is_confirmed else STATUS_WAITLIST
+                await _apply_roles(
+                    interaction,
+                    confirmed_role_id=_parse_role_id(
+                        str(evf.get("participant_role_id"))
+                        if evf.get("participant_role_id")
+                        else None
+                    ),
+                    waitlist_role_id=_parse_role_id(
+                        str(evf.get("pending_role_id"))
+                        if evf.get("pending_role_id")
+                        else None
+                    ),
+                    status=status,
+                )
+                await interaction.followup.send(
+                    "登録情報を更新しました。/ Registration updated.",
+                    ephemeral=True,
+                )
+                log.info(
+                    "registration_submit edit_success error_id=%s guild_id=%s user_id=%s event_id=%s member_id=%s registration_id=%s",
+                    err_id,
+                    guild_id,
+                    user_id,
+                    getattr(self.panel, "event_id", None),
+                    member_id,
+                    int(registration_id),
                 )
                 return
 
@@ -685,10 +927,28 @@ class RegistrationView(discord.ui.View):
             confirmed_count = await self.repo.count_confirmed_for_event(
                 event_id=self.panel.event_id
             )
-            if capacity <= 0:
-                new_is_confirmed = True
-            else:
-                new_is_confirmed = int(confirmed_count) < int(capacity)
+            if capacity > 0 and int(confirmed_count) >= int(capacity):
+                # Full: reject instead of placing on waitlist/pending.
+                await interaction.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "定員に達したため受付できませんでした。",
+                        "Registration is closed because the event is full.",
+                    ),
+                    ephemeral=True,
+                )
+                log.info(
+                    "registration_submit rejected_full error_id=%s event_id=%s member_id=%s confirmed_count=%s capacity=%s",
+                    err_id,
+                    getattr(self.panel, "event_id", None),
+                    member_id,
+                    int(confirmed_count),
+                    int(capacity),
+                )
+                return
+
+            # Accepted registrations are always confirmed.
+            new_is_confirmed = True
 
             log.info(
                 "registration_submit capacity_decision error_id=%s event_id=%s member_id=%s confirmed_count=%s capacity=%s is_confirmed=%s",
@@ -792,7 +1052,7 @@ class RegistrationView(discord.ui.View):
             step = "apply_roles"
             participant_role_id = evf.get("participant_role_id")
             pending_role_id = evf.get("pending_role_id")
-            status = STATUS_CONFIRMED if new_is_confirmed else STATUS_WAITLIST
+            status = STATUS_CONFIRMED
             await _apply_roles(
                 interaction,
                 confirmed_role_id=_parse_role_id(
@@ -834,17 +1094,13 @@ class RegistrationView(discord.ui.View):
                             int(log_channel_id),
                         )
 
-            msg = (
-                "参加確定しました / Registered"
-                if new_is_confirmed
-                else "ウェイトリストに入りました / You are on the waitlist"
-            )
+            msg = "参加確定しました / Registered"
             if not participant_role_id and not pending_role_id:
                 msg += "\n※イベントのロールが未設定のため、ロール付与は行われません。"
             await interaction.followup.send(msg, ephemeral=True)
 
             log.info(
-                "registration_submit success error_id=%s guild_id=%s user_id=%s event_id=%s panel_id=%s member_id=%s registration_id=%s is_confirmed=%s",
+                "registration_submit success error_id=%s guild_id=%s user_id=%s event_id=%s panel_id=%s member_id=%s registration_id=%s is_confirmed=%s is_edit=%s",
                 err_id,
                 guild_id,
                 user_id,
@@ -853,11 +1109,12 @@ class RegistrationView(discord.ui.View):
                 member_id,
                 int(created_registration_id),
                 bool(new_is_confirmed),
+                is_edit,
             )
 
         except Exception:
             log.exception(
-                "registration_submit failed error_id=%s step=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s event_id=%s panel_id=%s",
+                "registration_submit failed error_id=%s step=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s event_id=%s panel_id=%s is_edit=%s",
                 err_id,
                 step,
                 interaction_id,
@@ -867,6 +1124,7 @@ class RegistrationView(discord.ui.View):
                 user_id,
                 getattr(self.panel, "event_id", None),
                 getattr(self.panel, "panel_id", None),
+                is_edit,
             )
 
             is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
@@ -1266,6 +1524,112 @@ class OffkaiCog(commands.Cog):
     def __init__(self, bot: discord.Bot, *, repo: OffkaiNocoDbRepo) -> None:
         self.bot = bot
         self.repo = repo
+
+    @commands.Cog.listener()
+    async def on_member_update(
+        self, before: discord.Member, after: discord.Member
+    ) -> None:
+        """Listen for member updates (nickname/display name changes) and sync to NocoDB."""
+        # Only process if display_name changed
+        if before.display_name == after.display_name:
+            return
+
+        guild_id = after.guild.id
+        user_id = after.id
+        new_display_name = after.display_name
+
+        try:
+            # Find existing member record in NocoDB
+            member_rec = await self.repo.find_member(guild_id=guild_id, user_id=user_id)
+            if member_rec:
+                member_id = _nc_int(member_rec.get("id"))
+                if member_id is not None:
+                    # Update display_name in NocoDB
+                    await self.repo.update_member(
+                        member_id=member_id,
+                        fields={"display_name": new_display_name},
+                    )
+
+                    # Also keep denormalized registration.display_name fresh.
+                    # (Registrations are linked via FK column member_id.)
+                    updated_regs = 0
+                    try:
+                        updated_regs = (
+                            await self.repo.sync_registration_display_name_for_member(
+                                member_id=member_id,
+                                display_name=new_display_name,
+                            )
+                        )
+                    except Exception:
+                        # Best-effort: do not fail the whole handler.
+                        log.exception(
+                            "on_member_update failed to sync registration display_name guild_id=%s user_id=%s member_id=%s",
+                            guild_id,
+                            user_id,
+                            member_id,
+                        )
+                    log.info(
+                        "on_member_update synced display_name guild_id=%s user_id=%s member_id=%s old=%s new=%s updated_regs=%s",
+                        guild_id,
+                        user_id,
+                        member_id,
+                        before.display_name,
+                        new_display_name,
+                        updated_regs,
+                    )
+        except Exception:
+            log.exception(
+                "on_member_update failed to sync display_name guild_id=%s user_id=%s",
+                guild_id,
+                user_id,
+            )
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member) -> None:
+        """Mark member as out-of-guild in NocoDB when they leave the server."""
+        guild_id = member.guild.id
+        user_id = member.id
+
+        try:
+            member_rec = await self.repo.find_member(guild_id=guild_id, user_id=user_id)
+            if not member_rec:
+                return
+            member_id = _nc_int(member_rec.get("id"))
+            if member_id is None:
+                return
+
+            await self.repo.update_member(
+                member_id=member_id, fields={"in_guild": False}
+            )
+            log.info(
+                "on_member_remove marked in_guild=false guild_id=%s user_id=%s member_id=%s",
+                guild_id,
+                user_id,
+                member_id,
+            )
+        except Exception:
+            log.exception(
+                "on_member_remove failed to update in_guild guild_id=%s user_id=%s",
+                guild_id,
+                user_id,
+            )
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        """Best-effort mark member as in-guild again when they re-join."""
+        try:
+            # Create if missing; also refresh display_name and in_guild.
+            await self.repo.get_or_create_member(
+                guild_id=member.guild.id,
+                user_id=member.id,
+                display_name=member.display_name,
+            )
+        except Exception:
+            log.exception(
+                "on_member_join failed to upsert in_guild guild_id=%s user_id=%s",
+                member.guild.id,
+                member.id,
+            )
 
     @offkai.command(description="イベントを作成します")
     async def event_create(
@@ -1971,6 +2335,107 @@ class OffkaiCog(commands.Cog):
                 ),
                 ephemeral=True,
             )
+
+    @offkai.command(description="モーダルからBotとしてメッセージを送信します")
+    async def say(
+        self,
+        ctx: discord.ApplicationContext,
+        channel: Optional[discord.TextChannel] = Option(  # type: ignore[assignment]
+            discord.TextChannel,
+            "送信先チャンネル (省略時は現在のチャンネル)",
+            required=False,
+            default=None,
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+        ),
+        allow_mentions: bool = Option(  # type: ignore[assignment]
+            bool,
+            "@everyone 等のメンションを有効にする (既定: 無効)",
+            default=False,
+        ),
+    ) -> None:
+        # NOTE: モーダルを開くため defer しない。
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if not _ensure_manage_guild(ctx):
+                await ctx.respond(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if ctx.guild is None:
+                await ctx.respond(
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ実行できます。",
+                        "This can only be used in a server.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            target_channel = channel or ctx.channel
+            if target_channel is None or not isinstance(
+                target_channel, discord.TextChannel
+            ):
+                await ctx.respond(
+                    _msg(
+                        is_ja_client,
+                        "テキストチャンネルを指定してください。",
+                        "Please specify a text channel.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            interaction = getattr(ctx, "interaction", None)
+            if interaction is None or not hasattr(
+                getattr(interaction, "response", None), "send_modal"
+            ):
+                await ctx.respond(
+                    _msg(
+                        is_ja_client,
+                        "この環境ではモーダルを開けません。",
+                        "Unable to open a modal in this environment.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            modal = SayModal(
+                target_channel_id=int(target_channel.id),
+                allow_mentions=bool(allow_mentions),
+                locale_code=_locale_code(
+                    getattr(ctx, "locale", None)
+                    or getattr(getattr(ctx, "interaction", None), "locale", None)
+                ),
+            )
+            await interaction.response.send_modal(modal)
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "offkai.say failed error_id=%s guild_id=%s user_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
+            )
+            try:
+                await ctx.respond(
+                    _msg(
+                        is_ja_client,
+                        f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                        f"Request failed. Please contact an organizer. (error_id={err_id})",
+                    ),
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
 
     # NOTE: CSV出力/集計/ダッシュボード等の「便利機能」はNocoDB側で完結できるため、
     # Discord Bot 側からは撤去しました。

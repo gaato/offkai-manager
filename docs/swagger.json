@@ -1560,7 +1560,7 @@
                 "vw5iyb63jyna6b0a"
               ]
             },
-            "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwagc24vmum8cacz - Default view\n* vw5iyb63jyna6b0a - 参加者名簿",
+            "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwagc24vmum8cacz - Default view\n* vw5iyb63jyna6b0a - Participants List",
             "name": "viewId",
             "in": "query",
             "required": false
@@ -1812,7 +1812,7 @@
               "vw5iyb63jyna6b0a"
             ]
           },
-          "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwagc24vmum8cacz - Default view\n* vw5iyb63jyna6b0a - 参加者名簿",
+          "description": "Fetches records that are visible within a specific view. If the view has sorting enabled, the API returns records in the same order as displayed in the view. Specifying a **sort** query parameter overrides the view’s sorting configuration. Similarly, a **where** query parameter applies additional filtering on top of the view’s filters. By default, all fields—including those disabled in the view—are included in the response. Use the **fields** query parameter to include or exclude specific fields and customize the output.\n\n**Views:**\n* vwagc24vmum8cacz - Default view\n* vw5iyb63jyna6b0a - Participants List",
           "name": "viewId",
           "in": "query",
           "required": false
@@ -3742,6 +3742,9 @@
               },
               "registrations": {
                 "type": "integer"
+              },
+              "in_guild": {
+                "type": "boolean"
               }
             }
           }
@@ -3771,6 +3774,9 @@
               },
               "tickets": {
                 "type": "string"
+              },
+              "in_guild": {
+                "type": "boolean"
               }
             }
           }
@@ -3811,6 +3817,9 @@
               },
               "tickets": {
                 "type": "string"
+              },
+              "in_guild": {
+                "type": "boolean"
               }
             }
           }

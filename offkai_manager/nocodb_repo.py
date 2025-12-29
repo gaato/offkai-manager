@@ -37,6 +37,8 @@ class OffkaiNocoDbRepo:
         if not isinstance(first, dict):
             return None
         rid = first.get("id")
+        if rid is None:
+            return None
         try:
             return int(rid)
         except Exception:
@@ -150,7 +152,9 @@ class OffkaiNocoDbRepo:
             page += 1
         return out
 
-    async def list_panel_ids_for_event(self, *, event_id: int, limit: int = 20000) -> list[int]:
+    async def list_panel_ids_for_event(
+        self, *, event_id: int, limit: int = 20000
+    ) -> list[int]:
         """List panel ids for an event.
 
         Use ForeignKey column `event_id` (stable for filtering).
@@ -248,7 +252,11 @@ class OffkaiNocoDbRepo:
                     records=[
                         {
                             "id": existing["id"],
-                            "fields": {"display_name": display_name},
+                            "fields": {
+                                "display_name": display_name,
+                                # Keep membership state fresh (member record implies presence).
+                                "in_guild": True,
+                            },
                         }
                     ],
                 )
@@ -265,6 +273,7 @@ class OffkaiNocoDbRepo:
                     "guild_id": str(guild_id),
                     # tickets is MultiSelect; leave empty.
                     "tickets": "",
+                    "in_guild": True,
                 }
             ],
         )
@@ -340,6 +349,51 @@ class OffkaiNocoDbRepo:
             page += 1
         return out
 
+    async def sync_registration_display_name_for_member(
+        self,
+        *,
+        member_id: int,
+        display_name: str,
+        limit: int = 20000,
+    ) -> int:
+        """Sync registration.display_name for all registrations of a member.
+
+        Notes:
+        - Registration records store `display_name` as a denormalized snapshot.
+          This method updates it to match the current Discord display name.
+        - Uses chunked bulk updates to keep API calls bounded.
+        """
+        regs = await self.list_registrations_for_member(
+            member_id=member_id, limit=limit
+        )
+        if not regs:
+            return 0
+
+        # NocoDB PATCH /records accepts an array of updates.
+        # Keep chunks modest to avoid request size issues.
+        updated = 0
+        chunk_size = 50
+        for i in range(0, len(regs), chunk_size):
+            chunk = regs[i : i + chunk_size]
+            records: list[dict[str, Any]] = []
+            for r in chunk:
+                rid_raw = r.get("id")
+                if rid_raw is None:
+                    continue
+                try:
+                    rid = int(rid_raw)
+                except Exception:
+                    continue
+                records.append({"id": rid, "fields": {"display_name": display_name}})
+            if not records:
+                continue
+            await self._client.update_records(
+                table_id=self._ids.table_registration,
+                records=records,
+            )
+            updated += len(records)
+        return updated
+
     async def list_registrations_for_event_member(
         self,
         *,
@@ -385,7 +439,9 @@ class OffkaiNocoDbRepo:
 
     async def count_confirmed_for_event(self, *, event_id: int) -> int:
         where = f"(event_id,eq,{event_id})~and(is_confirmed,eq,true)"
-        return int(await self._client.count(table_id=self._ids.table_registration, where=where))
+        return int(
+            await self._client.count(table_id=self._ids.table_registration, where=where)
+        )
 
     async def list_registrations_for_event(
         self, *, event_id: int, limit: int = 20000
