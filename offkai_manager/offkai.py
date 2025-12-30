@@ -244,6 +244,44 @@ async def _respond_ephemeral(interaction: discord.Interaction, content: str) -> 
         await interaction.response.send_message(content, ephemeral=True)
 
 
+def _allowed_mentions_all() -> discord.AllowedMentions:
+    """Return an AllowedMentions instance that allows all mentions.
+
+    Some py-cord/discord.py stubs differ on whether AllowedMentions.all is a
+    callable or a prebuilt instance.
+    """
+
+    am = discord.AllowedMentions
+    maybe = getattr(am, "all", None)
+    if callable(maybe):
+        return maybe()  # type: ignore[misc]
+    if isinstance(maybe, discord.AllowedMentions):
+        return maybe
+    return discord.AllowedMentions(
+        everyone=True,
+        users=True,
+        roles=True,
+        replied_user=True,
+    )
+
+
+def _is_image_attachment(att: discord.Attachment) -> bool:
+    """Best-effort check whether the attachment is an image.
+
+    Discord sets content_type for most uploads, but it may be None.
+    """
+
+    ct = getattr(att, "content_type", None)
+    if isinstance(ct, str) and ct.lower().startswith("image/"):
+        return True
+
+    name = (getattr(att, "filename", None) or "").lower()
+    for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"):
+        if name.endswith(ext):
+            return True
+    return False
+
+
 class RegistrationModal(discord.ui.Modal):
     def __init__(
         self,
@@ -364,24 +402,24 @@ class SayModal(discord.ui.Modal):
         self,
         *,
         target_channel_id: int,
-        allow_mentions: bool,
         locale_code: Optional[str],
+        attachments: Iterable[discord.Attachment] = (),
     ) -> None:
         is_ja = bool(locale_code and locale_code.startswith("ja"))
         super().__init__(title=("Botとして送信" if is_ja else "Send as Bot"))
 
         self._target_channel_id = int(target_channel_id)
-        self._allow_mentions = bool(allow_mentions)
         self._locale_code = locale_code
+        self._attachments = tuple(attachments)
 
         self.message = _TextInput(
             label=("送信内容" if is_ja else "Message"),
             placeholder=(
-                "ここに送信したいメッセージを入力"
+                "ここに本文を入力（改行OK）\n空欄で画像のみ送信"
                 if is_ja
-                else "Type the message to send"
+                else "Type your message here (newlines OK)\nLeave blank to send images only."
             ),
-            required=True,
+            required=False,
             style=_PARAGRAPH_STYLE,
             max_length=2000,
         )
@@ -393,7 +431,7 @@ class SayModal(discord.ui.Modal):
             interaction
         )
         log.info(
-            "say_modal submit start error_id=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s target_channel_id=%s allow_mentions=%s",
+            "say_modal submit start error_id=%s interaction_id=%s guild_id=%s channel_id=%s message_id=%s user_id=%s target_channel_id=%s",
             err_id,
             interaction_id,
             guild_id,
@@ -401,7 +439,6 @@ class SayModal(discord.ui.Modal):
             message_id,
             user_id,
             int(self._target_channel_id),
-            bool(self._allow_mentions),
         )
 
         is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
@@ -419,13 +456,13 @@ class SayModal(discord.ui.Modal):
                 return
 
             content = (self.message.value or "").strip()
-            if not content:
+            if not content and not self._attachments:
                 await _respond_ephemeral(
                     interaction,
                     _msg(
                         is_ja_client,
-                        "送信内容を入力してください。",
-                        "Please enter a message.",
+                        "送信内容を入力するか、画像を添付してください。",
+                        "Please enter a message or attach images.",
                     ),
                 )
                 return
@@ -440,7 +477,7 @@ class SayModal(discord.ui.Modal):
                 except discord.HTTPException:
                     ch = None
 
-            if ch is None or not hasattr(ch, "send"):
+            if ch is None or not isinstance(ch, discord.abc.Messageable):
                 await _respond_ephemeral(
                     interaction,
                     _msg(
@@ -451,12 +488,29 @@ class SayModal(discord.ui.Modal):
                 )
                 return
 
-            allowed_mentions = (
-                discord.AllowedMentions.all()
-                if self._allow_mentions
-                else discord.AllowedMentions.none()
-            )
-            await ch.send(content, allowed_mentions=allowed_mentions)
+            files: list[discord.File] = []
+            for att in self._attachments:
+                if not _is_image_attachment(att):
+                    await _respond_ephemeral(
+                        interaction,
+                        _msg(
+                            is_ja_client,
+                            "画像ファイルを指定してください。",
+                            "Please provide image files.",
+                        ),
+                    )
+                    return
+                files.append(await att.to_file(use_cached=True))
+
+            # /offkai say は運営(admin)限定のため、メンションは常に許可する。
+            if files:
+                await ch.send(
+                    content=content or None,
+                    files=files,
+                    allowed_mentions=_allowed_mentions_all(),
+                )
+            else:
+                await ch.send(content, allowed_mentions=_allowed_mentions_all())
 
             await _respond_ephemeral(
                 interaction,
@@ -2336,7 +2390,9 @@ class OffkaiCog(commands.Cog):
                 ephemeral=True,
             )
 
-    @offkai.command(description="モーダルからBotとしてメッセージを送信します")
+    @offkai.command(
+        description="Botとしてメッセージを送信します（本文なしの場合はモーダル）"
+    )
     async def say(
         self,
         ctx: discord.ApplicationContext,
@@ -2347,17 +2403,44 @@ class OffkaiCog(commands.Cog):
             default=None,
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
         ),
-        allow_mentions: bool = Option(  # type: ignore[assignment]
-            bool,
-            "@everyone 等のメンションを有効にする (既定: 無効)",
-            default=False,
+        message: Optional[str] = Option(  # type: ignore[assignment]
+            str,
+            "送信内容（任意。未指定の場合はモーダル）",
+            required=False,
+            default=None,
+            max_length=2000,
+        ),
+        image: Optional[discord.Attachment] = Option(  # type: ignore[assignment]
+            discord.Attachment,
+            "画像（任意）",
+            required=False,
+            default=None,
+        ),
+        image2: Optional[discord.Attachment] = Option(  # type: ignore[assignment]
+            discord.Attachment,
+            "画像2（任意）",
+            required=False,
+            default=None,
+        ),
+        image3: Optional[discord.Attachment] = Option(  # type: ignore[assignment]
+            discord.Attachment,
+            "画像3（任意）",
+            required=False,
+            default=None,
+        ),
+        image4: Optional[discord.Attachment] = Option(  # type: ignore[assignment]
+            discord.Attachment,
+            "画像4（任意）",
+            required=False,
+            default=None,
         ),
     ) -> None:
-        # NOTE: モーダルを開くため defer しない。
+        # NOTE: モーダルを開く場合は defer しない（モーダル送信に失敗するため）。
         is_ja_client = _is_ja_locale(
             getattr(ctx, "locale", None)
             or getattr(getattr(ctx, "interaction", None), "locale", None)
         )
+        did_defer = False
         try:
             if not _ensure_manage_guild(ctx):
                 await ctx.respond(
@@ -2394,6 +2477,77 @@ class OffkaiCog(commands.Cog):
                 )
                 return
 
+            attachments: list[discord.Attachment] = [
+                a for a in (image, image2, image3, image4) if a is not None
+            ]
+
+            # If only images are provided (no message), open modal so users can type multi-line.
+            msg = (message or "").strip() or None
+            if msg is None and attachments:
+                interaction = getattr(ctx, "interaction", None)
+                if interaction is None or not hasattr(
+                    getattr(interaction, "response", None), "send_modal"
+                ):
+                    await ctx.respond(
+                        _msg(
+                            is_ja_client,
+                            "この環境ではモーダルを開けません。",
+                            "Unable to open a modal in this environment.",
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+
+                modal = SayModal(
+                    target_channel_id=int(target_channel.id),
+                    locale_code=_locale_code(
+                        getattr(ctx, "locale", None)
+                        or getattr(getattr(ctx, "interaction", None), "locale", None)
+                    ),
+                    attachments=attachments,
+                )
+                await interaction.response.send_modal(modal)
+                return
+
+            # If message is provided (with or without images), send directly (no modal).
+            if msg is not None or attachments:
+                await ctx.defer(ephemeral=True)
+                did_defer = True
+
+                for att in attachments:
+                    if not _is_image_attachment(att):
+                        await ctx.followup.send(
+                            _msg(
+                                is_ja_client,
+                                "画像ファイルを指定してください。",
+                                "Please provide image files.",
+                            ),
+                            ephemeral=True,
+                        )
+                        return
+
+                files: list[discord.File] = []
+                for att in attachments:
+                    files.append(await att.to_file(use_cached=True))
+
+                if files:
+                    await target_channel.send(
+                        content=msg,
+                        files=files,
+                        allowed_mentions=_allowed_mentions_all(),
+                    )
+                else:
+                    await target_channel.send(
+                        content=msg,
+                        allowed_mentions=_allowed_mentions_all(),
+                    )
+
+                await ctx.followup.send(
+                    _msg(is_ja_client, "送信しました。", "Sent."),
+                    ephemeral=True,
+                )
+                return
+
             interaction = getattr(ctx, "interaction", None)
             if interaction is None or not hasattr(
                 getattr(interaction, "response", None), "send_modal"
@@ -2410,7 +2564,6 @@ class OffkaiCog(commands.Cog):
 
             modal = SayModal(
                 target_channel_id=int(target_channel.id),
-                allow_mentions=bool(allow_mentions),
                 locale_code=_locale_code(
                     getattr(ctx, "locale", None)
                     or getattr(getattr(ctx, "interaction", None), "locale", None)
@@ -2426,14 +2579,25 @@ class OffkaiCog(commands.Cog):
                 getattr(ctx.author, "id", None),
             )
             try:
-                await ctx.respond(
-                    _msg(
-                        is_ja_client,
-                        f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
-                        f"Request failed. Please contact an organizer. (error_id={err_id})",
-                    ),
-                    ephemeral=True,
-                )
+                # If we already deferred, use followup.
+                if did_defer:
+                    await ctx.followup.send(
+                        _msg(
+                            is_ja_client,
+                            f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                            f"Request failed. Please contact an organizer. (error_id={err_id})",
+                        ),
+                        ephemeral=True,
+                    )
+                else:
+                    await ctx.respond(
+                        _msg(
+                            is_ja_client,
+                            f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                            f"Request failed. Please contact an organizer. (error_id={err_id})",
+                        ),
+                        ephemeral=True,
+                    )
             except Exception:
                 pass
 
