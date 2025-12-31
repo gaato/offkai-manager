@@ -237,11 +237,30 @@ async def _apply_roles(
     )
 
 
-async def _respond_ephemeral(interaction: discord.Interaction, content: str) -> None:
+async def _respond_ephemeral(
+    interaction: discord.Interaction,
+    content: str,
+    *,
+    allowed_mentions: Optional[discord.AllowedMentions] = None,
+) -> None:
     if interaction.response.is_done():
-        await interaction.followup.send(content, ephemeral=True)
+        if allowed_mentions is None:
+            await interaction.followup.send(content, ephemeral=True)
+        else:
+            await interaction.followup.send(
+                content,
+                ephemeral=True,
+                allowed_mentions=allowed_mentions,
+            )
     else:
-        await interaction.response.send_message(content, ephemeral=True)
+        if allowed_mentions is None:
+            await interaction.response.send_message(content, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                content,
+                ephemeral=True,
+                allowed_mentions=allowed_mentions,
+            )
 
 
 def _allowed_mentions_all() -> discord.AllowedMentions:
@@ -263,6 +282,33 @@ def _allowed_mentions_all() -> discord.AllowedMentions:
         roles=True,
         replied_user=True,
     )
+
+
+def _format_current_ticket_roles_mention_list(
+    *,
+    guild: discord.Guild,
+    member: discord.Member,
+    is_ja: bool,
+) -> tuple[str, list[discord.Role]]:
+    """Return (formatted_text, roles) for ticket/day roles currently held by member.
+
+    The formatted text is intended to be appended to an ephemeral response.
+    """
+
+    held: list[discord.Role] = []
+    for spec in _iter_ticket_role_specs():
+        r = _find_role_by_candidates(guild, spec.role_name_candidates)
+        if r is not None and r in getattr(member, "roles", []):
+            held.append(r)
+
+    if not held:
+        return _msg(
+            is_ja, "現在ついているチケット系ロール: なし", "Current ticket roles: none"
+        ), []
+
+    mentions = " ".join(r.mention for r in held)
+    prefix = _msg(is_ja, "現在ついているチケット系ロール", "Current ticket roles")
+    return f"{prefix}: {mentions}", held
 
 
 def _is_image_attachment(att: discord.Attachment) -> bool:
@@ -1452,7 +1498,20 @@ class TicketRolesView(discord.ui.View):
                 if role in member.roles:
                     await member.remove_roles(role, reason="Self-assign ticket role")
                     next_keys.discard(spec.key)
-                    await _respond_ephemeral(interaction, f"外しました: {role.name}")
+                    is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
+                    current_txt, _ = _format_current_ticket_roles_mention_list(
+                        guild=interaction.guild,
+                        member=member,
+                        is_ja=is_ja_client,
+                    )
+                    await _respond_ephemeral(
+                        interaction,
+                        _msg(
+                            is_ja_client,
+                            f"外しました: {role.name}\n{current_txt}",
+                            f"Removed: {role.name}\n{current_txt}",
+                        ),
+                    )
                 else:
                     # Enforce mutual exclusivity:
                     # - If adding zenloss: remove all other ticket/day roles first.
@@ -1497,7 +1556,20 @@ class TicketRolesView(discord.ui.View):
                     next_keys.add(spec.key)
 
                     await member.add_roles(role, reason="Self-assign ticket role")
-                    await _respond_ephemeral(interaction, f"付けました: {role.name}")
+                    is_ja_client = _is_ja_locale(getattr(interaction, "locale", None))
+                    current_txt, _ = _format_current_ticket_roles_mention_list(
+                        guild=interaction.guild,
+                        member=member,
+                        is_ja=is_ja_client,
+                    )
+                    await _respond_ephemeral(
+                        interaction,
+                        _msg(
+                            is_ja_client,
+                            f"付けました: {role.name}\n{current_txt}",
+                            f"Added: {role.name}\n{current_txt}",
+                        ),
+                    )
 
                 # Persist ticket keys to NocoDB (best-effort).
                 if self._repo is not None:
