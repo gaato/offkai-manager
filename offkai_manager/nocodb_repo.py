@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from offkai_manager.nocodb_api import NocoDbClient
+from offkai_manager.nocodb_api import NocoDbClient, NocoDbError
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +53,13 @@ class OffkaiNocoDbRepo:
                 table_id=self._ids.table_event,
                 record_id=event_id,
             )
+        except NocoDbError as e:
+            # Missing records can happen (deleted/invalid event id). Treat as not found.
+            if "status=404" in str(e):
+                log.info("Event not found event_id=%s", event_id)
+                return None
+            log.exception("Failed to fetch event event_id=%s", event_id)
+            return None
         except Exception:
             log.exception("Failed to fetch event event_id=%s", event_id)
             return None
@@ -95,6 +102,28 @@ class OffkaiNocoDbRepo:
             table_id=self._ids.table_event,
             records=[{"id": event_id, "fields": fields}],
         )
+
+    async def list_events_for_guild(
+        self, *, guild_id: int, limit: int = 20000
+    ) -> list[dict[str, Any]]:
+        where = f"(guild_id,eq,{guild_id})"
+        out: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            payload = await self._client.list_records(
+                table_id=self._ids.table_event,
+                where=where,
+                page=page,
+                page_size=min(200, max(1, limit - len(out))),
+            )
+            records = list(payload.get("records", []))
+            out.extend(records)
+            if len(out) >= limit:
+                break
+            if not payload.get("next"):
+                break
+            page += 1
+        return out
 
     # -----------------
     # Panel
@@ -242,6 +271,7 @@ class OffkaiNocoDbRepo:
         guild_id: int,
         user_id: int,
         display_name: str,
+        username: str,
     ) -> dict[str, Any]:
         existing = await self.find_member(guild_id=guild_id, user_id=user_id)
         if existing:
@@ -254,6 +284,7 @@ class OffkaiNocoDbRepo:
                             "id": existing["id"],
                             "fields": {
                                 "display_name": display_name,
+                                "username": username,
                                 # Keep membership state fresh (member record implies presence).
                                 "in_guild": True,
                             },
@@ -269,6 +300,7 @@ class OffkaiNocoDbRepo:
             records=[
                 {
                     "display_name": display_name,
+                    "username": username,
                     "user_id": str(user_id),
                     "guild_id": str(guild_id),
                     # tickets is MultiSelect; leave empty.
@@ -296,12 +328,14 @@ class OffkaiNocoDbRepo:
         guild_id: int,
         user_id: int,
         display_name: str,
+        username: str,
         ticket_keys: list[str],
     ) -> None:
         member = await self.get_or_create_member(
             guild_id=guild_id,
             user_id=user_id,
             display_name=display_name,
+            username=username,
         )
         # swagger.json snapshot models tickets as a string.
         value = ",".join(ticket_keys)
@@ -485,6 +519,7 @@ class OffkaiNocoDbRepo:
                     "twitter_id": twitter_id or "",
                     "residence": residence or "",
                     "requests": requests or "",
+                    "ticket_number": "",
                     "is_confirmed": bool(is_confirmed),
                     "has_paid": False,
                     "notes": "",
@@ -522,21 +557,44 @@ class OffkaiNocoDbRepo:
 
         out: dict[int, dict[str, Any]] = {}
 
-        # NocoDB where supports (field,in,a,b,c). Keep chunks modest.
-        chunk_size = 50
-        for i in range(0, len(member_ids), chunk_size):
-            chunk = member_ids[i : i + chunk_size]
-            values = ",".join(str(x) for x in chunk)
-            where = f"(id,in,{values})"
+        # NOTE:
+        # Some NocoDB setups do not allow filtering by `id` in where clause
+        # (INVALID_FILTER: field 'id' not found). Fetch by record endpoint instead.
+        for member_id in sorted(set(member_ids)):
+            try:
+                r = await self._client.get_record(
+                    table_id=self._ids.table_member,
+                    record_id=member_id,
+                )
+                out[int(r["id"])] = r
+            except NocoDbError as e:
+                # Missing member record: skip silently.
+                if "status=404" in str(e):
+                    continue
+                raise
+            except Exception:
+                continue
+
+        return out
+
+    async def list_members_for_guild(
+        self, *, guild_id: int, limit: int = 20000
+    ) -> list[dict[str, Any]]:
+        where = f"(guild_id,eq,{guild_id})"
+        out: list[dict[str, Any]] = []
+        page = 1
+        while True:
             payload = await self._client.list_records(
                 table_id=self._ids.table_member,
                 where=where,
-                page_size=200,
+                page=page,
+                page_size=min(200, max(1, limit - len(out))),
             )
-            for r in payload.get("records", []):
-                try:
-                    out[int(r["id"])] = r
-                except Exception:
-                    continue
-
+            records = list(payload.get("records", []))
+            out.extend(records)
+            if len(out) >= limit:
+                break
+            if not payload.get("next"):
+                break
+            page += 1
         return out

@@ -9,7 +9,7 @@ from typing import Any, Iterable, Optional
 
 import discord
 from discord import IntegrationType, InteractionContextType, Option, OptionChoice
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from offkai_manager.nocodb_repo import OffkaiNocoDbRepo
 
@@ -27,6 +27,7 @@ else:
 STATUS_CONFIRMED = "confirmed"
 STATUS_WAITLIST = "waitlist"
 STATUS_CANCELLED = "cancelled"
+HAS_PAID_ROLE_SYNC_INTERVAL_MINUTES = 5
 
 
 def _parse_role_id(value: Optional[str]) -> Optional[int]:
@@ -136,6 +137,17 @@ def _nc_int(value: Any, *, default: int | None = None) -> int | None:
             return int(str(value))
         except Exception:
             return default
+
+
+def _registration_member_id(fields: dict[str, Any]) -> Optional[int]:
+    member_id = _nc_int(fields.get("member_id"))
+    if member_id is not None:
+        return member_id
+
+    linked = fields.get("member")
+    if isinstance(linked, list) and linked and isinstance(linked[0], dict):
+        return _nc_int(linked[0].get("id"))
+    return None
 
 
 def _locale_code(value: Any) -> str:
@@ -710,6 +722,7 @@ class RegistrationView(discord.ui.View):
                     if isinstance(user, discord.Member)
                     else str(user.id)
                 ),
+                username=str(user.name),
             )
             member_id = _nc_int(member_rec.get("id"))
             if member_id is None:
@@ -912,6 +925,7 @@ class RegistrationView(discord.ui.View):
                 guild_id=interaction.guild.id,
                 user_id=user.id,
                 display_name=display_name,
+                username=str(user.name),
             )
             member_id = _nc_int(member_rec.get("id"))
             if member_id is None:
@@ -1584,6 +1598,7 @@ class TicketRolesView(discord.ui.View):
                             guild_id=int(interaction.guild.id),
                             user_id=int(member.id),
                             display_name=str(member.display_name),
+                            username=str(member.name),
                             ticket_keys=nocodb_values,
                         )
                     except Exception:
@@ -1650,19 +1665,132 @@ class OffkaiCog(commands.Cog):
     def __init__(self, bot: discord.Bot, *, repo: OffkaiNocoDbRepo) -> None:
         self.bot = bot
         self.repo = repo
+        if not self._has_paid_role_sync_loop.is_running():
+            self._has_paid_role_sync_loop.start()
+
+    def cog_unload(self) -> None:
+        if self._has_paid_role_sync_loop.is_running():
+            self._has_paid_role_sync_loop.cancel()
+
+    async def _sync_has_paid_role_for_event(
+        self,
+        *,
+        guild: discord.Guild,
+        event_id: int,
+    ) -> tuple[int, int, int]:
+        ev = await self.repo.get_event(event_id)
+        if not ev:
+            return (0, 0, 1)
+
+        evf = _nc_fields(ev)
+        has_paid_role_id = _parse_role_id(
+            str(evf.get("has_paid_role_id")) if evf.get("has_paid_role_id") else None
+        )
+        if not has_paid_role_id:
+            return (0, 0, 0)
+
+        paid_role = guild.get_role(int(has_paid_role_id))
+        if paid_role is None:
+            log.warning(
+                "sync_has_paid_role role not found guild_id=%s event_id=%s role_id=%s",
+                guild.id,
+                event_id,
+                has_paid_role_id,
+            )
+            return (0, 0, 1)
+
+        regs = await self.repo.list_registrations_for_event(event_id=event_id)
+
+        paid_member_ids: list[int] = []
+        for r in regs:
+            rf = _nc_fields(r)
+            if not bool(rf.get("has_paid")):
+                continue
+            mid = _registration_member_id(rf)
+            if mid is not None:
+                paid_member_ids.append(mid)
+
+        members_by_id = await self.repo.list_members_by_ids(
+            member_ids=list(sorted(set(paid_member_ids)))
+        )
+
+        added = 0
+        missing = 0
+        failed = 0
+
+        for mid in sorted(set(paid_member_ids)):
+            member_rec = members_by_id.get(int(mid))
+            user_id = _nc_int(_nc_fields(member_rec).get("user_id"))
+            if user_id is None:
+                failed += 1
+                continue
+
+            try:
+                guild_member = await guild.fetch_member(int(user_id))
+            except discord.NotFound:
+                missing += 1
+                continue
+            except discord.HTTPException:
+                failed += 1
+                continue
+
+            try:
+                if paid_role not in guild_member.roles:
+                    await guild_member.add_roles(
+                        paid_role,
+                        reason="Registration payment confirmed",
+                    )
+                    added += 1
+            except discord.HTTPException:
+                failed += 1
+
+        return (added, missing, failed)
+
+    @tasks.loop(minutes=HAS_PAID_ROLE_SYNC_INTERVAL_MINUTES)
+    async def _has_paid_role_sync_loop(self) -> None:
+        for guild in self.bot.guilds:
+            try:
+                events = await self.repo.list_events_for_guild(guild_id=guild.id)
+            except Exception:
+                log.exception(
+                    "has_paid_role_sync failed to list events guild_id=%s",
+                    guild.id,
+                )
+                continue
+
+            for ev in events:
+                event_id = _nc_int(ev.get("id"))
+                if event_id is None:
+                    continue
+                try:
+                    await self._sync_has_paid_role_for_event(
+                        guild=guild,
+                        event_id=int(event_id),
+                    )
+                except Exception:
+                    log.exception(
+                        "has_paid_role_sync failed guild_id=%s event_id=%s",
+                        guild.id,
+                        event_id,
+                    )
+
+    @_has_paid_role_sync_loop.before_loop
+    async def _before_has_paid_role_sync_loop(self) -> None:
+        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_member_update(
         self, before: discord.Member, after: discord.Member
     ) -> None:
         """Listen for member updates (nickname/display name changes) and sync to NocoDB."""
-        # Only process if display_name changed
-        if before.display_name == after.display_name:
+        # Only process if either display_name or username changed.
+        if before.display_name == after.display_name and before.name == after.name:
             return
 
         guild_id = after.guild.id
         user_id = after.id
         new_display_name = after.display_name
+        new_username = after.name
 
         try:
             # Find existing member record in NocoDB
@@ -1673,7 +1801,10 @@ class OffkaiCog(commands.Cog):
                     # Update display_name in NocoDB
                     await self.repo.update_member(
                         member_id=member_id,
-                        fields={"display_name": new_display_name},
+                        fields={
+                            "display_name": new_display_name,
+                            "username": new_username,
+                        },
                     )
 
                     # Also keep denormalized registration.display_name fresh.
@@ -1695,12 +1826,14 @@ class OffkaiCog(commands.Cog):
                             member_id,
                         )
                     log.info(
-                        "on_member_update synced display_name guild_id=%s user_id=%s member_id=%s old=%s new=%s updated_regs=%s",
+                        "on_member_update synced profile guild_id=%s user_id=%s member_id=%s old_display_name=%s new_display_name=%s old_username=%s new_username=%s updated_regs=%s",
                         guild_id,
                         user_id,
                         member_id,
                         before.display_name,
                         new_display_name,
+                        before.name,
+                        new_username,
                         updated_regs,
                     )
         except Exception:
@@ -1749,6 +1882,7 @@ class OffkaiCog(commands.Cog):
                 guild_id=member.guild.id,
                 user_id=member.id,
                 display_name=member.display_name,
+                username=member.name,
             )
         except Exception:
             log.exception(
@@ -2091,16 +2225,9 @@ class OffkaiCog(commands.Cog):
             regs = await self.repo.list_registrations_for_event(event_id=event_id)
             member_ids: list[int] = []
             for r in regs:
-                mf = _nc_fields(r).get("member")
-                if (
-                    isinstance(mf, list)
-                    and mf
-                    and isinstance(mf[0], dict)
-                    and "id" in mf[0]
-                ):
-                    mid = _nc_int(mf[0].get("id"))
-                    if mid is not None:
-                        member_ids.append(mid)
+                mid = _registration_member_id(_nc_fields(r))
+                if mid is not None:
+                    member_ids.append(mid)
 
             members_by_id = await self.repo.list_members_by_ids(
                 member_ids=list(sorted(set(member_ids)))
@@ -2115,17 +2242,10 @@ class OffkaiCog(commands.Cog):
                 is_confirmed = bool(rf.get("is_confirmed"))
 
                 # Resolve discord user id via linked member.
-                mf = rf.get("member")
                 member_rec: Optional[dict[str, Any]] = None
-                if (
-                    isinstance(mf, list)
-                    and mf
-                    and isinstance(mf[0], dict)
-                    and "id" in mf[0]
-                ):
-                    mid = _nc_int(mf[0].get("id"))
-                    if mid is not None:
-                        member_rec = members_by_id.get(mid)
+                mid = _registration_member_id(rf)
+                if mid is not None:
+                    member_rec = members_by_id.get(mid)
 
                 user_id_raw = (
                     _nc_fields(member_rec).get("user_id") if member_rec else None
@@ -2156,8 +2276,19 @@ class OffkaiCog(commands.Cog):
                     failed += 1
                     log.exception("roles_sync failed for user_id=%s", user_id)
 
+            paid_added, paid_missing, paid_failed = (
+                await self._sync_has_paid_role_for_event(
+                    guild=ctx.guild,
+                    event_id=event_id,
+                )
+            )
+
             await ctx.followup.send(
-                f"ロール同期完了: ok={ok} missing={missing} failed={failed}",
+                (
+                    "ロール同期完了: "
+                    f"ok={ok} missing={missing} failed={failed} "
+                    f"paid_added={paid_added} paid_missing={paid_missing} paid_failed={paid_failed}"
+                ),
                 ephemeral=True,
             )
         except Exception:
@@ -2168,6 +2299,144 @@ class OffkaiCog(commands.Cog):
                 ctx.guild.id if ctx.guild else None,
                 getattr(ctx.author, "id", None),
                 event_id,
+            )
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    f"処理に失敗しました。運営に連絡してください (error_id={err_id})",
+                    f"Request failed. Please contact an organizer. (error_id={err_id})",
+                ),
+                ephemeral=True,
+            )
+
+    @offkai.command(
+        description="memberテーブルの display_name / username / in_guild を一括同期します"
+    )
+    async def members_sync_profile(
+        self,
+        ctx: discord.ApplicationContext,
+    ) -> None:
+        await ctx.defer(ephemeral=True)
+        is_ja_client = _is_ja_locale(
+            getattr(ctx, "locale", None)
+            or getattr(getattr(ctx, "interaction", None), "locale", None)
+        )
+        try:
+            if ctx.guild is None:
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー内でのみ実行できます。",
+                        "This can only be used in a server.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if not _ensure_manage_guild(ctx):
+                await ctx.followup.send(
+                    _msg(
+                        is_ja_client,
+                        "サーバー管理権限が必要です。",
+                        "Administrator permission is required.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            member_records = await self.repo.list_members_for_guild(
+                guild_id=ctx.guild.id
+            )
+
+            synced = 0
+            marked_out = 0
+            failed = 0
+            regs_updated = 0
+
+            for rec in member_records:
+                member_id = _nc_int(rec.get("id"))
+                user_id = _nc_int(_nc_fields(rec).get("user_id"))
+                if member_id is None or user_id is None:
+                    failed += 1
+                    continue
+
+                try:
+                    discord_member = await ctx.guild.fetch_member(int(user_id))
+                except discord.NotFound:
+                    try:
+                        await self.repo.update_member(
+                            member_id=int(member_id),
+                            fields={"in_guild": False},
+                        )
+                        marked_out += 1
+                    except Exception:
+                        failed += 1
+                        log.exception(
+                            "members_sync_profile failed to mark out-of-guild guild_id=%s member_id=%s user_id=%s",
+                            ctx.guild.id,
+                            member_id,
+                            user_id,
+                        )
+                    continue
+                except discord.HTTPException:
+                    failed += 1
+                    continue
+
+                try:
+                    await self.repo.update_member(
+                        member_id=int(member_id),
+                        fields={
+                            "display_name": str(discord_member.display_name),
+                            "username": str(discord_member.name),
+                            "in_guild": True,
+                        },
+                    )
+                    synced += 1
+                    try:
+                        regs_updated += (
+                            await self.repo.sync_registration_display_name_for_member(
+                                member_id=int(member_id),
+                                display_name=str(discord_member.display_name),
+                            )
+                        )
+                    except Exception:
+                        log.exception(
+                            "members_sync_profile failed to sync registration display_name guild_id=%s member_id=%s user_id=%s",
+                            ctx.guild.id,
+                            member_id,
+                            user_id,
+                        )
+                except Exception:
+                    failed += 1
+                    log.exception(
+                        "members_sync_profile failed to update member guild_id=%s member_id=%s user_id=%s",
+                        ctx.guild.id,
+                        member_id,
+                        user_id,
+                    )
+
+            await ctx.followup.send(
+                _msg(
+                    is_ja_client,
+                    (
+                        "member同期完了: "
+                        f"synced={synced} marked_out={marked_out} failed={failed} "
+                        f"registration_display_name_updated={regs_updated}"
+                    ),
+                    (
+                        "Member sync completed: "
+                        f"synced={synced} marked_out={marked_out} failed={failed} "
+                        f"registration_display_name_updated={regs_updated}"
+                    ),
+                ),
+                ephemeral=True,
+            )
+        except Exception:
+            err_id = secrets.token_hex(4)
+            log.exception(
+                "members_sync_profile failed error_id=%s guild_id=%s user_id=%s",
+                err_id,
+                ctx.guild.id if ctx.guild else None,
+                getattr(ctx.author, "id", None),
             )
             await ctx.followup.send(
                 _msg(

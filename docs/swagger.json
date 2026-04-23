@@ -3374,6 +3374,9 @@
               "requests": {
                 "type": "string"
               },
+              "ticket_number": {
+                "type": "string"
+              },
               "panel": {
                 "type": "array",
                 "items": {
@@ -3482,6 +3485,9 @@
                 "type": "string"
               },
               "requests": {
+                "type": "string"
+              },
+              "ticket_number": {
                 "type": "string"
               },
               "panel": {
@@ -3597,6 +3603,9 @@
                 "type": "string"
               },
               "requests": {
+                "type": "string"
+              },
+              "ticket_number": {
                 "type": "string"
               },
               "panel": {
@@ -3731,6 +3740,9 @@
               "display_name": {
                 "type": "string"
               },
+              "username": {
+                "type": "string"
+              },
               "user_id": {
                 "type": "string"
               },
@@ -3764,6 +3776,9 @@
             "description": "Record fields data to be created/updated",
             "properties": {
               "display_name": {
+                "type": "string"
+              },
+              "username": {
                 "type": "string"
               },
               "user_id": {
@@ -3807,6 +3822,9 @@
             "description": "Record fields data to be updated",
             "properties": {
               "display_name": {
+                "type": "string"
+              },
+              "username": {
                 "type": "string"
               },
               "user_id": {
