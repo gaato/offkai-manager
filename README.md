@@ -24,4 +24,4 @@ uv run main.py
 
 ## License
 
-All rights reserved. 参照用に公開していますが、ライセンスは付与していません(複製・再配布・改変利用は不可)。
+[Blue Oak Model License 1.0.0](LICENSE.md)
