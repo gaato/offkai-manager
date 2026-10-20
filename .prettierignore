@@ -1,0 +1,16 @@
+.agents
+AGENTS.md
+.svelte-kit
+build
+node_modules
+playwright-report
+test-results
+coverage
+cmd
+internal
+web
+docs
+e2e/legacy-reference
+LICENSE
+THIRD_PARTY_NOTICES.md
+pnpm-lock.yaml

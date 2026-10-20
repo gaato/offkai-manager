@@ -1,0 +1,384 @@
+import { and, asc, count, desc, eq, ilike, inArray, type SQL } from 'drizzle-orm';
+import type { DatabaseClient } from '$lib/server/db/client';
+import {
+  auditLogs,
+  eventFormFields,
+  events,
+  externalAccounts,
+  registrationFormAnswerOptions,
+  registrationFormAnswers,
+  registrations
+} from '$lib/server/db/schema';
+import { appendAudit } from '$lib/server/domain/audit';
+import { enqueueRoleSync } from '$lib/server/domain/discord';
+import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
+import {
+  cancelPaymentRequestsForRegistration,
+  ensurePaymentRequestsForRegistration
+} from '$lib/server/domain/payments';
+import { formFieldTypeSchema, type FormFieldType } from '$lib/shared/registration-form';
+import {
+  registrationStatuses,
+  registrationStatusSchema,
+  type RegistrationStatus
+} from '$lib/shared/registration';
+import { RegistrationError } from './errors';
+import { promoteOldestWaitlisted } from './promotion';
+import type { RegistrationSummary } from './service';
+
+const participantListLimit = 500;
+
+export type ParticipantStatusFilter = RegistrationStatus | 'all';
+
+export interface ParticipantListRow {
+  id: string;
+  displayName: string;
+  username: string;
+  status: RegistrationStatus;
+  registeredAt: Date;
+}
+
+export interface ParticipantList {
+  rows: ParticipantListRow[];
+  counts: Record<ParticipantStatusFilter, number>;
+  capped: boolean;
+}
+
+/** Lists event registrations for staff while preserving the legacy case-insensitive substring search. */
+export async function listParticipants(
+  client: DatabaseClient,
+  input: {
+    actorUserId: string;
+    eventId: string;
+    status: ParticipantStatusFilter;
+    query: string;
+  }
+): Promise<ParticipantList> {
+  return client.db.transaction(async (tx) => {
+    const eventRows = await tx
+      .select({ organizationId: events.organizationId })
+      .from(events)
+      .where(eq(events.id, input.eventId))
+      .limit(1);
+    if (!eventRows[0]) throw new RegistrationError('not_found', 'event not found');
+    await authorizeOrganizationRole(
+      tx,
+      eventRows[0].organizationId,
+      input.actorUserId,
+      'staff',
+      false,
+      true
+    );
+
+    const countRows = await tx
+      .select({ status: registrations.status, value: count(registrations.id) })
+      .from(registrations)
+      .where(eq(registrations.eventId, input.eventId))
+      .groupBy(registrations.status);
+    const counts: Record<ParticipantStatusFilter, number> = {
+      all: 0,
+      applied: 0,
+      confirmed: 0,
+      waitlisted: 0,
+      cancelled: 0
+    };
+    for (const row of countRows) {
+      const status = registrationStatusSchema.parse(row.status);
+      counts[status] = row.value;
+      counts.all += row.value;
+    }
+
+    const conditions: SQL[] = [eq(registrations.eventId, input.eventId)];
+    if (input.status !== 'all') conditions.push(eq(registrations.status, input.status));
+    const query = input.query.trim();
+    if (query) conditions.push(ilike(registrations.searchText, `%${query}%`));
+
+    const rows = await tx
+      .select({
+        id: registrations.id,
+        displayName: registrations.displayNameSnapshot,
+        username: externalAccounts.username,
+        status: registrations.status,
+        registeredAt: registrations.createdAt
+      })
+      .from(registrations)
+      .leftJoin(
+        externalAccounts,
+        and(
+          eq(externalAccounts.userId, registrations.userId),
+          eq(externalAccounts.provider, 'discord')
+        )
+      )
+      .where(and(...conditions))
+      .orderBy(asc(registrations.createdAt), asc(registrations.id))
+      .limit(participantListLimit + 1);
+
+    return {
+      rows: rows.slice(0, participantListLimit).map((row) => ({
+        ...row,
+        username: row.username ?? '',
+        status: registrationStatusSchema.parse(row.status)
+      })),
+      counts,
+      capped: rows.length > participantListLimit
+    };
+  });
+}
+
+export function participantStatusFilter(raw: string | null): ParticipantStatusFilter {
+  if (!raw || raw === 'all') return 'all';
+  const parsed = registrationStatusSchema.safeParse(raw);
+  return parsed.success ? parsed.data : 'all';
+}
+
+export const participantStatusFilters = ['all', ...registrationStatuses] as const;
+
+export interface AdminRegistrationAnswer {
+  label: string;
+  type: FormFieldType;
+  valueText: string;
+  valueBool: boolean | null;
+  optionLabels: string[];
+}
+
+export interface RegistrationAuditRow {
+  id: string;
+  action: string;
+  actorName: string;
+  beforeStatus: RegistrationStatus | null;
+  afterStatus: RegistrationStatus | null;
+  createdAt: Date;
+}
+
+export interface AdminRegistrationDetail {
+  registration: RegistrationSummary;
+  event: { id: string; title: string };
+  username: string;
+  answers: AdminRegistrationAnswer[];
+  audits: RegistrationAuditRow[];
+  canMutate: boolean;
+}
+
+/** Loads a registration's immutable answer snapshots and related audit history for staff. */
+export async function getAdminRegistrationDetail(
+  client: DatabaseClient,
+  actorUserId: string,
+  registrationId: string
+): Promise<AdminRegistrationDetail> {
+  return client.db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ registration: registrations, event: events, username: externalAccounts.username })
+      .from(registrations)
+      .innerJoin(events, eq(events.id, registrations.eventId))
+      .leftJoin(
+        externalAccounts,
+        and(
+          eq(externalAccounts.userId, registrations.userId),
+          eq(externalAccounts.provider, 'discord')
+        )
+      )
+      .where(eq(registrations.id, registrationId))
+      .limit(1);
+    const row = rows[0];
+    if (!row) throw new RegistrationError('not_found', 'registration not found');
+    const access = await authorizeOrganizationRole(
+      tx,
+      row.event.organizationId,
+      actorUserId,
+      'staff',
+      false,
+      true
+    );
+
+    const answerRows = await tx
+      .select({ answer: registrationFormAnswers, position: eventFormFields.position })
+      .from(registrationFormAnswers)
+      .innerJoin(eventFormFields, eq(eventFormFields.id, registrationFormAnswers.fieldId))
+      .where(eq(registrationFormAnswers.registrationId, registrationId))
+      .orderBy(asc(eventFormFields.position), asc(registrationFormAnswers.id));
+    const answerIds = answerRows.map(({ answer }) => answer.id);
+    const optionRows =
+      answerIds.length === 0
+        ? []
+        : await tx
+            .select()
+            .from(registrationFormAnswerOptions)
+            .where(inArray(registrationFormAnswerOptions.answerId, answerIds));
+    const optionsByAnswer = new Map<string, string[]>();
+    for (const option of optionRows) {
+      const labels = optionsByAnswer.get(option.answerId) ?? [];
+      labels.push(option.optionLabelSnapshot);
+      optionsByAnswer.set(option.answerId, labels);
+    }
+
+    const relatedAudits = await tx
+      .select()
+      .from(auditLogs)
+      .where(and(eq(auditLogs.targetType, 'registration'), eq(auditLogs.targetId, registrationId)))
+      .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id));
+    const actorIds = relatedAudits
+      .map(({ actorUserId }) => actorUserId)
+      .filter((id): id is string => id !== null);
+    const actorRows =
+      actorIds.length === 0
+        ? []
+        : await tx
+            .select({
+              userId: externalAccounts.userId,
+              displayName: externalAccounts.displayName,
+              username: externalAccounts.username
+            })
+            .from(externalAccounts)
+            .where(
+              and(
+                eq(externalAccounts.provider, 'discord'),
+                inArray(externalAccounts.userId, actorIds)
+              )
+            );
+    const actorNames = new Map(
+      actorRows.map(({ userId, displayName, username }) => [userId, displayName || username])
+    );
+
+    return {
+      registration: parseRegistration(row.registration),
+      event: { id: row.event.id, title: row.event.title },
+      username: row.username ?? '',
+      answers: answerRows.map(({ answer }) => ({
+        label: answer.fieldLabelSnapshot,
+        type: formFieldTypeSchema.parse(answer.fieldTypeSnapshot),
+        valueText: answer.valueText,
+        valueBool: answer.valueBool,
+        optionLabels: optionsByAnswer.get(answer.id) ?? []
+      })),
+      audits: relatedAudits.map((audit) => ({
+        id: audit.id,
+        action: audit.action,
+        actorName: audit.actorUserId ? (actorNames.get(audit.actorUserId) ?? '') : '',
+        beforeStatus: auditStatus(audit.beforeJson),
+        afterStatus: auditStatus(audit.afterJson),
+        createdAt: audit.createdAt
+      })),
+      canMutate: !access.suspendedAt && access.capabilities.canOperateParticipants
+    };
+  });
+}
+
+export async function changeRegistrationStatus(
+  client: DatabaseClient,
+  input: {
+    actorUserId: string;
+    registrationId: string;
+    status: Extract<RegistrationStatus, 'confirmed' | 'waitlisted' | 'cancelled'>;
+  }
+): Promise<RegistrationSummary> {
+  return client.db.transaction(async (tx) => {
+    const identityRows = await tx
+      .select({ eventId: registrations.eventId })
+      .from(registrations)
+      .where(eq(registrations.id, input.registrationId))
+      .limit(1);
+    if (!identityRows[0]) throw new RegistrationError('not_found', 'registration not found');
+
+    const eventRows = await tx
+      .select()
+      .from(events)
+      .where(eq(events.id, identityRows[0].eventId))
+      .limit(1)
+      .for('update');
+    const event = eventRows[0];
+    if (!event) throw new RegistrationError('not_found', 'event not found');
+    await authorizeOrganizationRole(tx, event.organizationId, input.actorUserId, 'organizer');
+
+    const registrationRows = await tx
+      .select()
+      .from(registrations)
+      .where(eq(registrations.id, input.registrationId))
+      .limit(1)
+      .for('update');
+    const current = registrationRows[0];
+    if (!current || current.eventId !== event.id) {
+      throw new RegistrationError('not_found', 'registration not found');
+    }
+    const currentStatus = registrationStatusSchema.parse(current.status);
+    if (!canChangeRegistrationStatus(currentStatus, input.status)) {
+      throw new RegistrationError('illegal_transition', 'registration status transition denied');
+    }
+    if (input.status === 'confirmed' && event.capacity !== null) {
+      const confirmedRows = await tx
+        .select({ value: count(registrations.id) })
+        .from(registrations)
+        .where(and(eq(registrations.eventId, event.id), eq(registrations.status, 'confirmed')));
+      if ((confirmedRows[0]?.value ?? 0) >= event.capacity) {
+        throw new RegistrationError('capacity', 'event capacity has been reached');
+      }
+    }
+
+    const updatedRows = await tx
+      .update(registrations)
+      .set({ status: input.status, updatedAt: new Date() })
+      .where(and(eq(registrations.id, current.id), eq(registrations.status, currentStatus)))
+      .returning();
+    if (!updatedRows[0]) {
+      throw new RegistrationError('illegal_transition', 'registration changed concurrently');
+    }
+    const updated = parseRegistration(updatedRows[0]);
+    await appendAudit(tx, {
+      actorUserId: input.actorUserId,
+      eventId: event.id,
+      action: registrationAction(input.status),
+      targetType: 'registration',
+      targetId: current.id,
+      before: { status: currentStatus },
+      after: { status: input.status },
+      reason: 'organizer action'
+    });
+    await enqueueRoleSync(tx, event.id, current.id);
+
+    if (input.status === 'confirmed') {
+      await ensurePaymentRequestsForRegistration(tx, event.id, current.id);
+    } else if (input.status === 'cancelled') {
+      await cancelPaymentRequestsForRegistration(tx, current.id);
+    }
+
+    if (
+      input.status === 'cancelled' &&
+      currentStatus === 'confirmed' &&
+      event.registrationMode === 'auto_confirm'
+    ) {
+      await promoteOldestWaitlisted(tx, {
+        eventId: event.id,
+        capacity: event.capacity,
+        actorUserId: input.actorUserId,
+        reason: 'vacancy after organizer cancellation'
+      });
+    }
+    return updated;
+  });
+}
+
+function canChangeRegistrationStatus(
+  from: RegistrationStatus,
+  to: Extract<RegistrationStatus, 'confirmed' | 'waitlisted' | 'cancelled'>
+): boolean {
+  if (to === 'confirmed') return from === 'applied' || from === 'waitlisted';
+  if (to === 'waitlisted') return from === 'applied' || from === 'confirmed';
+  return from !== 'cancelled';
+}
+
+function registrationAction(
+  status: Extract<RegistrationStatus, 'confirmed' | 'waitlisted' | 'cancelled'>
+): 'registration.confirm' | 'registration.waitlist' | 'registration.cancel' {
+  if (status === 'confirmed') return 'registration.confirm';
+  if (status === 'waitlisted') return 'registration.waitlist';
+  return 'registration.cancel';
+}
+
+function parseRegistration(row: typeof registrations.$inferSelect): RegistrationSummary {
+  return { ...row, status: registrationStatusSchema.parse(row.status) };
+}
+
+function auditStatus(value: unknown): RegistrationStatus | null {
+  if (!value || typeof value !== 'object' || !('status' in value)) return null;
+  const parsed = registrationStatusSchema.safeParse(value.status);
+  return parsed.success ? parsed.data : null;
+}

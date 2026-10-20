@@ -1,0 +1,35 @@
+[tools]
+node = "24.18.0"
+pnpm = "11.9.0"
+
+[tasks.dev]
+description = "Start the SvelteKit development server"
+run = "pnpm dev"
+
+[tasks.build]
+description = "Build the adapter-node application"
+run = "pnpm build"
+
+[tasks.check]
+description = "Run Svelte and TypeScript checks"
+run = "pnpm check"
+
+[tasks.lint]
+description = "Run ESLint and Prettier checks"
+run = "pnpm lint"
+
+[tasks.depcruise]
+description = "Check architecture boundaries"
+run = "pnpm depcruise"
+
+[tasks.test]
+description = "Run unit tests"
+run = "pnpm test"
+
+[tasks.test-integration]
+description = "Run PostgreSQL integration tests"
+run = "pnpm test:integration"
+
+[tasks.test-e2e]
+description = "Run Chromium browser tests"
+run = "pnpm test:e2e"

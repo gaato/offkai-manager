@@ -1,0 +1,97 @@
+export type AuditActionLabelKey =
+  | 'activity.action.unknown'
+  | 'activity.action.identity.discord_link'
+  | 'activity.action.identity.discord_refresh'
+  | 'activity.action.organization.create'
+  | 'activity.action.membership.invite'
+  | 'activity.action.membership.role_change'
+  | 'activity.action.membership.enable'
+  | 'activity.action.membership.disable'
+  | 'activity.action.event.create'
+  | 'activity.action.event.settings_update'
+  | 'activity.action.event.publish'
+  | 'activity.action.event.unlist'
+  | 'activity.action.event.cancel'
+  | 'activity.action.event.archive'
+  | 'activity.action.event.form_field_upsert'
+  | 'activity.action.event.form_field_archive'
+  | 'activity.action.event.form_field_reorder'
+  | 'activity.action.event.discord_update'
+  | 'activity.action.registration.create'
+  | 'activity.action.registration.withdraw'
+  | 'activity.action.registration.promote'
+  | 'activity.action.registration.confirm'
+  | 'activity.action.registration.waitlist'
+  | 'activity.action.registration.cancel'
+  | 'activity.action.collection.create'
+  | 'activity.action.collection.update'
+  | 'activity.action.collection.status_change'
+  | 'activity.action.payment_method.upsert'
+  | 'activity.action.payment_method.archive'
+  | 'activity.action.payment.confirm_manual'
+  | 'activity.action.payment.waive'
+  | 'activity.action.payment.stripe_checkout_begin'
+  | 'activity.action.payment.stripe_checkout_attach'
+  | 'activity.action.payment.stripe_checkout_failed'
+  | 'activity.action.payment.stripe_settle'
+  | 'activity.action.payment.stripe_settle_conflict'
+  | 'activity.action.payment.mark_refunded'
+  | 'activity.action.stripe.onboard_start'
+  | 'activity.action.stripe.status_change'
+  | 'activity.action.checkin.record'
+  | 'activity.action.checkin.undo'
+  | 'activity.action.platform.org_suspend'
+  | 'activity.action.platform.org_unsuspend'
+  | 'activity.action.platform.user_suspend'
+  | 'activity.action.platform.user_unsuspend';
+
+const actionLabels: Readonly<Record<string, AuditActionLabelKey>> = {
+  'identity.discord_link': 'activity.action.identity.discord_link',
+  'identity.discord_refresh': 'activity.action.identity.discord_refresh',
+  'organization.create': 'activity.action.organization.create',
+  'membership.invite': 'activity.action.membership.invite',
+  'membership.role_change': 'activity.action.membership.role_change',
+  'membership.enable': 'activity.action.membership.enable',
+  'membership.disable': 'activity.action.membership.disable',
+  'event.create': 'activity.action.event.create',
+  'event.settings_update': 'activity.action.event.settings_update',
+  'event.publish': 'activity.action.event.publish',
+  'event.unlist': 'activity.action.event.unlist',
+  'event.cancel': 'activity.action.event.cancel',
+  'event.archive': 'activity.action.event.archive',
+  'event.form_field_upsert': 'activity.action.event.form_field_upsert',
+  'event.form_field_archive': 'activity.action.event.form_field_archive',
+  'event.form_field_reorder': 'activity.action.event.form_field_reorder',
+  'event.discord_update': 'activity.action.event.discord_update',
+  'registration.create': 'activity.action.registration.create',
+  'registration.withdraw': 'activity.action.registration.withdraw',
+  'registration.promote': 'activity.action.registration.promote',
+  'registration.confirm': 'activity.action.registration.confirm',
+  'registration.waitlist': 'activity.action.registration.waitlist',
+  'registration.cancel': 'activity.action.registration.cancel',
+  'collection.create': 'activity.action.collection.create',
+  'collection.update': 'activity.action.collection.update',
+  'collection.status_change': 'activity.action.collection.status_change',
+  'payment_method.upsert': 'activity.action.payment_method.upsert',
+  'payment_method.archive': 'activity.action.payment_method.archive',
+  'payment.confirm_manual': 'activity.action.payment.confirm_manual',
+  'payment.waive': 'activity.action.payment.waive',
+  'payment.stripe_checkout_begin': 'activity.action.payment.stripe_checkout_begin',
+  'payment.stripe_checkout_attach': 'activity.action.payment.stripe_checkout_attach',
+  'payment.stripe_checkout_failed': 'activity.action.payment.stripe_checkout_failed',
+  'payment.stripe_settle': 'activity.action.payment.stripe_settle',
+  'payment.stripe_settle_conflict': 'activity.action.payment.stripe_settle_conflict',
+  'payment.mark_refunded': 'activity.action.payment.mark_refunded',
+  'stripe.onboard_start': 'activity.action.stripe.onboard_start',
+  'stripe.status_change': 'activity.action.stripe.status_change',
+  'checkin.record': 'activity.action.checkin.record',
+  'checkin.undo': 'activity.action.checkin.undo',
+  'platform.org_suspend': 'activity.action.platform.org_suspend',
+  'platform.org_unsuspend': 'activity.action.platform.org_unsuspend',
+  'platform.user_suspend': 'activity.action.platform.user_suspend',
+  'platform.user_unsuspend': 'activity.action.platform.user_unsuspend'
+};
+
+export function auditActionLabelKey(action: string): AuditActionLabelKey {
+  return actionLabels[action] ?? 'activity.action.unknown';
+}

@@ -1,0 +1,815 @@
+import { and, asc, desc, eq, gt, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
+import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
+import {
+  collectionPaymentMethods,
+  collections,
+  eventFormFields,
+  events,
+  organizations,
+  paymentRecords,
+  paymentRequests,
+  registrations,
+  stripeConnectAccounts
+} from '$lib/server/db/schema';
+import { appendAudit } from '$lib/server/domain/audit';
+import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
+import {
+  collectionStatusSchema,
+  paymentConfirmationSchema,
+  paymentRequestStatusSchema,
+  paymentTimingSchema,
+  type PaymentRequestStatus
+} from '$lib/shared/payment';
+import type { Collection, CollectionPaymentMethod } from './collections';
+import { CollectionError, PaymentError } from './errors';
+
+export interface PaymentRequest {
+  id: string;
+  eventId: string;
+  collectionId: string;
+  registrationId: string;
+  collectionPaymentMethodId: string;
+  amountMinor: bigint;
+  currency: string;
+  status: PaymentRequestStatus;
+  dueAt: Date | null;
+  stripeAccountId: string;
+  checkoutSessionId: string;
+  paymentIntentId: string;
+  chargeType: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PaymentRecord {
+  id: string;
+  paymentRequestId: string;
+  registrationId: string;
+  collectionId: string;
+  collectionPaymentMethodId: string;
+  externalReference: string;
+  note: string;
+  amountMinor: bigint;
+  currency: string;
+  status: string;
+  confirmedByUserId: string | null;
+  confirmedAt: Date | null;
+  rawPayloadJson: unknown;
+  idempotencyKey: string;
+  createdAt: Date;
+}
+
+export interface ConfirmManualPaymentInput {
+  actorUserId: string;
+  paymentRequestId: string;
+  paymentMethodId: string;
+  idempotencyKey: string;
+  externalReference: string;
+  note: string;
+}
+
+export interface WaivePaymentInput {
+  actorUserId: string;
+  paymentRequestId: string;
+  idempotencyKey: string;
+  reason: string;
+}
+
+export interface PaymentRequestRow {
+  request: PaymentRequest;
+  displayName: string;
+  method: CollectionPaymentMethod;
+}
+
+export interface CollectionMetrics {
+  targetCount: number;
+  targetAmountMinor: bigint;
+  paidCount: number;
+  paidAmountMinor: bigint;
+  unpaidCount: number;
+  unpaidAmountMinor: bigint;
+  waivedCount: number;
+  waivedAmountMinor: bigint;
+}
+
+export interface CollectionDashboard {
+  eventTitle: string;
+  eventSlug: string;
+  organizationSlug: string;
+  collection: Collection | null;
+  methods: CollectionPaymentMethod[];
+  requests: PaymentRequestRow[];
+  metrics: CollectionMetrics;
+  amountFrozen: boolean;
+  conflicts: SettleConflictRow[];
+  consentMissing: boolean;
+}
+
+export interface SettleConflictRow {
+  recordId: string;
+  paymentRequestId: string;
+  displayName: string;
+  amountMinor: bigint;
+  currency: string;
+  paymentIntentId: string;
+  requestStatus: PaymentRequestStatus;
+  occurredAt: Date;
+}
+
+export interface GlobalSettleConflictRow extends SettleConflictRow {
+  organizationId: string;
+  organizationName: string;
+  eventId: string;
+  eventTitle: string;
+}
+
+export interface ParticipantPaymentDetail {
+  amountMinor: bigint;
+  currency: string;
+  dueAt: Date | null;
+  collectionTitle: string;
+  collectionInstructions: string;
+  methodLabel: string;
+  methodInstructions: string;
+  methodConfirmation: CollectionPaymentMethod['confirmation'];
+  status: PaymentRequestStatus;
+  canCheckout: boolean;
+  paidAt: Date | null;
+}
+
+/** Loads the main collection and participant obligations for staff and organizers. */
+export async function getCollectionDashboard(
+  client: DatabaseClient,
+  input: { actorUserId: string; eventId: string }
+): Promise<CollectionDashboard> {
+  return client.db.transaction(async (tx) => {
+    const eventRows = await tx
+      .select({
+        organizationId: events.organizationId,
+        eventTitle: events.title,
+        eventSlug: events.slug,
+        organizationSlug: organizations.slug
+      })
+      .from(events)
+      .innerJoin(organizations, eq(organizations.id, events.organizationId))
+      .where(eq(events.id, input.eventId))
+      .limit(1);
+    if (!eventRows[0]) throw new CollectionError('not_found', 'event not found');
+    await authorizeOrganizationRole(
+      tx,
+      eventRows[0].organizationId,
+      input.actorUserId,
+      'staff',
+      false,
+      true
+    );
+
+    const collectionRows = await tx
+      .select()
+      .from(collections)
+      .where(and(eq(collections.eventId, input.eventId), ne(collections.status, 'archived')))
+      .orderBy(asc(collections.createdAt), asc(collections.id))
+      .limit(1);
+    if (!collectionRows[0]) return emptyDashboard();
+    const collection = parseCollection(collectionRows[0]);
+    const methodRows = await tx
+      .select()
+      .from(collectionPaymentMethods)
+      .where(eq(collectionPaymentMethods.collectionId, collection.id))
+      .orderBy(asc(collectionPaymentMethods.sortOrder), asc(collectionPaymentMethods.id));
+    const methods = methodRows.map(parsePaymentMethod);
+    const rows = await tx
+      .select({
+        request: paymentRequests,
+        displayName: registrations.displayNameSnapshot,
+        method: collectionPaymentMethods
+      })
+      .from(paymentRequests)
+      .innerJoin(registrations, eq(registrations.id, paymentRequests.registrationId))
+      .innerJoin(
+        collectionPaymentMethods,
+        eq(collectionPaymentMethods.id, paymentRequests.collectionPaymentMethodId)
+      )
+      .where(eq(paymentRequests.collectionId, collection.id))
+      .orderBy(asc(registrations.createdAt), asc(registrations.id));
+    const requests = rows.map((row) => ({
+      request: parsePaymentRequest(row.request),
+      displayName: row.displayName,
+      method: parsePaymentMethod(row.method)
+    }));
+    const settledRows = await tx
+      .select({ id: paymentRecords.id })
+      .from(paymentRecords)
+      .where(
+        and(eq(paymentRecords.collectionId, collection.id), eq(paymentRecords.status, 'settled'))
+      )
+      .limit(1);
+    const startedRows = await tx
+      .select({ id: paymentRequests.id })
+      .from(paymentRequests)
+      .where(
+        and(
+          eq(paymentRequests.collectionId, collection.id),
+          inArray(paymentRequests.status, ['payment_pending', 'paid'])
+        )
+      )
+      .limit(1);
+    const conflictRows = await listUnresolvedSettleConflicts(tx, {
+      eventId: input.eventId,
+      newestFirst: false
+    });
+    const consentRows = await tx
+      .select({ id: eventFormFields.id })
+      .from(eventFormFields)
+      .where(
+        and(
+          eq(eventFormFields.eventId, input.eventId),
+          eq(eventFormFields.fieldType, 'consent'),
+          isNull(eventFormFields.archivedAt)
+        )
+      )
+      .limit(1);
+    return {
+      eventTitle: eventRows[0].eventTitle,
+      eventSlug: eventRows[0].eventSlug,
+      organizationSlug: eventRows[0].organizationSlug,
+      collection,
+      methods,
+      requests,
+      metrics: collectionMetrics(requests),
+      amountFrozen: Boolean(startedRows[0] || settledRows[0]),
+      conflicts: conflictRows,
+      consentMissing: collection.status === 'open' && collection.amountMinor > 0n && !consentRows[0]
+    };
+  });
+}
+
+export async function listUnresolvedSettleConflicts(
+  tx: DatabaseTransaction,
+  options: { eventId?: string; newestFirst?: boolean } = {}
+): Promise<GlobalSettleConflictRow[]> {
+  const refundRecords = alias(paymentRecords, 'refund_records');
+  const rows = await tx
+    .select({
+      organizationId: organizations.id,
+      organizationName: organizations.name,
+      eventId: events.id,
+      eventTitle: events.title,
+      recordId: paymentRecords.id,
+      paymentRequestId: paymentRecords.paymentRequestId,
+      displayName: registrations.displayNameSnapshot,
+      amountMinor: paymentRecords.amountMinor,
+      currency: paymentRecords.currency,
+      paymentIntentId: paymentRecords.externalReference,
+      requestStatus: paymentRequests.status,
+      occurredAt: paymentRecords.createdAt
+    })
+    .from(paymentRecords)
+    .innerJoin(paymentRequests, eq(paymentRequests.id, paymentRecords.paymentRequestId))
+    .innerJoin(registrations, eq(registrations.id, paymentRecords.registrationId))
+    .innerJoin(events, eq(events.id, paymentRequests.eventId))
+    .innerJoin(organizations, eq(organizations.id, events.organizationId))
+    .where(
+      and(
+        options.eventId ? eq(paymentRequests.eventId, options.eventId) : undefined,
+        eq(paymentRecords.status, 'settled'),
+        gt(paymentRecords.amountMinor, 0n),
+        or(
+          inArray(paymentRequests.status, ['cancelled', 'waived']),
+          and(eq(paymentRequests.status, 'paid'), eq(registrations.status, 'cancelled'))
+        ),
+        notExists(
+          tx
+            .select({ id: refundRecords.id })
+            .from(refundRecords)
+            .where(
+              and(
+                eq(refundRecords.status, 'refunded'),
+                eq(
+                  refundRecords.idempotencyKey,
+                  sql<string>`'manual_refund:' || ${paymentRecords.id}::text`
+                )
+              )
+            )
+        )
+      )
+    )
+    .orderBy(
+      options.newestFirst ? desc(paymentRecords.createdAt) : asc(paymentRecords.createdAt),
+      options.newestFirst ? desc(paymentRecords.id) : asc(paymentRecords.id)
+    );
+  return rows.map((row) => ({
+    ...row,
+    requestStatus: paymentRequestStatusSchema.parse(row.requestStatus)
+  }));
+}
+
+/** Returns an active obligation only to the participant who owns the registration. */
+export async function getParticipantPaymentDetail(
+  client: DatabaseClient,
+  registrationId: string,
+  userId: string
+): Promise<ParticipantPaymentDetail | null> {
+  const rows = await client.db
+    .select({
+      request: paymentRequests,
+      collection: collections,
+      method: collectionPaymentMethods,
+      eventCancelledAt: events.cancelledAt,
+      eventArchivedAt: events.archivedAt,
+      organizationSuspendedAt: organizations.suspendedAt,
+      connectStatus: stripeConnectAccounts.onboardingStatus,
+      chargesEnabled: stripeConnectAccounts.chargesEnabled
+    })
+    .from(paymentRequests)
+    .innerJoin(registrations, eq(registrations.id, paymentRequests.registrationId))
+    .innerJoin(collections, eq(collections.id, paymentRequests.collectionId))
+    .innerJoin(events, eq(events.id, paymentRequests.eventId))
+    .innerJoin(organizations, eq(organizations.id, events.organizationId))
+    .innerJoin(
+      collectionPaymentMethods,
+      eq(collectionPaymentMethods.id, paymentRequests.collectionPaymentMethodId)
+    )
+    .leftJoin(
+      stripeConnectAccounts,
+      eq(stripeConnectAccounts.organizationId, events.organizationId)
+    )
+    .where(
+      and(
+        eq(paymentRequests.registrationId, registrationId),
+        eq(registrations.userId, userId),
+        inArray(paymentRequests.status, [
+          'pending',
+          'pending_external_creation',
+          'payment_pending',
+          'paid',
+          'waived',
+          'cancelled'
+        ]),
+        ne(collections.status, 'archived')
+      )
+    )
+    .orderBy(asc(collections.createdAt), asc(collections.id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const settledRows =
+    row.request.status === 'paid'
+      ? await client.db
+          .select({ confirmedAt: paymentRecords.confirmedAt })
+          .from(paymentRecords)
+          .where(
+            and(
+              eq(paymentRecords.paymentRequestId, row.request.id),
+              eq(paymentRecords.status, 'settled')
+            )
+          )
+          .orderBy(desc(paymentRecords.confirmedAt), desc(paymentRecords.createdAt))
+          .limit(1)
+      : [];
+  return {
+    amountMinor: row.request.amountMinor,
+    currency: row.request.currency,
+    dueAt: row.request.dueAt,
+    collectionTitle: row.collection.title,
+    collectionInstructions: row.collection.instructions,
+    methodLabel: row.method.label,
+    methodInstructions: row.method.instructions,
+    methodConfirmation: paymentConfirmationSchema.parse(row.method.confirmation),
+    status: paymentRequestStatusSchema.parse(row.request.status),
+    canCheckout:
+      row.method.enabled &&
+      row.method.confirmation === 'internal' &&
+      row.collection.status === 'open' &&
+      !row.eventCancelledAt &&
+      !row.eventArchivedAt &&
+      !row.organizationSuspendedAt &&
+      row.connectStatus === 'ready' &&
+      row.chargesEnabled === true &&
+      ['pending', 'pending_external_creation', 'payment_pending'].includes(row.request.status),
+    paidAt: settledRows[0]?.confirmedAt ?? null
+  };
+}
+
+/** Adds missing request snapshots for all confirmed registrations in one open collection. */
+export async function backfillPaymentRequests(
+  tx: DatabaseTransaction,
+  collection: Collection
+): Promise<PaymentRequest[]> {
+  if (collection.status !== 'open') {
+    throw new CollectionError('illegal_transition', 'collection must be open');
+  }
+  const methodId = await defaultPaymentMethodId(tx, collection.id);
+  const confirmedRows = await tx
+    .select({ id: registrations.id })
+    .from(registrations)
+    .where(
+      and(eq(registrations.eventId, collection.eventId), eq(registrations.status, 'confirmed'))
+    );
+  if (confirmedRows.length === 0) return [];
+
+  const rows = await tx
+    .insert(paymentRequests)
+    .values(
+      confirmedRows.map(({ id }) => ({
+        eventId: collection.eventId,
+        collectionId: collection.id,
+        registrationId: id,
+        collectionPaymentMethodId: methodId,
+        amountMinor: collection.amountMinor,
+        currency: collection.currency,
+        status: 'pending',
+        dueAt: collection.dueAt
+      }))
+    )
+    .onConflictDoNothing({
+      target: [paymentRequests.collectionId, paymentRequests.registrationId]
+    })
+    .returning();
+  return rows.map(parsePaymentRequest);
+}
+
+/** Creates a request snapshot when one confirmed registration enters an open collection. */
+export async function ensurePaymentRequestsForRegistration(
+  tx: DatabaseTransaction,
+  eventId: string,
+  registrationId: string
+): Promise<PaymentRequest[]> {
+  const collectionRows = await tx
+    .select()
+    .from(collections)
+    .where(and(eq(collections.eventId, eventId), eq(collections.status, 'open')))
+    .orderBy(asc(collections.createdAt), asc(collections.id));
+  const created: PaymentRequest[] = [];
+  for (const row of collectionRows) {
+    const collection: Collection = {
+      ...row,
+      status: 'open'
+    };
+    const methodId = await defaultPaymentMethodId(tx, collection.id);
+    const rows = await tx
+      .insert(paymentRequests)
+      .values({
+        eventId,
+        collectionId: collection.id,
+        registrationId,
+        collectionPaymentMethodId: methodId,
+        amountMinor: collection.amountMinor,
+        currency: collection.currency,
+        status: 'pending',
+        dueAt: collection.dueAt
+      })
+      .onConflictDoNothing({
+        target: [paymentRequests.collectionId, paymentRequests.registrationId]
+      })
+      .returning();
+    if (rows[0]) created.push(parsePaymentRequest(rows[0]));
+  }
+  return created;
+}
+
+/** Cancels only non-terminal request states, preserving paid and waived facts. */
+export async function cancelPaymentRequestsForRegistration(
+  tx: DatabaseTransaction,
+  registrationId: string
+): Promise<string[]> {
+  const rows = await tx
+    .update(paymentRequests)
+    .set({ status: 'cancelled', updatedAt: new Date() })
+    .where(
+      and(
+        eq(paymentRequests.registrationId, registrationId),
+        inArray(paymentRequests.status, ['pending', 'payment_pending'])
+      )
+    )
+    .returning({ id: paymentRequests.id });
+  return rows.map(({ id }) => id);
+}
+
+/** Records a manually verified payment with command idempotency. */
+export async function confirmManualPayment(
+  client: DatabaseClient,
+  input: ConfirmManualPaymentInput
+): Promise<PaymentRecord> {
+  const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
+  return client.db.transaction(async (tx) => {
+    const context = await loadRequestContext(
+      tx,
+      input.paymentRequestId,
+      input.actorUserId,
+      'staff'
+    );
+    const existing = await findRecordByIdempotencyKey(tx, idempotencyKey);
+    if (existing) {
+      if (
+        existing.paymentRequestId === context.request.id &&
+        existing.collectionPaymentMethodId === input.paymentMethodId &&
+        existing.status === 'settled'
+      ) {
+        return existing;
+      }
+      throw new PaymentError('conflict', 'idempotency key belongs to another payment operation');
+    }
+    ensurePayable(context.request);
+
+    const methodRows = await tx
+      .select()
+      .from(collectionPaymentMethods)
+      .where(
+        and(
+          eq(collectionPaymentMethods.id, input.paymentMethodId),
+          eq(collectionPaymentMethods.collectionId, context.request.collectionId)
+        )
+      )
+      .limit(1);
+    const method = methodRows[0];
+    if (!method || !method.enabled || method.confirmation !== 'manual') {
+      throw new PaymentError('invalid_method', 'payment method cannot confirm manual payments');
+    }
+
+    const record = await insertSettledRecord(tx, {
+      request: context.request,
+      paymentMethodId: method.id,
+      amountMinor: context.request.amountMinor,
+      actorUserId: input.actorUserId,
+      externalReference: input.externalReference.trim(),
+      note: input.note.trim(),
+      idempotencyKey
+    });
+    await tx
+      .update(paymentRequests)
+      .set({ status: 'paid', updatedAt: new Date() })
+      .where(eq(paymentRequests.id, context.request.id));
+    await appendAudit(tx, {
+      actorUserId: input.actorUserId,
+      eventId: context.request.eventId,
+      action: 'payment.confirm_manual',
+      targetType: 'payment_request',
+      targetId: context.request.id,
+      before: { status: context.request.status },
+      after: {
+        status: 'paid',
+        paymentRecordId: record.id,
+        amountMinor: record.amountMinor.toString(),
+        currency: record.currency,
+        paymentMethodId: record.collectionPaymentMethodId,
+        hasExternalReference: record.externalReference.length > 0
+      }
+    });
+    return record;
+  });
+}
+
+/** Records a zero-value settlement under the collection's enabled waiver method. */
+export async function waivePaymentRequest(
+  client: DatabaseClient,
+  input: WaivePaymentInput
+): Promise<PaymentRecord> {
+  const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
+  return client.db.transaction(async (tx) => {
+    const context = await loadRequestContext(
+      tx,
+      input.paymentRequestId,
+      input.actorUserId,
+      'organizer'
+    );
+    const existing = await findRecordByIdempotencyKey(tx, idempotencyKey);
+    if (existing) {
+      if (
+        existing.paymentRequestId === context.request.id &&
+        existing.amountMinor === 0n &&
+        existing.status === 'settled'
+      ) {
+        return existing;
+      }
+      throw new PaymentError('conflict', 'idempotency key belongs to another payment operation');
+    }
+    ensurePayable(context.request);
+
+    const waiverRows = await tx
+      .select({ id: collectionPaymentMethods.id })
+      .from(collectionPaymentMethods)
+      .where(
+        and(
+          eq(collectionPaymentMethods.collectionId, context.request.collectionId),
+          eq(collectionPaymentMethods.enabled, true),
+          eq(collectionPaymentMethods.timing, 'none'),
+          eq(collectionPaymentMethods.confirmation, 'none')
+        )
+      )
+      .orderBy(asc(collectionPaymentMethods.sortOrder), asc(collectionPaymentMethods.id))
+      .limit(1);
+    if (!waiverRows[0]) {
+      throw new PaymentError('invalid_method', 'collection has no enabled waiver method');
+    }
+
+    const record = await insertSettledRecord(tx, {
+      request: context.request,
+      paymentMethodId: waiverRows[0].id,
+      amountMinor: 0n,
+      actorUserId: input.actorUserId,
+      externalReference: '',
+      note: input.reason.trim(),
+      idempotencyKey
+    });
+    await tx
+      .update(paymentRequests)
+      .set({ status: 'waived', updatedAt: new Date() })
+      .where(eq(paymentRequests.id, context.request.id));
+    await appendAudit(tx, {
+      actorUserId: input.actorUserId,
+      eventId: context.request.eventId,
+      action: 'payment.waive',
+      targetType: 'payment_request',
+      targetId: context.request.id,
+      before: {
+        status: context.request.status,
+        amountMinor: context.request.amountMinor.toString()
+      },
+      after: {
+        status: 'waived',
+        paymentRecordId: record.id,
+        amountMinor: '0',
+        currency: record.currency,
+        paymentMethodId: record.collectionPaymentMethodId
+      },
+      reason: input.reason.trim()
+    });
+    return record;
+  });
+}
+
+async function defaultPaymentMethodId(
+  tx: DatabaseTransaction,
+  collectionId: string
+): Promise<string> {
+  const rows = await tx
+    .select({ id: collectionPaymentMethods.id })
+    .from(collectionPaymentMethods)
+    .where(
+      and(
+        eq(collectionPaymentMethods.collectionId, collectionId),
+        eq(collectionPaymentMethods.enabled, true),
+        ne(collectionPaymentMethods.timing, 'none')
+      )
+    )
+    .orderBy(asc(collectionPaymentMethods.sortOrder), asc(collectionPaymentMethods.id))
+    .limit(1);
+  if (!rows[0]) {
+    throw new CollectionError('validation', 'collection has no enabled payment method');
+  }
+  return rows[0].id;
+}
+
+async function loadRequestContext(
+  tx: DatabaseTransaction,
+  requestId: string,
+  actorUserId: string,
+  role: 'staff' | 'organizer'
+) {
+  const rows = await tx
+    .select({ request: paymentRequests, collection: collections, event: events })
+    .from(paymentRequests)
+    .innerJoin(collections, eq(collections.id, paymentRequests.collectionId))
+    .innerJoin(events, eq(events.id, paymentRequests.eventId))
+    .where(eq(paymentRequests.id, requestId))
+    .limit(1)
+    .for('update', { of: paymentRequests });
+  const row = rows[0];
+  if (!row) throw new PaymentError('not_found', 'payment request not found');
+  await authorizeOrganizationRole(tx, row.event.organizationId, actorUserId, role);
+  if (row.event.archivedAt || row.collection.status === 'archived') {
+    throw new PaymentError('not_payable', 'payment request belongs to an archived scope');
+  }
+  return { request: parsePaymentRequest(row.request) };
+}
+
+function ensurePayable(request: PaymentRequest): void {
+  if (request.status !== 'pending' && request.status !== 'payment_pending') {
+    throw new PaymentError('not_payable', 'payment request is terminal');
+  }
+}
+
+async function findRecordByIdempotencyKey(
+  tx: DatabaseTransaction,
+  idempotencyKey: string
+): Promise<PaymentRecord | null> {
+  const rows = await tx
+    .select()
+    .from(paymentRecords)
+    .where(eq(paymentRecords.idempotencyKey, idempotencyKey))
+    .limit(1);
+  return rows[0] ? parsePaymentRecord(rows[0]) : null;
+}
+
+async function insertSettledRecord(
+  tx: DatabaseTransaction,
+  input: {
+    request: PaymentRequest;
+    paymentMethodId: string;
+    amountMinor: bigint;
+    actorUserId: string;
+    externalReference: string;
+    note: string;
+    idempotencyKey: string;
+  }
+): Promise<PaymentRecord> {
+  const rows = await tx
+    .insert(paymentRecords)
+    .values({
+      paymentRequestId: input.request.id,
+      registrationId: input.request.registrationId,
+      collectionId: input.request.collectionId,
+      collectionPaymentMethodId: input.paymentMethodId,
+      externalReference: input.externalReference,
+      note: input.note,
+      amountMinor: input.amountMinor,
+      currency: input.request.currency,
+      status: 'settled',
+      confirmedByUserId: input.actorUserId,
+      confirmedAt: new Date(),
+      idempotencyKey: input.idempotencyKey
+    })
+    .returning();
+  return parsePaymentRecord(rows[0]);
+}
+
+function requireIdempotencyKey(raw: string): string {
+  const key = raw.trim();
+  if (!key || key.length > 200) {
+    throw new PaymentError('validation', 'idempotency key is required');
+  }
+  return key;
+}
+
+function parsePaymentRequest(row: typeof paymentRequests.$inferSelect): PaymentRequest {
+  return { ...row, status: paymentRequestStatusSchema.parse(row.status) };
+}
+
+function parsePaymentRecord(row: typeof paymentRecords.$inferSelect): PaymentRecord {
+  return row;
+}
+
+function parseCollection(row: typeof collections.$inferSelect): Collection {
+  return { ...row, status: collectionStatusSchema.parse(row.status) };
+}
+
+function parsePaymentMethod(
+  row: typeof collectionPaymentMethods.$inferSelect
+): CollectionPaymentMethod {
+  return {
+    ...row,
+    timing: paymentTimingSchema.parse(row.timing),
+    confirmation: paymentConfirmationSchema.parse(row.confirmation)
+  };
+}
+
+function emptyDashboard(): CollectionDashboard {
+  return {
+    eventTitle: '',
+    eventSlug: '',
+    organizationSlug: '',
+    collection: null,
+    methods: [],
+    requests: [],
+    metrics: {
+      targetCount: 0,
+      targetAmountMinor: 0n,
+      paidCount: 0,
+      paidAmountMinor: 0n,
+      unpaidCount: 0,
+      unpaidAmountMinor: 0n,
+      waivedCount: 0,
+      waivedAmountMinor: 0n
+    },
+    amountFrozen: false,
+    conflicts: [],
+    consentMissing: false
+  };
+}
+
+function collectionMetrics(rows: readonly PaymentRequestRow[]): CollectionMetrics {
+  const metrics = emptyDashboard().metrics;
+  for (const { request } of rows) {
+    if (request.status !== 'cancelled') {
+      metrics.targetCount += 1;
+      metrics.targetAmountMinor += request.amountMinor;
+    }
+    if (request.status === 'paid') {
+      metrics.paidCount += 1;
+      metrics.paidAmountMinor += request.amountMinor;
+    } else if (request.status === 'waived') {
+      metrics.waivedCount += 1;
+      metrics.waivedAmountMinor += request.amountMinor;
+    } else if (
+      request.status === 'pending' ||
+      request.status === 'pending_external_creation' ||
+      request.status === 'payment_pending'
+    ) {
+      metrics.unpaidCount += 1;
+      metrics.unpaidAmountMinor += request.amountMinor;
+    }
+  }
+  return metrics;
+}

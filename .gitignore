@@ -1,13 +1,29 @@
-# Python-generated files
+/.env
+/.env.*
+!.env.example
+
+/.DS_Store
+/.cache/
+/.ruff_cache/
+/.venv/
+/node_modules/
+/playwright-report/
+/test-results/
+/.templui/upstream/
+
+/outputs/
+/vendor/
+/offkai-manager
+
 __pycache__/
-*.py[oc]
+*.py[cod]
+*.test
+*.out
+coverage.*
+# SvelteKit / Node
+node_modules/
+.svelte-kit/
 build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-.env
-*.code-workspace
+coverage/
+playwright-report/
+test-results/

@@ -1,0 +1,12 @@
+.git
+.jj
+.svelte-kit
+build
+node_modules
+playwright-report
+test-results
+coverage
+.env
+.env.*
+!.env.example
+e2e/legacy-reference
