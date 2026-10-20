@@ -13,6 +13,7 @@ const fields = [
   field('badge', 'checkbox', false),
   field('policy', 'consent', true)
 ];
+
 const schema = buildRegistrationSchema(fields, {
   required: 'required',
   tooLong: (maximum) => `maximum ${maximum}`,
@@ -45,7 +46,6 @@ describe('runtime registration schema', () => {
       { fieldKey: 'policy', valueText: '', valueBool: true, optionIds: [] }
     ]);
   });
-
   it('rejects option values outside the current definition', () => {
     const result = schema.safeParse({
       short_text: 'Name',
@@ -55,7 +55,6 @@ describe('runtime registration schema', () => {
     expect(result.success).toBe(false);
     expect(result.error?.issues.some(({ message }) => message === 'invalid option')).toBe(true);
   });
-
   it('rejects false consent and overlong text', () => {
     const consent = schema.safeParse({ short_text: 'Name', meal: 'meal-1', policy: false });
     expect(consent.success).toBe(false);

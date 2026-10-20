@@ -24,7 +24,7 @@ export async function populateRequestSession(
   const raw = event.cookies.get(SESSION_COOKIE_NAME);
   const verified = raw ? verifySession(raw, config.auth.sessionSecret) : null;
   const active =
-    verified && config.database.url
+    verified && config.database.path
       ? await isSessionUserActive(
           client ?? getDatabaseClient(config),
           verified.userId,

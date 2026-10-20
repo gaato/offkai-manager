@@ -8,11 +8,27 @@ export interface PublicEvent {
 }
 
 export type RegistrationAvailability =
-  | { state: 'cancelled'; canRegister: false }
-  | { state: 'before_open'; canRegister: false; opensAt: Date }
-  | { state: 'closed'; canRegister: false }
-  | { state: 'waitlist'; canRegister: true }
-  | { state: 'open'; canRegister: true };
+  | {
+      state: 'cancelled';
+      canRegister: false;
+    }
+  | {
+      state: 'before_open';
+      canRegister: false;
+      opensAt: Date;
+    }
+  | {
+      state: 'closed';
+      canRegister: false;
+    }
+  | {
+      state: 'waitlist';
+      canRegister: true;
+    }
+  | {
+      state: 'open';
+      canRegister: true;
+    };
 
 export interface PublicVenue {
   name: string;

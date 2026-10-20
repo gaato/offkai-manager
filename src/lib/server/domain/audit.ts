@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from '$lib/server/clock';
 import type { DatabaseTransaction } from '$lib/server/db/client';
 import { auditLogs } from '$lib/server/db/schema';
 
@@ -13,16 +14,23 @@ export interface AuditEntry {
   metadata?: unknown;
 }
 
-export async function appendAudit(tx: DatabaseTransaction, entry: AuditEntry): Promise<void> {
-  await tx.insert(auditLogs).values({
-    actorUserId: entry.actorUserId,
-    eventId: entry.eventId ?? null,
-    action: entry.action,
-    targetType: entry.targetType,
-    targetId: entry.targetId ?? null,
-    beforeJson: entry.before,
-    afterJson: entry.after,
-    reason: entry.reason ?? '',
-    metadataJson: entry.metadata
-  });
+export function appendAudit(
+  tx: DatabaseTransaction,
+  entry: AuditEntry,
+  clock: Clock = systemClock
+): void {
+  tx.insert(auditLogs)
+    .values({
+      createdAt: clock.now(),
+      actorUserId: entry.actorUserId,
+      eventId: entry.eventId ?? null,
+      action: entry.action,
+      targetType: entry.targetType,
+      targetId: entry.targetId ?? null,
+      beforeJson: entry.before,
+      afterJson: entry.after,
+      reason: entry.reason ?? '',
+      metadataJson: entry.metadata
+    })
+    .run();
 }

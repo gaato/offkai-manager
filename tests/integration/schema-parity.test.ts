@@ -1,8 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { loadConfig } from '$lib/server/config';
-import { closeDatabase, createDatabaseClient, type DatabaseClient } from '$lib/server/db/client';
-import { runMigrations } from '$lib/server/db/migrate';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { DatabaseClient } from '$lib/server/db/client';
+import { testDatabase } from '../database';
 
 const expectedTables = [
   'audit_logs',
@@ -124,6 +122,18 @@ const expectedRetentionForeignKeys = [
 ] as const;
 
 const checkFragments: Readonly<Record<string, readonly string[]>> = {
+  event_form_fields_required_check: ['required', '0,1'],
+  registration_form_answers_value_bool_check: ['value_bool', '0,1'],
+  stripe_connect_accounts_charges_enabled_check: ['charges_enabled', '0,1'],
+  stripe_connect_accounts_payouts_enabled_check: ['payouts_enabled', '0,1'],
+  stripe_connect_accounts_details_submitted_check: ['details_submitted', '0,1'],
+  collection_payment_methods_enabled_check: ['enabled', '0,1'],
+  payment_records_raw_payload_json_check: ['json_valid', 'raw_payload_json'],
+  stripe_webhook_events_payload_json_check: ['json_valid', 'payload_json'],
+  audit_logs_before_json_check: ['json_valid', 'before_json'],
+  audit_logs_after_json_check: ['json_valid', 'after_json'],
+  audit_logs_metadata_json_check: ['json_valid', 'metadata_json'],
+  outbox_events_payload_json_check: ['json_valid', 'payload_json'],
   external_accounts_provider_check: ['provider', 'discord'],
   organizations_name_check: ['length(name)>0'],
   organizations_slug_check: ['length(slug)>0'],
@@ -209,302 +219,188 @@ const checkFragments: Readonly<Record<string, readonly string[]>> = {
   audit_logs_action_check: ['length(action)>0'],
   audit_logs_target_type_check: ['length(target_type)>0'],
   outbox_events_type_check: ['type', 'discord.role_sync_requested'],
-  outbox_events_status_check: ['status', 'pending', 'processed', 'failed'],
+  outbox_events_status_check: ['status', 'pending', 'processing', 'processed', 'failed'],
   outbox_events_attempts_check: ['attempts>=0']
 };
-
-interface ConstraintRow {
-  tableName: string;
-  referencedTableName: string;
-  columns: string[];
-  referencedColumns: string[];
-  deleteAction: string;
-}
-
-interface IndexRow {
-  tableName: string;
-  columns: string[];
-  predicate: string | null;
-  isUnique: boolean;
-  accessMethod: string;
-  definition: string;
-}
 
 const canonicalSql = (value: string): string =>
   value
     .toLowerCase()
-    .replaceAll('"', '')
-    .replace(/::(?:text|integer|bigint)/g, '')
+    .replace(/["`]/g, '')
+    .replace(/\b[a-z_]+\./g, '')
     .replace(/\s+/g, '')
     .replace(/[()]/g, '');
 
-const constraintKey = (
-  tableName: string,
+const key = (
+  table: string,
   columns: readonly string[],
-  referencedTableName = '',
-  referencedColumns: readonly string[] = [],
-  deleteAction = ''
-): string =>
-  [
-    tableName,
-    columns.join(','),
-    referencedTableName,
-    referencedColumns.join(','),
-    deleteAction
-  ].join('|');
+  target = '',
+  targetColumns: readonly string[] = [],
+  onDelete = ''
+) => [table, columns.join(','), target, targetColumns.join(','), onDelete].join('|');
 
 describe('database schema parity', () => {
-  let container: StartedPostgreSqlContainer;
   let client: DatabaseClient;
-
-  beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:17-alpine').start();
-    client = createDatabaseClient(
-      loadConfig({
-        OFFKAI_DATABASE_URL: container.getConnectionUri(),
-        OFFKAI_SESSION_SECRET: 'schema-parity-session-secret',
-        OFFKAI_AUTH_DEV_BYPASS: 'true'
-      })
-    );
-    await runMigrations(client);
+  beforeEach(() => {
+    client = testDatabase();
+  });
+  afterEach(() => {
+    client.db.$client.close();
   });
 
-  afterAll(async () => {
-    if (client) await closeDatabase(client);
-    if (container) await container.stop();
+  it('creates all 20 application tables as STRICT tables', () => {
+    const tables = client.db.$client
+      .prepare(
+        "select name from sqlite_schema where type = 'table' and name not like 'sqlite_%' and name <> '__drizzle_migrations' order by name"
+      )
+      .all() as { name: string }[];
+    expect(tables.map(({ name }) => name)).toEqual(expectedTables);
+    const strict = client.db.$client.pragma('table_list') as { name: string; strict: number }[];
+    for (const table of [...tables, { name: '__drizzle_migrations' }])
+      expect(strict.find(({ name }) => name === table.name)?.strict, table.name).toBe(1);
   });
 
-  it('creates the complete 20-table schema with pgcrypto', async () => {
-    const tables = await client.sql<{ tableName: string }[]>`
-      select table_name as "tableName"
-      from information_schema.tables
-      where table_schema = 'public' and table_type = 'BASE TABLE'
-      order by table_name
-    `;
-    const extensions = await client.sql<{ extensionName: string }[]>`
-      select extname as "extensionName" from pg_extension
-    `;
-
-    expect(tables.map(({ tableName }) => tableName)).toEqual(expectedTables);
-    expect(extensions.map(({ extensionName }) => extensionName)).toContain('pgcrypto');
-  });
-
-  it('preserves all unique constraints and partial unique predicates', async () => {
-    const constraints = await client.sql<{ tableName: string; columns: string[] }[]>`
-      select
-        relation.relname as "tableName",
-        array(
-          select attribute.attname
-          from unnest(constraint_row.conkey) with ordinality as key(attnum, position)
-          join pg_attribute as attribute
-            on attribute.attrelid = constraint_row.conrelid
-           and attribute.attnum = key.attnum
-          order by key.position
-        ) as columns
-      from pg_constraint as constraint_row
-      join pg_class as relation on relation.oid = constraint_row.conrelid
-      join pg_namespace as namespace on namespace.oid = relation.relnamespace
-      where namespace.nspname = 'public' and constraint_row.contype = 'u'
-    `;
-    const actualConstraints = new Set(
-      constraints.map(({ tableName, columns }) => constraintKey(tableName, columns))
-    );
-    for (const [tableName, columns] of expectedUniqueConstraints) {
-      expect(actualConstraints, `${tableName} UNIQUE (${columns.join(', ')})`).toContain(
-        constraintKey(tableName, columns)
-      );
+  it('preserves all unique constraints and partial unique predicates', () => {
+    const indexes = loadIndexes(client);
+    for (const [table, columns] of expectedUniqueConstraints) {
+      expect(
+        indexes.some(
+          (index) =>
+            index.table === table &&
+            index.unique &&
+            !index.partial &&
+            index.columns.join(',') === columns.join(',')
+        ),
+        key(table, columns)
+      ).toBe(true);
     }
-
-    const indexes = await loadIndexes(client);
-    for (const [tableName, columns, predicate] of expectedPartialUniqueIndexes) {
-      const match = indexes.find(
+    for (const [table, columns, predicate] of expectedPartialUniqueIndexes) {
+      const index = indexes.find(
         (index) =>
-          index.tableName === tableName &&
-          index.isUnique &&
+          index.table === table &&
+          index.unique &&
+          index.partial &&
           index.columns.join(',') === columns.join(',')
       );
-      expect(match, `${tableName} partial UNIQUE (${columns.join(', ')})`).toBeDefined();
-      expect(canonicalSql(match?.predicate ?? '')).toContain(canonicalSql(predicate));
+      expect(index, key(table, columns)).toBeDefined();
+      expect(canonicalSql(index?.sql ?? '')).toContain(canonicalSql(predicate));
     }
   });
 
-  it('preserves the complete composite foreign-key snapshot web', async () => {
-    const foreignKeys = await loadForeignKeys(client);
+  it('preserves the complete composite foreign-key snapshot web', () => {
     const actual = new Set(
-      foreignKeys.map((foreignKey) =>
-        constraintKey(
-          foreignKey.tableName,
-          foreignKey.columns,
-          foreignKey.referencedTableName,
-          foreignKey.referencedColumns
-        )
+      loadForeignKeys(client).map((fk) => key(fk.table, fk.columns, fk.target, fk.targetColumns))
+    );
+    for (const [table, columns, target, targetColumns] of expectedCompositeForeignKeys) {
+      expect(actual).toContain(key(table, columns, target, targetColumns));
+    }
+  });
+
+  it('uses retention-safe delete actions', () => {
+    const actual = new Set(
+      loadForeignKeys(client).map((fk) =>
+        key(fk.table, fk.columns, fk.target, fk.targetColumns, fk.onDelete)
       )
     );
-
-    for (const [
-      tableName,
-      columns,
-      referencedTable,
-      referencedColumns
-    ] of expectedCompositeForeignKeys) {
-      expect(
-        actual,
-        `${tableName} (${columns.join(', ')}) -> ${referencedTable} (${referencedColumns.join(', ')})`
-      ).toContain(constraintKey(tableName, columns, referencedTable, referencedColumns));
+    for (const [table, columns, target, targetColumns, onDelete] of expectedRetentionForeignKeys) {
+      expect(actual).toContain(key(table, columns, target, targetColumns, onDelete));
     }
   });
 
-  it('uses retention-safe delete actions instead of legacy cascades', async () => {
-    const foreignKeys = await loadForeignKeys(client);
-    const actual = new Set(
-      foreignKeys.map((foreignKey) =>
-        constraintKey(
-          foreignKey.tableName,
-          foreignKey.columns,
-          foreignKey.referencedTableName,
-          foreignKey.referencedColumns,
-          foreignKey.deleteAction
+  it('keeps every CHECK and its critical expression values', () => {
+    const rows = client.db.$client
+      .prepare("select sql from sqlite_schema where type = 'table'")
+      .all() as { sql: string }[];
+    const checks = new Map<string, string>();
+    for (const { sql } of rows) {
+      for (const match of sql.matchAll(/CONSTRAINT\s+["`]([^"`]+)["`]\s+CHECK\(([^\n]+)\)/g))
+        checks.set(match[1], canonicalSql(match[2]));
+    }
+    expect([...checks.keys()].sort()).toEqual(Object.keys(checkFragments).sort());
+    for (const [name, fragments] of Object.entries(checkFragments)) {
+      for (const fragment of fragments)
+        expect(checks.get(name), name).toContain(canonicalSql(fragment));
+    }
+  });
+
+  it('stores money, timestamps, booleans and retry times as INTEGER and JSON as TEXT', () => {
+    for (const table of expectedTables) {
+      const columns = client.db.$client.pragma(`table_info('${table}')`) as {
+        name: string;
+        type: string;
+        dflt_value: string | null;
+      }[];
+      for (const column of columns) {
+        if (
+          column.name.endsWith('_at') ||
+          column.name === 'amount_minor' ||
+          [
+            'attempts',
+            'required',
+            'value_bool',
+            'enabled',
+            'charges_enabled',
+            'payouts_enabled',
+            'details_submitted'
+          ].includes(column.name)
         )
-      )
-    );
-
-    for (const [
-      tableName,
-      columns,
-      referencedTable,
-      referencedColumns,
-      deleteAction
-    ] of expectedRetentionForeignKeys) {
-      expect(actual).toContain(
-        constraintKey(tableName, columns, referencedTable, referencedColumns, deleteAction)
-      );
-    }
-  });
-
-  it('keeps every legacy check constraint with its critical expression values', async () => {
-    const checks = await client.sql<{ constraintName: string; definition: string }[]>`
-      select
-        constraint_row.conname as "constraintName",
-        pg_get_constraintdef(constraint_row.oid, true) as definition
-      from pg_constraint as constraint_row
-      join pg_class as relation on relation.oid = constraint_row.conrelid
-      join pg_namespace as namespace on namespace.oid = relation.relnamespace
-      where namespace.nspname = 'public' and constraint_row.contype = 'c'
-    `;
-    const actual = new Map(
-      checks.map(({ constraintName, definition }) => [constraintName, canonicalSql(definition)])
-    );
-
-    expect([...actual.keys()].sort()).toEqual(Object.keys(checkFragments).sort());
-    for (const [constraintName, fragments] of Object.entries(checkFragments)) {
-      const definition = actual.get(constraintName);
-      expect(definition, constraintName).toBeDefined();
-      for (const fragment of fragments) {
-        expect(definition, `${constraintName}: ${fragment}`).toContain(canonicalSql(fragment));
+          expect(column.type.toLowerCase(), `${table}.${column.name}`).toBe('integer');
+        if (column.name.endsWith('_json')) expect(column.type.toLowerCase()).toBe('text');
+      }
+      if (table === 'outbox_events') {
+        expect(columns.find(({ name }) => name === 'next_attempt_at')).toBeDefined();
+        expect(columns.find(({ name }) => name === 'claimed_until')).toBeUndefined();
+        expect(columns.find(({ name }) => name === 'attempts')?.dflt_value).toBe('0');
       }
     }
   });
-
-  it('uses GIN simple-text search, bigint money, timestamptz, and outbox lease columns', async () => {
-    const indexes = await loadIndexes(client);
-    const searchIndex = indexes.find(
-      (index) =>
-        index.tableName === 'registrations' &&
-        index.accessMethod === 'gin' &&
-        index.definition.includes("to_tsvector('simple'::regconfig, search_text)")
-    );
-    expect(searchIndex).toBeDefined();
-
-    const columns = await client.sql<
-      {
-        tableName: string;
-        columnName: string;
-        dataType: string;
-        defaultValue: string | null;
-        isNullable: string;
-      }[]
-    >`
-      select
-        table_name as "tableName",
-        column_name as "columnName",
-        data_type as "dataType",
-        column_default as "defaultValue",
-        is_nullable as "isNullable"
-      from information_schema.columns
-      where table_schema = 'public'
-    `;
-    const byName = new Map(
-      columns.map((column) => [`${column.tableName}.${column.columnName}`, column])
-    );
-
-    for (const tableName of ['collections', 'payment_requests', 'payment_records']) {
-      expect(byName.get(`${tableName}.amount_minor`)?.dataType).toBe('bigint');
-    }
-    for (const column of columns.filter(({ dataType }) => dataType.startsWith('timestamp'))) {
-      expect(column.dataType, `${column.tableName}.${column.columnName}`).toBe(
-        'timestamp with time zone'
-      );
-    }
-    expect(byName.get('outbox_events.claimed_until')?.dataType).toBe('timestamp with time zone');
-    expect(byName.get('outbox_events.attempts')?.dataType).toBe('integer');
-    expect(byName.get('outbox_events.attempts')?.defaultValue).toBe('0');
-  });
 });
 
-async function loadForeignKeys(client: DatabaseClient): Promise<ConstraintRow[]> {
-  return client.sql<ConstraintRow[]>`
-    select
-      relation.relname as "tableName",
-      referenced_relation.relname as "referencedTableName",
-      array(
-        select attribute.attname
-        from unnest(constraint_row.conkey) with ordinality as key(attnum, position)
-        join pg_attribute as attribute
-          on attribute.attrelid = constraint_row.conrelid
-         and attribute.attnum = key.attnum
-        order by key.position
-      ) as columns,
-      array(
-        select attribute.attname
-        from unnest(constraint_row.confkey) with ordinality as key(attnum, position)
-        join pg_attribute as attribute
-          on attribute.attrelid = constraint_row.confrelid
-         and attribute.attnum = key.attnum
-        order by key.position
-      ) as "referencedColumns",
-      case constraint_row.confdeltype
-        when 'a' then 'NO ACTION'
-        when 'r' then 'RESTRICT'
-        when 'c' then 'CASCADE'
-        when 'n' then 'SET NULL'
-        when 'd' then 'SET DEFAULT'
-      end as "deleteAction"
-    from pg_constraint as constraint_row
-    join pg_class as relation on relation.oid = constraint_row.conrelid
-    join pg_class as referenced_relation on referenced_relation.oid = constraint_row.confrelid
-    join pg_namespace as namespace on namespace.oid = relation.relnamespace
-    where namespace.nspname = 'public' and constraint_row.contype = 'f'
-  `;
+function loadIndexes(client: DatabaseClient) {
+  return expectedTables.flatMap((table) => {
+    const indexes = client.db.$client.pragma(`index_list('${table}')`) as {
+      name: string;
+      unique: number;
+      partial: number;
+    }[];
+    return indexes.map((index) => {
+      const columns = client.db.$client.pragma(`index_info('${index.name}')`) as {
+        seqno: number;
+        name: string;
+      }[];
+      const definition = client.db.$client
+        .prepare('select sql from sqlite_schema where name = ?')
+        .get(index.name) as { sql: string | null };
+      return {
+        table,
+        unique: index.unique === 1,
+        partial: index.partial === 1,
+        columns: columns.sort((a, b) => a.seqno - b.seqno).map(({ name }) => name),
+        sql: definition.sql
+      };
+    });
+  });
 }
 
-async function loadIndexes(client: DatabaseClient): Promise<IndexRow[]> {
-  return client.sql<IndexRow[]>`
-    select
-      relation.relname as "tableName",
-      array(
-        select pg_get_indexdef(index_row.indexrelid, position, true)
-        from generate_series(1, index_row.indnkeyatts) as position
-        order by position
-      ) as columns,
-      pg_get_expr(index_row.indpred, index_row.indrelid) as predicate,
-      index_row.indisunique as "isUnique",
-      access_method.amname as "accessMethod",
-      pg_get_indexdef(index_row.indexrelid) as definition
-    from pg_index as index_row
-    join pg_class as relation on relation.oid = index_row.indrelid
-    join pg_class as index_relation on index_relation.oid = index_row.indexrelid
-    join pg_am as access_method on access_method.oid = index_relation.relam
-    join pg_namespace as namespace on namespace.oid = relation.relnamespace
-    where namespace.nspname = 'public'
-  `;
+function loadForeignKeys(client: DatabaseClient) {
+  return expectedTables.flatMap((table) => {
+    const rows = client.db.$client.pragma(`foreign_key_list('${table}')`) as {
+      id: number;
+      seq: number;
+      table: string;
+      from: string;
+      to: string;
+      on_delete: string;
+    }[];
+    return [...new Set(rows.map(({ id }) => id))].map((id) => {
+      const parts = rows.filter((row) => row.id === id).sort((a, b) => a.seq - b.seq);
+      return {
+        table,
+        target: parts[0].table,
+        columns: parts.map(({ from }) => from),
+        targetColumns: parts.map(({ to }) => to),
+        onDelete: parts[0].on_delete
+      };
+    });
+  });
 }

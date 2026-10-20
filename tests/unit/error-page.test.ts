@@ -15,7 +15,6 @@ describe('error response sanitization', () => {
         url: new URL('https://example.test/private')
       }
     } as never);
-
     expect(result).toEqual({ message: 'request failed', requestId: '0123456789abcdef' });
     expect(JSON.stringify(result)).not.toContain(cause.message);
     expect(logError).toHaveBeenCalledWith(

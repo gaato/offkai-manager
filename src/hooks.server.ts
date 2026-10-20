@@ -28,12 +28,12 @@ export async function init(): Promise<void> {
       'AUTH DEV BYPASS ENABLED: anyone who can reach /auth/dev can mint arbitrary sessions, including platform admin'
     );
   }
-  if (config.database.url && config.database.migrate) {
+  if (config.database.path && config.database.migrate) {
     await runMigrations(getDatabaseClient(config));
     logger.info('database migrations applied');
   }
   if (config.workerEnabled) {
-    if (!config.database.url || !config.discord.botToken) {
+    if (!config.database.path || !config.discord.botToken) {
       logger.warn(
         'Discord role sync worker is disabled because database or bot-token configuration is incomplete'
       );

@@ -25,7 +25,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      // This wrapper owns a disposable Postgres testcontainer, migrates and seeds it,
+      // This wrapper owns a temporary SQLite database, migrates and seeds it,
       // then starts the already-built adapter-node application against that database.
       command: 'node e2e/server.mjs',
       url: `${baseURL}/readyz`,
@@ -44,7 +44,7 @@ export default defineConfig({
         PORT: String(productionLikePort),
         OFFKAI_HTTP_ADDR: `127.0.0.1:${productionLikePort}`,
         OFFKAI_PUBLIC_BASE_URL: `http://127.0.0.1:${productionLikePort}`,
-        OFFKAI_DATABASE_URL: 'postgres://unused:unused@127.0.0.1:1/unused',
+        OFFKAI_DATABASE_PATH: ':memory:',
         OFFKAI_SESSION_SECRET: 'e2e-production-session-secret',
         OFFKAI_AUTH_DEV_BYPASS: 'false',
         OFFKAI_DISCORD_CLIENT_ID: 'e2e-production-client',

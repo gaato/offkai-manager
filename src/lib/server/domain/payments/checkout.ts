@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write } from '$lib/server/db/client';
 import { and, asc, eq, or } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
@@ -36,12 +38,13 @@ interface CheckoutIntent {
 export async function startCheckout(
   client: DatabaseClient,
   gateway: PaymentGateway,
-  input: StartCheckoutInput
+  input: StartCheckoutInput,
+  clock: Clock = systemClock
 ): Promise<string> {
   if (!input.successUrl || !input.cancelUrl) {
     throw new PaymentError('validation', 'checkout return URLs are required');
   }
-  const intent = await client.db.transaction((tx) => beginCheckout(tx, input));
+  const intent = write(client, (tx) => beginCheckout(tx, input, clock));
   let session;
   try {
     session = await gateway.createCheckoutSession({
@@ -58,22 +61,23 @@ export async function startCheckout(
       idempotencyKey: `checkout-${intent.requestId}`
     });
   } catch (cause) {
-    await restoreFailedStart(client, intent);
+    await restoreFailedStart(client, intent, clock);
     throw new PaymentError('gateway', 'create checkout session failed', { cause });
   }
   if (!session.sessionId || !session.url) {
-    await restoreFailedStart(client, intent);
+    await restoreFailedStart(client, intent, clock);
     throw new PaymentError('gateway', 'checkout gateway returned an incomplete session');
   }
-  await attachCheckout(client, intent, session);
+  await attachCheckout(client, intent, session, clock);
   return session.url;
 }
 
-async function beginCheckout(
+function beginCheckout(
   tx: DatabaseTransaction,
-  input: Pick<StartCheckoutInput, 'userId' | 'registrationId'>
-): Promise<CheckoutIntent> {
-  const rows = await tx
+  input: Pick<StartCheckoutInput, 'userId' | 'registrationId'>,
+  clock: Clock = systemClock
+): CheckoutIntent {
+  const rows = tx
     .select({
       request: paymentRequests,
       collection: collections,
@@ -103,7 +107,7 @@ async function beginCheckout(
     )
     .orderBy(asc(collections.createdAt), asc(collections.id))
     .limit(1)
-    .for('update', { of: paymentRequests });
+    .all();
   const row = rows[0];
   if (!row) throw new PaymentError('not_found', 'owned payment request not found');
   if (row.organizationSuspendedAt || row.eventCancelledAt || row.eventArchivedAt) {
@@ -121,8 +125,7 @@ async function beginCheckout(
   if (!row.connectAccountId || row.connectStatus !== 'ready' || row.chargesEnabled !== true) {
     throw new PaymentError('not_ready', 'organization has no ready Stripe account');
   }
-
-  const methodRows = await tx
+  const methodRows = tx
     .select({ id: collectionPaymentMethods.id })
     .from(collectionPaymentMethods)
     .where(
@@ -133,30 +136,34 @@ async function beginCheckout(
       )
     )
     .orderBy(asc(collectionPaymentMethods.sortOrder), asc(collectionPaymentMethods.id))
-    .limit(1);
+    .limit(1)
+    .all();
   if (!methodRows[0]) {
     throw new PaymentError('invalid_method', 'collection does not accept Stripe payments');
   }
-
   const previousStatus = row.request.status as CheckoutIntent['previousStatus'];
-  await tx
-    .update(paymentRequests)
+  tx.update(paymentRequests)
     .set({
       collectionPaymentMethodId: methodRows[0].id,
       stripeAccountId: row.connectAccountId,
       status: 'payment_pending',
-      updatedAt: new Date()
+      updatedAt: clock.now()
     })
-    .where(eq(paymentRequests.id, row.request.id));
-  await appendAudit(tx, {
-    actorUserId: input.userId,
-    eventId: row.request.eventId,
-    action: 'payment.stripe_checkout_begin',
-    targetType: 'payment_request',
-    targetId: row.request.id,
-    before: { status: row.request.status },
-    after: { status: 'payment_pending', stripeAccountSnapshotted: true }
-  });
+    .where(eq(paymentRequests.id, row.request.id))
+    .run();
+  appendAudit(
+    tx,
+    {
+      actorUserId: input.userId,
+      eventId: row.request.eventId,
+      action: 'payment.stripe_checkout_begin',
+      targetType: 'payment_request',
+      targetId: row.request.id,
+      before: { status: row.request.status },
+      after: { status: 'payment_pending', stripeAccountSnapshotted: true }
+    },
+    clock
+  );
   return {
     actorUserId: input.userId,
     requestId: row.request.id,
@@ -170,16 +177,20 @@ async function beginCheckout(
   };
 }
 
-async function restoreFailedStart(client: DatabaseClient, intent: CheckoutIntent): Promise<void> {
+async function restoreFailedStart(
+  client: DatabaseClient,
+  intent: CheckoutIntent,
+  clock: Clock = systemClock
+): Promise<void> {
   if (intent.previousStatus === 'payment_pending') return;
-  await client.db.transaction(async (tx) => {
-    const restored = await tx
+  write(client, (tx) => {
+    const restored = tx
       .update(paymentRequests)
       .set({
         status: intent.previousStatus,
         stripeAccountId: '',
         chargeType: '',
-        updatedAt: new Date()
+        updatedAt: clock.now()
       })
       .where(
         and(
@@ -188,32 +199,41 @@ async function restoreFailedStart(client: DatabaseClient, intent: CheckoutIntent
           eq(paymentRequests.checkoutSessionId, '')
         )
       )
-      .returning({ id: paymentRequests.id });
+      .returning({ id: paymentRequests.id })
+      .all();
     if (!restored[0]) return;
-    await appendAudit(tx, {
-      actorUserId: intent.actorUserId,
-      eventId: intent.eventId,
-      action: 'payment.stripe_checkout_failed',
-      targetType: 'payment_request',
-      targetId: intent.requestId,
-      before: { status: 'payment_pending' },
-      after: { status: intent.previousStatus }
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: intent.actorUserId,
+        eventId: intent.eventId,
+        action: 'payment.stripe_checkout_failed',
+        targetType: 'payment_request',
+        targetId: intent.requestId,
+        before: { status: 'payment_pending' },
+        after: { status: intent.previousStatus }
+      },
+      clock
+    );
   });
 }
 
 async function attachCheckout(
   client: DatabaseClient,
   intent: CheckoutIntent,
-  session: { sessionId: string; paymentIntentId?: string }
+  session: {
+    sessionId: string;
+    paymentIntentId?: string;
+  },
+  clock: Clock = systemClock
 ): Promise<void> {
-  await client.db.transaction(async (tx) => {
-    const rows = await tx
+  write(client, (tx) => {
+    const rows = tx
       .select({ request: paymentRequests })
       .from(paymentRequests)
       .where(eq(paymentRequests.id, intent.requestId))
       .limit(1)
-      .for('update');
+      .all();
     const request = rows[0]?.request;
     if (!request || !['pending', 'payment_pending'].includes(request.status)) {
       throw new PaymentError('not_payable', 'payment request is no longer payable');
@@ -224,7 +244,7 @@ async function attachCheckout(
     if (request.checkoutSessionId && request.checkoutSessionId !== session.sessionId) {
       throw new PaymentError('conflict', 'another checkout session is already attached');
     }
-    const updated = await tx
+    const updated = tx
       .update(paymentRequests)
       .set({
         stripeAccountId: intent.stripeAccountId,
@@ -232,7 +252,7 @@ async function attachCheckout(
         paymentIntentId: session.paymentIntentId ?? '',
         chargeType: 'direct',
         status: 'payment_pending',
-        updatedAt: new Date()
+        updatedAt: clock.now()
       })
       .where(
         and(
@@ -243,23 +263,28 @@ async function attachCheckout(
           )
         )
       )
-      .returning({ id: paymentRequests.id });
+      .returning({ id: paymentRequests.id })
+      .all();
     if (!updated[0]) {
       throw new PaymentError('conflict', 'checkout session attachment lost a race');
     }
-    await appendAudit(tx, {
-      actorUserId: intent.actorUserId,
-      eventId: intent.eventId,
-      action: 'payment.stripe_checkout_attach',
-      targetType: 'payment_request',
-      targetId: intent.requestId,
-      before: { status: request.status },
-      after: {
-        status: 'payment_pending',
-        chargeType: 'direct',
-        hasCheckoutSession: true,
-        hasPaymentIntent: Boolean(session.paymentIntentId)
-      }
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: intent.actorUserId,
+        eventId: intent.eventId,
+        action: 'payment.stripe_checkout_attach',
+        targetType: 'payment_request',
+        targetId: intent.requestId,
+        before: { status: request.status },
+        after: {
+          status: 'payment_pending',
+          chargeType: 'direct',
+          hasCheckoutSession: true,
+          hasPaymentIntent: Boolean(session.paymentIntentId)
+        }
+      },
+      clock
+    );
   });
 }

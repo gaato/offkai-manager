@@ -34,7 +34,6 @@ describe('public event presentation rules', () => {
       canRegister: true
     });
   });
-
   it('reports the opening instant before the registration window', () => {
     expect(registrationAvailability(event, 0, new Date('2026-12-01T00:00:00Z'))).toEqual({
       state: 'before_open',
@@ -42,7 +41,6 @@ describe('public event presentation rules', () => {
       opensAt: event.registrationOpensAt
     });
   });
-
   it('reveals a restricted address only to confirmed viewers', () => {
     expect(publicVenue(event, false)).toEqual({
       name: 'Hall',

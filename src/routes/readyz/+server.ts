@@ -4,7 +4,7 @@ import { getDatabaseClient, pingDatabase } from '$lib/server/db/client';
 
 export const GET: RequestHandler = async () => {
   const config = getConfig();
-  if (!config.database.url && config.auth.devBypass) {
+  if (!config.database.path && config.auth.devBypass) {
     return Response.json({ status: 'ok', db: 'skipped' });
   }
   try {

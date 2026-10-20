@@ -10,14 +10,12 @@ This is a bilingual organizer web UI for fan-run events, direct-to-organizer pay
 
 ## Quick start
 
-[mise](https://mise.jdx.dev/) installs the pinned Node.js and pnpm versions. Docker is needed for
-PostgreSQL and the integration tests.
+[mise](https://mise.jdx.dev/) installs the pinned Node.js and pnpm versions. SQLite runs in the app process; integration tests use isolated in-memory databases.
 
 ```fish
 mise install
 pnpm install
-docker compose up -d db
-env OFFKAI_DATABASE_URL=postgres://offkai:offkai@127.0.0.1:5432/offkai \
+env OFFKAI_DATABASE_PATH=./offkai.sqlite \
   OFFKAI_AUTH_DEV_BYPASS=true pnpm dev
 ```
 
@@ -30,7 +28,7 @@ To exercise the adapter-node production entry point from source:
 ```fish
 env SOURCE_REPOSITORY=https://github.com/gaato/offkai-manager \
   VCS_REF=(git rev-parse HEAD) pnpm build
-env OFFKAI_DATABASE_URL=postgres://offkai:offkai@127.0.0.1:5432/offkai \
+env OFFKAI_DATABASE_PATH=./offkai.sqlite \
   OFFKAI_AUTH_DEV_BYPASS=true node scripts/start.mjs
 ```
 
@@ -49,11 +47,8 @@ Durations accept Go-style units such as `500ms`, `10s`, `30m`, or `1h30m`.
 | `OFFKAI_CLIENT_IP_HEADER`           | empty                   | Trusted reverse-proxy header used for request rate-limit keys, for example `X-Forwarded-For`. Leave empty unless the proxy overwrites it. |
 | `OFFKAI_TIMEZONE`                   | `Asia/Tokyo`            | IANA time zone for all wall-clock parsing and display.                                                                                    |
 | `OFFKAI_LOG_LEVEL`                  | `info`                  | One of `debug`, `info`, `warn`, or `error`.                                                                                               |
-| `OFFKAI_DATABASE_URL`               | empty                   | PostgreSQL URL. Required unless the development bypass is enabled.                                                                        |
-| `OFFKAI_DB_MAX_OPEN_CONNS`          | `10`                    | Maximum database connections; must be greater than zero.                                                                                  |
-| `OFFKAI_DB_MAX_IDLE_CONNS`          | `5`                     | Idle connection limit; from zero through the open-connection limit.                                                                       |
-| `OFFKAI_DB_CONN_MAX_LIFETIME`       | `30m`                   | Maximum connection lifetime.                                                                                                              |
-| `OFFKAI_DB_MIGRATE`                 | `true`                  | Apply Drizzle migrations during server initialization. Set false only when a separate release step owns migrations.                       |
+| `OFFKAI_DATABASE_PATH`              | empty                   | SQLite file path (or `:memory:`). Required unless the development bypass is enabled.                                                      |
+| `OFFKAI_DB_MIGRATE`                 | `true`                  | Apply Drizzle migrations during server initialization. The single replica can safely apply migrations at startup.                         |
 | `OFFKAI_PUBLIC_BASE_URL`            | `http://127.0.0.1:8080` | Public HTTP(S) origin without a path. Used for redirects, same-origin checks, and adapter-node `ORIGIN`.                                  |
 | `OFFKAI_SESSION_SECRET`             | empty                   | Session-signing secret of at least 16 bytes. Required outside the development bypass; use a high-entropy secret in production.            |
 | `OFFKAI_AUTH_DEV_BYPASS`            | `false`                 | Enables `/auth/dev` and development Stripe stand-ins. Production must keep this false.                                                    |
@@ -64,7 +59,7 @@ Durations accept Go-style units such as `500ms`, `10s`, `30m`, or `1h30m`.
 | `OFFKAI_STRIPE_SECRET_KEY`          | empty                   | Stripe platform secret key. Outside the development bypass it must be configured together with the webhook secret.                        |
 | `OFFKAI_STRIPE_WEBHOOK_SECRET`      | empty                   | Signing secret for the connected-account Stripe webhook endpoint.                                                                         |
 | `OFFKAI_PLATFORM_ADMIN_DISCORD_IDS` | empty                   | Comma-separated Discord user IDs allowed to access `/ops`.                                                                                |
-| `OFFKAI_WORKER_ENABLED`             | `true`                  | Starts the leased Discord role-sync outbox worker when the database and bot token are present.                                            |
+| `OFFKAI_WORKER_ENABLED`             | `true`                  | Starts the Discord role-sync outbox worker when the database and bot token are present.                                                   |
 
 Boolean values are enabled by `true`, `1`, or `yes`; an empty value uses the documented default.
 Discord OAuth values are an all-or-none group. In production the Stripe key and webhook secret are
@@ -77,13 +72,13 @@ pnpm check              # Svelte and TypeScript checks
 pnpm lint               # ESLint and Prettier
 pnpm depcruise          # architecture boundaries
 pnpm test               # Vitest unit suite
-pnpm test:integration   # Vitest with real PostgreSQL testcontainers
+pnpm test:integration   # Vitest with isolated in-memory SQLite
 pnpm test:e2e           # Chromium acceptance suite against a built app
 pnpm test:e2e:all       # all configured Playwright browser projects
 pnpm build              # adapter-node production build
 ```
 
-Integration and E2E tests require a working Docker daemon. The acceptance ports can be overridden
+Integration and E2E tests use SQLite and do not need Docker. The acceptance ports can be overridden
 with `OFFKAI_E2E_PRIMARY_PORT` and `OFFKAI_E2E_PRODUCTION_PORT`.
 
 ## Deployment
@@ -99,9 +94,9 @@ docker build \
 ```
 
 The image runs as the unprivileged `node` user. `GET /healthz` is a process liveness check;
-`GET /readyz` checks PostgreSQL and is the container healthcheck. Migrations run before the server
-becomes ready when `OFFKAI_DB_MIGRATE=true`. During a multi-replica rollout, use backward-compatible
-migrations or assign one migration owner and set `OFFKAI_DB_MIGRATE=false` on the other replicas.
+`GET /readyz` checks SQLite and is the container healthcheck. Migrations run before the server
+becomes ready when `OFFKAI_DB_MIGRATE=true`. Run one process with one replica and keep the SQLite
+database at `OFFKAI_DATABASE_PATH` on a persistent volume (the image defaults to `/data/offkai.sqlite`).
 Terminate the process with `SIGTERM` so adapter-node and the in-process outbox worker can finish
 their in-flight work.
 

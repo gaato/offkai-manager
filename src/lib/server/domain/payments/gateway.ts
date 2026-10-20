@@ -11,12 +11,12 @@ export interface ConnectAccount {
 
 /** Stripe Connect account management without coupling the domain to Stripe's SDK. */
 export interface ConnectGateway {
-  createExpressAccount(input: { organizationId: string }): Promise<{ accountId: string }>;
-  createAccountLink(input: {
+  createExpressAccount(input: { organizationId: string }): Promise<{
     accountId: string;
-    returnUrl: string;
-    refreshUrl: string;
-  }): Promise<{ url: string }>;
+  }>;
+  createAccountLink(input: { accountId: string; returnUrl: string; refreshUrl: string }): Promise<{
+    url: string;
+  }>;
   getAccount(accountId: string): Promise<ConnectAccount>;
 }
 

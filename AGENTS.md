@@ -8,8 +8,8 @@ specified per delegation prompt. Legacy Go code lives in git history (`git show 
 
 SvelteKit 2 + Svelte 5 (**runes mode enforced**, `compilerOptions.runes: true`) ·
 adapter-node · Tailwind CSS 4 + shadcn-svelte (vendored into `src/lib/components/ui/`) ·
-Drizzle ORM + postgres.js · Zod 4 + sveltekit-superforms 2 · stripe (server SDK only,
-hosted Checkout — never render card inputs) · vitest + @testcontainers/postgresql ·
+Drizzle ORM + better-sqlite3 (SQLite) · Zod 4 + sveltekit-superforms 2 · stripe (server SDK only,
+hosted Checkout — never render card inputs) · vitest + in-memory SQLite ·
 Playwright + axe · dependency-cruiser · pnpm · node 24 via mise.
 
 ## Svelte 5 — runes only (legacy syntax is a build error)
@@ -42,12 +42,13 @@ src/lib/server/domain/**   framework-free business logic. May import db/, shared
                            routes, components, or gateway implementations.
 src/lib/server/gateways/   external effects (stripe real/dev, discord). Implement domain ports.
 src/routes/**      thin: parse (zod) → call domain service → render/redirect. Never imports
-                   `stripe` or `postgres` directly.
+                   `stripe` or `better-sqlite3` directly.
 ```
 
-Every domain mutation runs inside one `db.transaction`, appends its audit row in the same
-tx, and takes locks (`FOR UPDATE`) where the spec says so. Concurrency invariants live in
-Postgres (partial unique indexes, composite FKs) — do not "optimize" them away.
+Every domain mutation runs inside one synchronous `write` transaction and appends its audit
+row in the same tx. `write` uses BEGIN IMMEDIATE; `read` supplies multi-statement snapshots.
+Callbacks cannot return promises, because better-sqlite3 commits at the first await.
+SQLite partial unique indexes and composite FKs preserve concurrency and money invariants.
 
 ## Forms & progressive enhancement
 
@@ -94,12 +95,13 @@ pnpm check        # svelte-check
 pnpm lint         # eslint + prettier check
 pnpm depcruise    # boundary lint
 pnpm test         # vitest unit
-pnpm test:integration   # vitest + testcontainers (real Postgres; needs docker)
+pnpm test:integration   # vitest + isolated in-memory SQLite
 pnpm test:e2e     # Playwright against built app (dev bypass + stripedev)
 ```
 
-- Domain logic with DB effects → integration test against real Postgres (testcontainers),
-  including actual parallelism for race-sensitive paths. No mock DB, no memory store.
+- Domain logic with DB effects → integration tests against an isolated in-memory SQLite
+  database cloned from a migrated template. Keep concurrent-call outcome assertions to
+  verify invariants under serialized synchronous writes; inject a fixed Clock for reproducibility.
 - Every GET route must have a sweep fixture (route sweep renders all routes in ja+en and
   scans for raw enums/`undefined`/`NaN`/`[object Object]`). New route without fixture =
   test failure.

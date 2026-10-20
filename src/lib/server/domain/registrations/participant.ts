@@ -1,3 +1,6 @@
+import { read } from '$lib/server/db/client';
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write } from '$lib/server/db/client';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
 import {
@@ -44,56 +47,60 @@ export async function getOwnedRegistration(
   registrationId: string,
   userId: string
 ): Promise<OwnedRegistrationDetail> {
-  const rows = await client.db
-    .select({
-      registration: registrations,
-      event: events,
-      organizationName: organizations.name
-    })
-    .from(registrations)
-    .innerJoin(events, eq(events.id, registrations.eventId))
-    .innerJoin(organizations, eq(organizations.id, events.organizationId))
-    .where(and(eq(registrations.id, registrationId), eq(registrations.userId, userId)))
-    .limit(1);
-  if (!rows[0]) throw new RegistrationError('not_found', 'registration not found');
-
-  const answerRows = await client.db
-    .select({ answer: registrationFormAnswers, position: eventFormFields.position })
-    .from(registrationFormAnswers)
-    .innerJoin(eventFormFields, eq(eventFormFields.id, registrationFormAnswers.fieldId))
-    .where(eq(registrationFormAnswers.registrationId, registrationId))
-    .orderBy(asc(eventFormFields.position), asc(registrationFormAnswers.id));
-  const answerIds = answerRows.map(({ answer }) => answer.id);
-  const optionRows =
-    answerIds.length === 0
-      ? []
-      : await client.db
-          .select()
-          .from(registrationFormAnswerOptions)
-          .where(inArray(registrationFormAnswerOptions.answerId, answerIds));
-  const optionsByAnswer = new Map<string, string[]>();
-  for (const option of optionRows) {
-    const labels = optionsByAnswer.get(option.answerId) ?? [];
-    labels.push(option.optionLabelSnapshot);
-    optionsByAnswer.set(option.answerId, labels);
-  }
-  return {
-    registration: parseRegistration(rows[0].registration),
-    event: parseEvent(rows[0].event),
-    organizationName: rows[0].organizationName,
-    answers: answerRows.map(({ answer }) => ({
-      label: answer.fieldLabelSnapshot,
-      type: formFieldTypeSchema.parse(answer.fieldTypeSnapshot),
-      valueText: answer.valueText,
-      valueBool: answer.valueBool,
-      optionLabels: optionsByAnswer.get(answer.id) ?? []
-    }))
-  };
+  return read(client, (tx) => {
+    const rows = tx
+      .select({
+        registration: registrations,
+        event: events,
+        organizationName: organizations.name
+      })
+      .from(registrations)
+      .innerJoin(events, eq(events.id, registrations.eventId))
+      .innerJoin(organizations, eq(organizations.id, events.organizationId))
+      .where(and(eq(registrations.id, registrationId), eq(registrations.userId, userId)))
+      .limit(1)
+      .all();
+    if (!rows[0]) throw new RegistrationError('not_found', 'registration not found');
+    const answerRows = tx
+      .select({ answer: registrationFormAnswers, position: eventFormFields.position })
+      .from(registrationFormAnswers)
+      .innerJoin(eventFormFields, eq(eventFormFields.id, registrationFormAnswers.fieldId))
+      .where(eq(registrationFormAnswers.registrationId, registrationId))
+      .orderBy(asc(eventFormFields.position), asc(registrationFormAnswers.id))
+      .all();
+    const answerIds = answerRows.map(({ answer }) => answer.id);
+    const optionRows =
+      answerIds.length === 0
+        ? []
+        : tx
+            .select()
+            .from(registrationFormAnswerOptions)
+            .where(inArray(registrationFormAnswerOptions.answerId, answerIds))
+            .all();
+    const optionsByAnswer = new Map<string, string[]>();
+    for (const option of optionRows) {
+      const labels = optionsByAnswer.get(option.answerId) ?? [];
+      labels.push(option.optionLabelSnapshot);
+      optionsByAnswer.set(option.answerId, labels);
+    }
+    return {
+      registration: parseRegistration(rows[0].registration),
+      event: parseEvent(rows[0].event),
+      organizationName: rows[0].organizationName,
+      answers: answerRows.map(({ answer }) => ({
+        label: answer.fieldLabelSnapshot,
+        type: formFieldTypeSchema.parse(answer.fieldTypeSnapshot),
+        valueText: answer.valueText,
+        valueBool: answer.valueBool,
+        optionLabels: optionsByAnswer.get(answer.id) ?? []
+      }))
+    };
+  });
 }
 
 export function canWithdrawRegistration(
   detail: Pick<OwnedRegistrationDetail, 'registration' | 'event'>,
-  now = new Date()
+  now: Date
 ): boolean {
   return detail.registration.status !== 'cancelled' && now < detail.event.startsAt;
 }
@@ -101,67 +108,81 @@ export function canWithdrawRegistration(
 /** Withdraws an active registration and fills the resulting vacancy atomically. */
 export async function withdrawRegistration(
   client: DatabaseClient,
-  input: { registrationId: string; userId: string }
-): Promise<{ registration: RegistrationSummary; promotedRegistrationId: string | null }> {
-  return client.db.transaction(async (tx) => {
-    const identityRows = await tx
+  input: {
+    registrationId: string;
+    userId: string;
+  },
+  clock: Clock = systemClock
+): Promise<{
+  registration: RegistrationSummary;
+  promotedRegistrationId: string | null;
+}> {
+  return write(client, (tx) => {
+    const identityRows = tx
       .select({ eventId: registrations.eventId })
       .from(registrations)
       .where(
         and(eq(registrations.id, input.registrationId), eq(registrations.userId, input.userId))
       )
-      .limit(1);
+      .limit(1)
+      .all();
     if (!identityRows[0]) throw new RegistrationError('not_found', 'registration not found');
-    const eventRows = await tx
+    const eventRows = tx
       .select()
       .from(events)
       .where(eq(events.id, identityRows[0].eventId))
       .limit(1)
-      .for('update');
+      .all();
     if (!eventRows[0]) throw new RegistrationError('not_found', 'event not found');
     const event = parseEvent(eventRows[0]);
-
-    const registrationRows = await tx
+    const registrationRows = tx
       .select()
       .from(registrations)
       .where(
         and(eq(registrations.id, input.registrationId), eq(registrations.userId, input.userId))
       )
       .limit(1)
-      .for('update');
+      .all();
     if (!registrationRows[0]) throw new RegistrationError('not_found', 'registration not found');
     const current = parseRegistration(registrationRows[0]);
-    if (!canWithdrawRegistration({ registration: current, event })) {
+    if (!canWithdrawRegistration({ registration: current, event }, clock.now())) {
       throw new RegistrationError('not_withdrawable', 'registration cannot be withdrawn');
     }
-
-    const updatedRows = await tx
+    const updatedRows = tx
       .update(registrations)
-      .set({ status: 'cancelled', updatedAt: new Date() })
+      .set({ status: 'cancelled', updatedAt: clock.now() })
       .where(eq(registrations.id, current.id))
-      .returning();
+      .returning()
+      .all();
     const withdrawn = parseRegistration(updatedRows[0]);
-    await appendAudit(tx, {
-      actorUserId: input.userId,
-      eventId: current.eventId,
-      action: 'registration.withdraw',
-      targetType: 'registration',
-      targetId: current.id,
-      before: { status: current.status },
-      after: { status: withdrawn.status },
-      reason: 'participant withdrawal'
-    });
-    await cancelPaymentRequestsForRegistration(tx, current.id);
-    await enqueueRoleSync(tx, current.eventId, current.id);
-
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.userId,
+        eventId: current.eventId,
+        action: 'registration.withdraw',
+        targetType: 'registration',
+        targetId: current.id,
+        before: { status: current.status },
+        after: { status: withdrawn.status },
+        reason: 'participant withdrawal'
+      },
+      clock
+    );
+    cancelPaymentRequestsForRegistration(tx, current.id, clock);
+    enqueueRoleSync(tx, current.eventId, current.id, clock);
     let promotedRegistrationId: string | null = null;
     if (current.status === 'confirmed' && event.registrationMode === 'auto_confirm') {
-      promotedRegistrationId = await promoteOldestWaitlisted(tx, {
-        eventId: event.id,
-        capacity: event.capacity,
-        actorUserId: input.userId,
-        reason: 'vacancy after participant withdrawal'
-      });
+      promotedRegistrationId = promoteOldestWaitlisted(
+        tx,
+        {
+          eventId: event.id,
+          capacity: event.capacity,
+          actorUserId: input.userId,
+          reason: 'vacancy after participant withdrawal'
+        },
+        clock
+      );
     }
     return { registration: withdrawn, promotedRegistrationId };
   });

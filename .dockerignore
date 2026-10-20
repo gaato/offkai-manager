@@ -10,3 +10,8 @@ coverage
 .env.*
 !.env.example
 e2e/legacy-reference
+
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal

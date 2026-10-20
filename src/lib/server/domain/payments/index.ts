@@ -9,10 +9,15 @@ export {
   type ConnectActor,
   type OnboardingInput
 } from './connect';
+
 export * from './collections';
+
 export * from './checkout';
+
 export * from './requests';
+
 export * from './settle';
+
 export {
   CollectionError,
   ConnectError,
@@ -23,6 +28,7 @@ export {
   type PaymentErrorCode,
   type SettlementErrorCode
 } from './errors';
+
 export type {
   ConnectAccount,
   ConnectGateway,
@@ -31,4 +37,5 @@ export type {
   StripeWebhookGateway,
   StripeDashboardType
 } from './gateway';
+
 export type { VerifiedCheckoutEvent, VerifiedCheckoutSettlementEvent } from './gateway';

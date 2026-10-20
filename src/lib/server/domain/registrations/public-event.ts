@@ -1,3 +1,4 @@
+import { read } from '$lib/server/db/client';
 import { and, count, eq, isNull, ne } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
 import { events, organizations, registrations } from '$lib/server/db/schema';
@@ -16,43 +17,46 @@ export async function getPublicEventBySlug(
   organizationSlug: string,
   eventSlug: string
 ): Promise<PublicEvent> {
-  const rows = await client.db
-    .select({
-      event: events,
-      organizationName: organizations.name,
-      organizationSlug: organizations.slug,
-      confirmedCount: count(registrations.id)
-    })
-    .from(events)
-    .innerJoin(organizations, eq(organizations.id, events.organizationId))
-    .leftJoin(
-      registrations,
-      and(eq(registrations.eventId, events.id), eq(registrations.status, 'confirmed'))
-    )
-    .where(
-      and(
-        eq(organizations.slug, organizationSlug),
-        eq(events.slug, eventSlug),
-        isNull(organizations.suspendedAt),
-        isNull(events.archivedAt),
-        ne(events.visibility, 'draft')
+  return read(client, (tx) => {
+    const rows = tx
+      .select({
+        event: events,
+        organizationName: organizations.name,
+        organizationSlug: organizations.slug,
+        confirmedCount: count(registrations.id)
+      })
+      .from(events)
+      .innerJoin(organizations, eq(organizations.id, events.organizationId))
+      .leftJoin(
+        registrations,
+        and(eq(registrations.eventId, events.id), eq(registrations.status, 'confirmed'))
       )
-    )
-    .groupBy(events.id, organizations.id)
-    .limit(1);
-  if (!rows[0]) throw new RegistrationError('not_found', 'public event not found');
-  return {
-    event: parseEvent(rows[0].event),
-    organizationName: rows[0].organizationName,
-    organizationSlug: rows[0].organizationSlug,
-    confirmedCount: rows[0].confirmedCount
-  };
+      .where(
+        and(
+          eq(organizations.slug, organizationSlug),
+          eq(events.slug, eventSlug),
+          isNull(organizations.suspendedAt),
+          isNull(events.archivedAt),
+          ne(events.visibility, 'draft')
+        )
+      )
+      .groupBy(events.id, organizations.id)
+      .limit(1)
+      .all();
+    if (!rows[0]) throw new RegistrationError('not_found', 'public event not found');
+    return {
+      event: parseEvent(rows[0].event),
+      organizationName: rows[0].organizationName,
+      organizationSlug: rows[0].organizationSlug,
+      confirmedCount: rows[0].confirmedCount
+    };
+  });
 }
 
 export function registrationAvailability(
   event: EventSummary,
   confirmedCount: number,
-  now = new Date()
+  now: Date
 ): RegistrationAvailability {
   if (event.cancelledAt) return { state: 'cancelled', canRegister: false };
   if (now < event.registrationOpensAt) {

@@ -16,7 +16,6 @@ describe('form conventions', () => {
       expect(readFileSync(path, 'utf8'), path).not.toMatch(/^\s*default\s*:/m);
     }
   });
-
   it('gives every POST form an explicit named action', () => {
     for (const path of routeFiles('+page.svelte')) {
       const source = readFileSync(path, 'utf8');

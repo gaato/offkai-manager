@@ -24,6 +24,7 @@ export default defineConfig({
         resolve: { alias: aliases },
         test: {
           name: 'unit',
+          setupFiles: ['tests/clock.ts'],
           include: ['tests/unit/**/*.test.ts'],
           environment: 'node'
         }
@@ -32,6 +33,8 @@ export default defineConfig({
         resolve: { alias: aliases },
         test: {
           name: 'integration',
+          isolate: false,
+          setupFiles: ['tests/clock.ts'],
           include: ['tests/integration/**/*.test.ts'],
           environment: 'node',
           fileParallelism: false,

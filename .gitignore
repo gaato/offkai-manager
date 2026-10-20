@@ -27,3 +27,8 @@ build/
 coverage/
 playwright-report/
 test-results/
+
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal

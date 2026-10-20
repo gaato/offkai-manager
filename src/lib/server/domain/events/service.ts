@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write, read } from '$lib/server/db/client';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import { events } from '$lib/server/db/schema';
@@ -22,28 +24,31 @@ import type {
 } from './types';
 
 const slugAttempts = 4;
+
 type SlugFactory = (startsAt: Date, timeZone: string) => string;
 
 /** Creates a draft event and its audit record atomically. */
 export async function createEvent(
   client: DatabaseClient,
   input: CreateEventInput,
-  slugFactory: SlugFactory = generateEventSlug
+  slugFactory: SlugFactory = generateEventSlug,
+  clock: Clock = systemClock
 ): Promise<EventSummary> {
   const title = validateTitle(input.title);
   const startsAt = parseInputTime(input.startsAt, input.timeZone, 'start time');
   const capacity = validateCapacity(input.capacity ?? null);
   const registrationMode = parseRegistrationMode(input.registrationMode ?? 'auto_confirm');
-
   for (let attempt = 0; attempt < slugAttempts; attempt += 1) {
     const slug = slugFactory(startsAt, input.timeZone);
     try {
-      return await client.db.transaction(async (tx) => {
-        await authorizeOrganizationRole(tx, input.organizationId, input.actorUserId, 'organizer');
-        const endsAt = new Date(startsAt.getTime() + 3 * 60 * 60 * 1_000);
-        const created = await tx
+      return write(client, (tx) => {
+        authorizeOrganizationRole(tx, input.organizationId, input.actorUserId, 'organizer');
+        const endsAt = new Date(startsAt.getTime() + 3 * 60 * 60 * 1000);
+        const created = tx
           .insert(events)
           .values({
+            createdAt: clock.now(),
+            updatedAt: clock.now(),
             organizationId: input.organizationId,
             title,
             slug,
@@ -52,21 +57,26 @@ export async function createEvent(
             capacity,
             visibility: 'draft',
             discordPolicy: 'not_used',
-            registrationOpensAt: new Date(),
+            registrationOpensAt: clock.now(),
             registrationClosesAt: startsAt,
             venueReveal: 'public',
             registrationMode
           })
-          .returning();
+          .returning()
+          .all();
         const event = parseEvent(created[0]);
-        await appendAudit(tx, {
-          actorUserId: input.actorUserId,
-          eventId: event.id,
-          action: 'event.create',
-          targetType: 'event',
-          targetId: event.id,
-          after: { title: event.title, slug: event.slug, visibility: event.visibility }
-        });
+        appendAudit(
+          tx,
+          {
+            actorUserId: input.actorUserId,
+            eventId: event.id,
+            action: 'event.create',
+            targetType: 'event',
+            targetId: event.id,
+            after: { title: event.title, slug: event.slug, visibility: event.visibility }
+          },
+          clock
+        );
         return event;
       });
     } catch (cause) {
@@ -82,13 +92,14 @@ export async function listEventsForOrganization(
   actorUserId: string,
   organizationId: string
 ): Promise<EventSummary[]> {
-  return client.db.transaction(async (tx) => {
-    await authorizeOrganizationRole(tx, organizationId, actorUserId, 'viewer', false, true);
-    const rows = await tx
+  return read(client, (tx) => {
+    authorizeOrganizationRole(tx, organizationId, actorUserId, 'viewer', true);
+    const rows = tx
       .select()
       .from(events)
       .where(and(eq(events.organizationId, organizationId), isNull(events.archivedAt)))
-      .orderBy(asc(events.startsAt), asc(events.createdAt));
+      .orderBy(asc(events.startsAt), asc(events.createdAt))
+      .all();
     return rows.map(parseEvent);
   });
 }
@@ -99,14 +110,13 @@ export async function getEventAccess(
   actorUserId: string,
   eventId: string
 ): Promise<EventAccess> {
-  return client.db.transaction(async (tx) => {
-    const event = await loadEvent(tx, eventId);
-    const organization = await authorizeOrganizationRole(
+  return read(client, (tx) => {
+    const event = loadEvent(tx, eventId);
+    const organization = authorizeOrganizationRole(
       tx,
       event.organizationId,
       actorUserId,
       'viewer',
-      false,
       true
     );
     return {
@@ -121,74 +131,112 @@ export async function getEventAccess(
 /** Updates every organizer-editable event setting without changing lifecycle state or slug. */
 export async function updateSettings(
   client: DatabaseClient,
-  input: UpdateEventSettingsInput
+  input: UpdateEventSettingsInput,
+  clock: Clock = systemClock
 ): Promise<EventSummary> {
   const values = validateSettings(input);
-  return client.db.transaction(async (tx) => {
-    const current = await loadEvent(tx, input.eventId, true);
-    await authorizeOrganizationRole(tx, current.organizationId, input.actorUserId, 'organizer');
+  return write(client, (tx) => {
+    const current = loadEvent(tx, input.eventId);
+    authorizeOrganizationRole(tx, current.organizationId, input.actorUserId, 'organizer');
     if (current.archivedAt) {
       throw new EventError('illegal_transition', 'archived events cannot be changed');
     }
-    const updatedRows = await tx
+    const updatedRows = tx
       .update(events)
-      .set({ ...values, updatedAt: new Date() })
+      .set({ ...values, updatedAt: clock.now() })
       .where(eq(events.id, current.id))
-      .returning();
+      .returning()
+      .all();
     const updated = parseEvent(updatedRows[0]);
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: updated.id,
-      action: 'event.settings_update',
-      targetType: 'event',
-      targetId: updated.id,
-      before: settingsAuditSnapshot(current),
-      after: settingsAuditSnapshot(updated)
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: updated.id,
+        action: 'event.settings_update',
+        targetType: 'event',
+        targetId: updated.id,
+        before: settingsAuditSnapshot(current),
+        after: settingsAuditSnapshot(updated)
+      },
+      clock
+    );
     return updated;
   });
 }
 
 export async function publishEvent(
   client: DatabaseClient,
-  input: EventMutationInput
+  input: EventMutationInput,
+  clock: Clock = systemClock
 ): Promise<EventSummary> {
-  return mutateLifecycle(client, input, 'publish', 'event.publish', () => ({
-    visibility: 'public',
-    updatedAt: new Date()
-  }));
+  return mutateLifecycle(
+    client,
+    input,
+    'publish',
+    'event.publish',
+    () => ({
+      visibility: 'public',
+      updatedAt: clock.now()
+    }),
+    clock
+  );
 }
 
 export async function toggleEventUnlisted(
   client: DatabaseClient,
-  input: EventMutationInput
+  input: EventMutationInput,
+  clock: Clock = systemClock
 ): Promise<EventSummary> {
-  return mutateLifecycle(client, input, 'toggle_unlisted', 'event.unlist', (current) => ({
-    visibility: toggledVisibility(current.visibility)!,
-    updatedAt: new Date()
-  }));
+  return mutateLifecycle(
+    client,
+    input,
+    'toggle_unlisted',
+    'event.unlist',
+    (current) => ({
+      visibility: toggledVisibility(current.visibility)!,
+      updatedAt: clock.now()
+    }),
+    clock
+  );
 }
 
 export async function cancelEvent(
   client: DatabaseClient,
-  input: EventMutationInput
+  input: EventMutationInput,
+  clock: Clock = systemClock
 ): Promise<EventSummary> {
   const reason = input.reason?.trim() ?? '';
   if (!reason) throw new EventError('validation', 'a cancellation reason is required');
-  return mutateLifecycle(client, { ...input, reason }, 'cancel', 'event.cancel', () => ({
-    cancelledAt: new Date(),
-    updatedAt: new Date()
-  }));
+  return mutateLifecycle(
+    client,
+    { ...input, reason },
+    'cancel',
+    'event.cancel',
+    () => ({
+      cancelledAt: clock.now(),
+      updatedAt: clock.now()
+    }),
+    clock
+  );
 }
 
 export async function archiveEvent(
   client: DatabaseClient,
-  input: EventMutationInput
+  input: EventMutationInput,
+  clock: Clock = systemClock
 ): Promise<EventSummary> {
-  return mutateLifecycle(client, input, 'archive', 'event.archive', () => ({
-    archivedAt: new Date(),
-    updatedAt: new Date()
-  }));
+  return mutateLifecycle(
+    client,
+    input,
+    'archive',
+    'event.archive',
+    () => ({
+      archivedAt: clock.now(),
+      updatedAt: clock.now()
+    }),
+    clock
+  );
 }
 
 async function mutateLifecycle(
@@ -196,11 +244,12 @@ async function mutateLifecycle(
   input: EventMutationInput,
   transition: EventTransition,
   action: string,
-  changes: (current: EventSummary) => Partial<typeof events.$inferInsert>
+  changes: (current: EventSummary) => Partial<typeof events.$inferInsert>,
+  clock: Clock = systemClock
 ): Promise<EventSummary> {
-  return client.db.transaction(async (tx) => {
-    const current = await loadEvent(tx, input.eventId, true);
-    await authorizeOrganizationRole(tx, current.organizationId, input.actorUserId, 'organizer');
+  return write(client, (tx) => {
+    const current = loadEvent(tx, input.eventId);
+    authorizeOrganizationRole(tx, current.organizationId, input.actorUserId, 'organizer');
     if (transition === 'cancel' && current.cancelledAt) return current;
     if (
       !canTransitionEvent(
@@ -217,33 +266,34 @@ async function mutateLifecycle(
         `event cannot apply lifecycle transition ${transition}`
       );
     }
-    const updatedRows = await tx
+    const updatedRows = tx
       .update(events)
       .set(changes(current))
       .where(eq(events.id, current.id))
-      .returning();
+      .returning()
+      .all();
     const updated = parseEvent(updatedRows[0]);
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: updated.id,
-      action,
-      targetType: 'event',
-      targetId: updated.id,
-      reason: input.reason?.trim(),
-      before: lifecycleAuditSnapshot(current),
-      after: lifecycleAuditSnapshot(updated)
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: updated.id,
+        action,
+        targetType: 'event',
+        targetId: updated.id,
+        reason: input.reason?.trim(),
+        before: lifecycleAuditSnapshot(current),
+        after: lifecycleAuditSnapshot(updated)
+      },
+      clock
+    );
     return updated;
   });
 }
 
-async function loadEvent(
-  tx: DatabaseTransaction,
-  eventId: string,
-  lock = false
-): Promise<EventSummary> {
+function loadEvent(tx: DatabaseTransaction, eventId: string): EventSummary {
   const query = tx.select().from(events).where(eq(events.id, eventId)).limit(1);
-  const rows = lock ? await query.for('update') : await query;
+  const rows = query.all();
   if (!rows[0]) throw new EventError('not_found', 'event not found');
   return parseEvent(rows[0]);
 }
@@ -367,9 +417,14 @@ function settingsAuditSnapshot(event: EventSummary) {
 
 function isEventSlugCollision(cause: unknown): boolean {
   if (!cause || typeof cause !== 'object') return false;
-  const error = cause as { cause?: unknown; code?: unknown; constraint_name?: unknown };
+  const error = cause as {
+    cause?: unknown;
+    code?: unknown;
+    message?: string;
+  };
   return (
-    (error.code === '23505' && error.constraint_name === 'events_organization_id_slug_key') ||
+    (error.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+      error.message?.includes('events.organization_id, events.slug') === true) ||
     isEventSlugCollision(error.cause)
   );
 }

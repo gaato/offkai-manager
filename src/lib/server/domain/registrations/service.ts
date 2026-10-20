@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write, read } from '$lib/server/db/client';
 import { and, count, eq, ne } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
@@ -41,38 +43,39 @@ export async function listActiveRegistrationFields(
   client: DatabaseClient,
   eventId: string
 ): Promise<RegistrationFormField[]> {
-  return client.db.transaction((tx) => loadActiveFormFields(tx, eventId));
+  return read(client, (tx) => loadActiveFormFields(tx, eventId));
 }
 
 /** Creates one registration, its answer snapshots, and its audit record atomically. */
 export async function createRegistration(
   client: DatabaseClient,
-  input: CreateRegistrationInput
+  input: CreateRegistrationInput,
+  clock: Clock = systemClock
 ): Promise<RegistrationSummary> {
   try {
-    return await client.db.transaction(async (tx) => {
-      const userRows = await tx
+    return write(client, (tx) => {
+      const userRows = tx
         .select({ suspendedAt: users.suspendedAt })
         .from(users)
         .where(eq(users.id, input.userId))
         .limit(1)
-        .for('update');
+        .all();
       if (!userRows[0] || userRows[0].suspendedAt) {
         throw new RegistrationError('forbidden', 'user is suspended');
       }
-      const event = await loadRegistrableEventForUpdate(
+      const event = loadRegistrableEventForUpdate(
         tx,
         input.organizationSlug,
-        input.eventSlug
+        input.eventSlug,
+        clock
       );
-      const fields = await loadActiveFormFields(tx, event.id);
+      const fields = loadActiveFormFields(tx, event.id);
       try {
         validateRegistrationAnswers(fields, input.answers);
       } catch (cause) {
         throw new RegistrationError('validation', 'registration answers are invalid', { cause });
       }
-
-      const active = await tx
+      const active = tx
         .select({ id: registrations.id })
         .from(registrations)
         .where(
@@ -82,58 +85,65 @@ export async function createRegistration(
             ne(registrations.status, 'cancelled')
           )
         )
-        .limit(1);
+        .limit(1)
+        .all();
       if (active[0]) {
         throw new RegistrationError('duplicate', 'user already has an active registration');
       }
-
       let status: RegistrationStatus = 'applied';
       if (registrationModeSchema.parse(event.registrationMode) === 'auto_confirm') {
-        const confirmedRows = await tx
+        const confirmedRows = tx
           .select({ value: count(registrations.id) })
           .from(registrations)
-          .where(and(eq(registrations.eventId, event.id), eq(registrations.status, 'confirmed')));
+          .where(and(eq(registrations.eventId, event.id), eq(registrations.status, 'confirmed')))
+          .all();
         const confirmedCount = confirmedRows[0]?.value ?? 0;
         status =
           event.capacity !== null && confirmedCount >= event.capacity ? 'waitlisted' : 'confirmed';
       }
-
-      const account = await tx
+      const account = tx
         .select({ username: externalAccounts.username })
         .from(externalAccounts)
         .where(
           and(eq(externalAccounts.userId, input.userId), eq(externalAccounts.provider, 'discord'))
         )
-        .limit(1);
+        .limit(1)
+        .all();
       const displayName = input.displayName.trim();
       if (!displayName) {
         throw new RegistrationError('validation', 'display name is required');
       }
       const searchText = [displayName, account[0]?.username ?? ''].filter(Boolean).join(' ');
-      const createdRows = await tx
+      const createdRows = tx
         .insert(registrations)
         .values({
+          createdAt: clock.now(),
+          updatedAt: clock.now(),
           eventId: event.id,
           userId: input.userId,
           status,
           displayNameSnapshot: displayName,
           searchText
         })
-        .returning();
+        .returning()
+        .all();
       const registration = parseRegistration(createdRows[0]);
-
-      await saveAnswers(tx, registration.id, event.id, fields, input.answers);
-      await appendAudit(tx, {
-        actorUserId: input.userId,
-        eventId: event.id,
-        action: 'registration.create',
-        targetType: 'registration',
-        targetId: registration.id,
-        after: { status: registration.status }
-      });
+      saveAnswers(tx, registration.id, event.id, fields, input.answers, clock);
+      appendAudit(
+        tx,
+        {
+          actorUserId: input.userId,
+          eventId: event.id,
+          action: 'registration.create',
+          targetType: 'registration',
+          targetId: registration.id,
+          after: { status: registration.status }
+        },
+        clock
+      );
       if (registration.status === 'confirmed') {
-        await ensurePaymentRequestsForRegistration(tx, event.id, registration.id);
-        await enqueueRoleSync(tx, event.id, registration.id);
+        ensurePaymentRequestsForRegistration(tx, event.id, registration.id, clock);
+        enqueueRoleSync(tx, event.id, registration.id, clock);
       }
       return registration;
     });
@@ -148,18 +158,19 @@ export async function createRegistration(
   }
 }
 
-async function loadRegistrableEventForUpdate(
+function loadRegistrableEventForUpdate(
   tx: DatabaseTransaction,
   organizationSlug: string,
-  eventSlug: string
+  eventSlug: string,
+  clock: Clock = systemClock
 ) {
-  const rows = await tx
+  const rows = tx
     .select({ event: events, organizationSuspendedAt: organizations.suspendedAt })
     .from(events)
     .innerJoin(organizations, eq(organizations.id, events.organizationId))
     .where(and(eq(organizations.slug, organizationSlug), eq(events.slug, eventSlug)))
     .limit(1)
-    .for('update');
+    .all();
   const row = rows[0];
   if (
     !row ||
@@ -169,7 +180,7 @@ async function loadRegistrableEventForUpdate(
   ) {
     throw new RegistrationError('not_found', 'public event not found');
   }
-  const now = new Date();
+  const now = clock.now();
   if (
     row.event.cancelledAt ||
     now < row.event.registrationOpensAt ||
@@ -180,19 +191,21 @@ async function loadRegistrableEventForUpdate(
   return row.event;
 }
 
-async function saveAnswers(
+function saveAnswers(
   tx: DatabaseTransaction,
   registrationId: string,
   eventId: string,
   fields: readonly RegistrationFormField[],
-  answers: readonly RegistrationAnswerInput[]
-): Promise<void> {
+  answers: readonly RegistrationAnswerInput[],
+  clock: Clock = systemClock
+): void {
   const answersByKey = new Map(answers.map((answer) => [answer.fieldKey, answer]));
   for (const field of fields) {
     const answer = answersByKey.get(field.key)!;
-    const inserted = await tx
+    const inserted = tx
       .insert(registrationFormAnswers)
       .values({
+        createdAt: clock.now(),
         eventId,
         registrationId,
         fieldId: field.id,
@@ -202,21 +215,24 @@ async function saveAnswers(
         valueText: answer.valueText,
         valueBool: answer.valueBool
       })
-      .returning({ id: registrationFormAnswers.id });
+      .returning({ id: registrationFormAnswers.id })
+      .all();
     if (answer.optionIds.length === 0) continue;
     const optionById = new Map(field.options.map((option) => [option.id, option]));
-    await tx.insert(registrationFormAnswerOptions).values(
-      answer.optionIds.map((optionId) => {
-        const option = optionById.get(optionId)!;
-        return {
-          answerId: inserted[0].id,
-          fieldId: field.id,
-          optionId: option.id,
-          optionKeySnapshot: option.key,
-          optionLabelSnapshot: option.label
-        };
-      })
-    );
+    tx.insert(registrationFormAnswerOptions)
+      .values(
+        answer.optionIds.map((optionId) => {
+          const option = optionById.get(optionId)!;
+          return {
+            answerId: inserted[0].id,
+            fieldId: field.id,
+            optionId: option.id,
+            optionKeySnapshot: option.key,
+            optionLabelSnapshot: option.label
+          };
+        })
+      )
+      .run();
   }
 }
 
@@ -226,10 +242,14 @@ function parseRegistration(row: typeof registrations.$inferSelect): Registration
 
 function isActiveRegistrationConflict(cause: unknown): boolean {
   if (!cause || typeof cause !== 'object') return false;
-  const error = cause as { cause?: unknown; code?: unknown; constraint_name?: unknown };
+  const error = cause as {
+    cause?: unknown;
+    code?: unknown;
+    message?: string;
+  };
   return (
-    (error.code === '23505' &&
-      error.constraint_name === 'registrations_one_active_per_user_event') ||
+    (error.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+      error.message?.includes('registrations.event_id, registrations.user_id') === true) ||
     isActiveRegistrationConflict(error.cause)
   );
 }

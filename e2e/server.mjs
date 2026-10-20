@@ -1,10 +1,13 @@
 import { spawn } from 'node:child_process';
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer } from 'vite';
 
 const port = process.env.OFFKAI_E2E_PORT ?? '18080';
-const container = await new PostgreSqlContainer('postgres:17-alpine').start();
-const databaseUrl = container.getConnectionUri();
+const directory = await mkdtemp(join(tmpdir(), 'offkai-e2e-'));
+const databasePath = join(directory, 'offkai.sqlite');
 
 const apps = [];
 try {
@@ -15,7 +18,7 @@ try {
   });
   try {
     const { seedE2E } = await vite.ssrLoadModule('/e2e/seed.ts');
-    await seedE2E(databaseUrl);
+    await seedE2E(databasePath);
   } finally {
     await vite.close();
   }
@@ -25,7 +28,7 @@ try {
   for (const app of apps) {
     if (app.exitCode === null) app.kill('SIGTERM');
   }
-  await container.stop();
+  await rm(directory, { recursive: true, force: true });
   throw cause;
 }
 
@@ -38,7 +41,7 @@ function spawnApp(appPort) {
       PORT: appPort,
       OFFKAI_HTTP_ADDR: `127.0.0.1:${appPort}`,
       OFFKAI_PUBLIC_BASE_URL: `http://127.0.0.1:${appPort}`,
-      OFFKAI_DATABASE_URL: databaseUrl,
+      OFFKAI_DATABASE_PATH: databasePath,
       OFFKAI_AUTH_DEV_BYPASS: 'true',
       OFFKAI_SESSION_SECRET: 'e2e-development-session-secret',
       OFFKAI_DB_MIGRATE: 'false',
@@ -53,9 +56,13 @@ let shutdownPromise;
 function stop(signal) {
   shutdownPromise ??= (async () => {
     for (const app of apps) {
-      if (app.exitCode === null) app.kill(signal);
+      if (app.exitCode === null && app.signalCode === null) {
+        const exited = once(app, 'exit');
+        app.kill(signal);
+        await exited;
+      }
     }
-    await container.stop();
+    await rm(directory, { recursive: true, force: true });
   })();
   return shutdownPromise;
 }

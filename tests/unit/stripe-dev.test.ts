@@ -8,7 +8,7 @@ describe('development Stripe Checkout', () => {
     const input = {
       referenceId: 'request-reference',
       productName: 'Event fee',
-      amountMinor: 1_000n,
+      amountMinor: 1000n,
       currency: 'JPY',
       quantity: 3,
       stripeAccountId: accountId,
@@ -16,16 +16,14 @@ describe('development Stripe Checkout', () => {
       cancelUrl: 'https://example.test/cancel',
       idempotencyKey: 'checkout-request-reference'
     };
-
     const first = await gateway.createCheckoutSession(input);
     const duplicate = await gateway.createCheckoutSession(input);
     expect(duplicate).toEqual(first);
     expect(gateway.checkoutSession(first.sessionId)).toMatchObject({
-      amountMinor: 1_000n,
+      amountMinor: 1000n,
       quantity: 3
     });
   });
-
   it('accepts a database-seeded ready account identifier', async () => {
     const gateway = new DevConnectGateway();
     const result = await gateway.createCheckoutSession({

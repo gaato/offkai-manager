@@ -1,8 +1,11 @@
 import { randomInt } from 'node:crypto';
 
 const MAX_SLUG_LENGTH = 64;
+
 const RANDOM_SLUG_LENGTH = 7;
+
 const RANDOM_SLUG_ATTEMPTS = 32;
+
 const base36Alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
 export function organizationSlugBase(name: string): string {

@@ -1,38 +1,54 @@
-import { sql } from 'drizzle-orm';
+import { desc, sql } from 'drizzle-orm';
 import {
-  bigint,
-  boolean,
+  customType,
   check,
   foreignKey,
   index,
   integer,
-  jsonb,
-  pgTable,
+  sqliteTable,
   primaryKey,
   text,
-  timestamp,
   unique,
-  uniqueIndex,
-  uuid
-} from 'drizzle-orm/pg-core';
+  uniqueIndex
+} from 'drizzle-orm/sqlite-core';
 
-const id = () => uuid('id').primaryKey().defaultRandom();
-const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
-const updatedAt = () => timestamp('updated_at', { withTimezone: true }).notNull().defaultNow();
-const money = (name: string) => bigint(name, { mode: 'bigint' }).notNull();
+const id = () =>
+  text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID());
+const createdAt = () =>
+  integer('created_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .default(sql`(cast(unixepoch('subsec') * 1000 as integer))`);
+const updatedAt = () =>
+  integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .default(sql`(cast(unixepoch('subsec') * 1000 as integer))`);
+// Reject amounts that Number cannot represent exactly before binding them to SQLite.
+export const bigintInteger = customType<{ data: bigint; driverData: number }>({
+  dataType: () => 'integer',
+  toDriver: (value) => {
+    if (value < BigInt(Number.MIN_SAFE_INTEGER) || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new RangeError('Money amount is outside the safe integer range');
+    }
+    return Number(value);
+  },
+  fromDriver: (value) => BigInt(value)
+});
+const money = (name: string) => bigintInteger(name).notNull();
 
-export const users = pgTable('users', {
+export const users = sqliteTable('users', {
   id: id(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-  suspendedAt: timestamp('suspended_at', { withTimezone: true })
+  suspendedAt: integer('suspended_at', { mode: 'timestamp_ms' })
 });
 
-export const externalAccounts = pgTable(
+export const externalAccounts = sqliteTable(
   'external_accounts',
   {
     id: id(),
-    userId: uuid('user_id')
+    userId: text('user_id')
       .notNull()
       .references(() => users.id),
     provider: text('provider').notNull(),
@@ -40,7 +56,9 @@ export const externalAccounts = pgTable(
     username: text('username').notNull().default(''),
     displayName: text('display_name').notNull().default(''),
     avatarUrl: text('avatar_url').notNull().default(''),
-    linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow()
+    linkedAt: integer('linked_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .default(sql`(cast(unixepoch('subsec') * 1000 as integer))`)
   },
   (table) => [
     unique('external_accounts_provider_provider_user_id_key').on(
@@ -51,7 +69,7 @@ export const externalAccounts = pgTable(
   ]
 );
 
-export const organizations = pgTable(
+export const organizations = sqliteTable(
   'organizations',
   {
     id: id(),
@@ -59,7 +77,7 @@ export const organizations = pgTable(
     slug: text('slug').notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
-    suspendedAt: timestamp('suspended_at', { withTimezone: true })
+    suspendedAt: integer('suspended_at', { mode: 'timestamp_ms' })
   },
   (table) => [
     unique('organizations_slug_key').on(table.slug),
@@ -71,20 +89,22 @@ export const organizations = pgTable(
   ]
 );
 
-export const organizationMemberships = pgTable(
+export const organizationMemberships = sqliteTable(
   'organization_memberships',
   {
     id: id(),
-    organizationId: uuid('organization_id')
+    organizationId: text('organization_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
+    userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
     status: text('status').notNull().default('active'),
-    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
-    invitedByUserId: uuid('invited_by_user_id').references(() => users.id),
+    joinedAt: integer('joined_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
+    invitedByUserId: text('invited_by_user_id').references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt()
   },
@@ -103,31 +123,31 @@ export const organizationMemberships = pgTable(
   ]
 );
 
-export const events = pgTable(
+export const events = sqliteTable(
   'events',
   {
     id: id(),
-    organizationId: uuid('organization_id')
+    organizationId: text('organization_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     slug: text('slug').notNull(),
     description: text('description').notNull().default(''),
-    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
-    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    startsAt: integer('starts_at', { mode: 'timestamp_ms' }).notNull(),
+    endsAt: integer('ends_at', { mode: 'timestamp_ms' }).notNull(),
     capacity: integer('capacity'),
     visibility: text('visibility').notNull(),
     discordPolicy: text('discord_policy').notNull(),
-    registrationOpensAt: timestamp('registration_opens_at', { withTimezone: true }).notNull(),
-    registrationClosesAt: timestamp('registration_closes_at', { withTimezone: true }).notNull(),
+    registrationOpensAt: integer('registration_opens_at', { mode: 'timestamp_ms' }).notNull(),
+    registrationClosesAt: integer('registration_closes_at', { mode: 'timestamp_ms' }).notNull(),
     venueName: text('venue_name').notNull().default(''),
     venueAddress: text('venue_address').notNull().default(''),
     venueReveal: text('venue_reveal').notNull().default('public'),
     contact: text('contact').notNull().default(''),
     cancellationPolicy: text('cancellation_policy').notNull().default(''),
     registrationMode: text('registration_mode').notNull().default('auto_confirm'),
-    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    cancelledAt: integer('cancelled_at', { mode: 'timestamp_ms' }),
+    archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
     updatedAt: updatedAt()
   },
@@ -151,11 +171,11 @@ export const events = pgTable(
   ]
 );
 
-export const eventDiscordIntegrations = pgTable(
+export const eventDiscordIntegrations = sqliteTable(
   'event_discord_integrations',
   {
     id: id(),
-    eventId: uuid('event_id')
+    eventId: text('event_id')
       .notNull()
       .references(() => events.id, { onDelete: 'cascade' }),
     guildId: text('guild_id').notNull().default(''),
@@ -170,26 +190,27 @@ export const eventDiscordIntegrations = pgTable(
   (table) => [unique('event_discord_integrations_event_id_key').on(table.eventId)]
 );
 
-export const eventFormFields = pgTable(
+export const eventFormFields = sqliteTable(
   'event_form_fields',
   {
     id: id(),
-    eventId: uuid('event_id')
+    eventId: text('event_id')
       .notNull()
       .references(() => events.id, { onDelete: 'cascade' }),
     fieldKey: text('field_key').notNull(),
     label: text('label').notNull(),
     fieldType: text('field_type').notNull(),
-    required: boolean('required').notNull().default(false),
+    required: integer('required', { mode: 'boolean' }).notNull().default(false),
     position: integer('position').notNull().default(0),
     helpText: text('help_text').notNull().default(''),
-    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
     updatedAt: updatedAt()
   },
   (table) => [
     unique('event_form_fields_event_id_field_key_key').on(table.eventId, table.fieldKey),
     unique('event_form_fields_event_id_id_key').on(table.eventId, table.id),
+    check('event_form_fields_required_check', sql`${table.required} in (0, 1)`),
     check('event_form_fields_field_key_check', sql`length(${table.fieldKey}) > 0`),
     check('event_form_fields_label_check', sql`length(${table.label}) > 0`),
     check(
@@ -200,17 +221,17 @@ export const eventFormFields = pgTable(
   ]
 );
 
-export const eventFormFieldOptions = pgTable(
+export const eventFormFieldOptions = sqliteTable(
   'event_form_field_options',
   {
     id: id(),
-    fieldId: uuid('field_id')
+    fieldId: text('field_id')
       .notNull()
       .references(() => eventFormFields.id, { onDelete: 'cascade' }),
     optionKey: text('option_key').notNull(),
     label: text('label').notNull(),
     position: integer('position').notNull().default(0),
-    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
     updatedAt: updatedAt()
   },
@@ -223,14 +244,14 @@ export const eventFormFieldOptions = pgTable(
   ]
 );
 
-export const registrations = pgTable(
+export const registrations = sqliteTable(
   'registrations',
   {
     id: id(),
-    eventId: uuid('event_id')
+    eventId: text('event_id')
       .notNull()
       .references(() => events.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
+    userId: text('user_id')
       .notNull()
       .references(() => users.id),
     status: text('status').notNull(),
@@ -245,10 +266,6 @@ export const registrations = pgTable(
       .on(table.eventId, table.userId)
       .where(sql`${table.status} <> 'cancelled'`),
     index('registrations_event_status_idx').on(table.eventId, table.status),
-    index('registrations_event_search_idx').using(
-      'gin',
-      sql`to_tsvector('simple', ${table.searchText})`
-    ),
     check(
       'registrations_status_check',
       sql`${table.status} in ('applied', 'confirmed', 'waitlisted', 'cancelled')`
@@ -260,22 +277,22 @@ export const registrations = pgTable(
   ]
 );
 
-export const registrationFormAnswers = pgTable(
+export const registrationFormAnswers = sqliteTable(
   'registration_form_answers',
   {
     id: id(),
-    eventId: uuid('event_id').notNull(),
-    registrationId: uuid('registration_id')
+    eventId: text('event_id').notNull(),
+    registrationId: text('registration_id')
       .notNull()
       .references(() => registrations.id, { onDelete: 'cascade' }),
-    fieldId: uuid('field_id')
+    fieldId: text('field_id')
       .notNull()
       .references(() => eventFormFields.id),
     fieldKeySnapshot: text('field_key_snapshot').notNull(),
     fieldLabelSnapshot: text('field_label_snapshot').notNull(),
     fieldTypeSnapshot: text('field_type_snapshot').notNull(),
     valueText: text('value_text').notNull().default(''),
-    valueBool: boolean('value_bool'),
+    valueBool: integer('value_bool', { mode: 'boolean' }),
     createdAt: createdAt(),
     updatedAt: updatedAt()
   },
@@ -295,6 +312,7 @@ export const registrationFormAnswers = pgTable(
       columns: [table.eventId, table.fieldId],
       foreignColumns: [eventFormFields.eventId, eventFormFields.id]
     }),
+    check('registration_form_answers_value_bool_check', sql`${table.valueBool} in (0, 1)`),
     check(
       'registration_form_answers_field_key_snapshot_check',
       sql`length(${table.fieldKeySnapshot}) > 0`
@@ -313,14 +331,14 @@ export const registrationFormAnswers = pgTable(
   ]
 );
 
-export const registrationFormAnswerOptions = pgTable(
+export const registrationFormAnswerOptions = sqliteTable(
   'registration_form_answer_options',
   {
-    answerId: uuid('answer_id')
+    answerId: text('answer_id')
       .notNull()
       .references(() => registrationFormAnswers.id, { onDelete: 'cascade' }),
-    fieldId: uuid('field_id').notNull(),
-    optionId: uuid('option_id')
+    fieldId: text('field_id').notNull(),
+    optionId: text('option_id')
       .notNull()
       .references(() => eventFormFieldOptions.id),
     optionKeySnapshot: text('option_key_snapshot').notNull(),
@@ -353,18 +371,18 @@ export const registrationFormAnswerOptions = pgTable(
   ]
 );
 
-export const stripeConnectAccounts = pgTable(
+export const stripeConnectAccounts = sqliteTable(
   'stripe_connect_accounts',
   {
     id: id(),
-    organizationId: uuid('organization_id')
+    organizationId: text('organization_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
     stripeAccountId: text('stripe_account_id').notNull(),
     dashboardType: text('dashboard_type').notNull(),
-    chargesEnabled: boolean('charges_enabled').notNull().default(false),
-    payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
-    detailsSubmitted: boolean('details_submitted').notNull().default(false),
+    chargesEnabled: integer('charges_enabled', { mode: 'boolean' }).notNull().default(false),
+    payoutsEnabled: integer('payouts_enabled', { mode: 'boolean' }).notNull().default(false),
+    detailsSubmitted: integer('details_submitted', { mode: 'boolean' }).notNull().default(false),
     onboardingStatus: text('onboarding_status').notNull(),
     country: text('country').notNull().default(''),
     defaultCurrency: text('default_currency').notNull().default(''),
@@ -377,6 +395,12 @@ export const stripeConnectAccounts = pgTable(
     unique('stripe_connect_accounts_organization_id_stripe_account_id_key').on(
       table.organizationId,
       table.stripeAccountId
+    ),
+    check('stripe_connect_accounts_charges_enabled_check', sql`${table.chargesEnabled} in (0, 1)`),
+    check('stripe_connect_accounts_payouts_enabled_check', sql`${table.payoutsEnabled} in (0, 1)`),
+    check(
+      'stripe_connect_accounts_details_submitted_check',
+      sql`${table.detailsSubmitted} in (0, 1)`
     ),
     check(
       'stripe_connect_accounts_stripe_account_id_check',
@@ -393,18 +417,18 @@ export const stripeConnectAccounts = pgTable(
   ]
 );
 
-export const collections = pgTable(
+export const collections = sqliteTable(
   'collections',
   {
     id: id(),
-    eventId: uuid('event_id')
+    eventId: text('event_id')
       .notNull()
       .references(() => events.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     amountMinor: money('amount_minor'),
     currency: text('currency').notNull(),
     status: text('status').notNull(),
-    dueAt: timestamp('due_at', { withTimezone: true }),
+    dueAt: integer('due_at', { mode: 'timestamp_ms' }),
     instructions: text('instructions').notNull().default(''),
     createdAt: createdAt(),
     updatedAt: updatedAt()
@@ -423,15 +447,15 @@ export const collections = pgTable(
   ]
 );
 
-export const collectionPaymentMethods = pgTable(
+export const collectionPaymentMethods = sqliteTable(
   'collection_payment_methods',
   {
     id: id(),
-    collectionId: uuid('collection_id')
+    collectionId: text('collection_id')
       .notNull()
       .references(() => collections.id, { onDelete: 'cascade' }),
     label: text('label').notNull(),
-    enabled: boolean('enabled').notNull().default(true),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     sortOrder: integer('sort_order').notNull().default(0),
     timing: text('timing').notNull().default('onsite'),
     confirmation: text('confirmation').notNull().default('manual'),
@@ -443,6 +467,7 @@ export const collectionPaymentMethods = pgTable(
       table.label
     ),
     unique('collection_payment_methods_collection_id_id_key').on(table.collectionId, table.id),
+    check('collection_payment_methods_enabled_check', sql`${table.enabled} in (0, 1)`),
     check('collection_payment_methods_label_check', sql`length(${table.label}) > 0`),
     check(
       'collection_payment_methods_timing_check',
@@ -455,24 +480,24 @@ export const collectionPaymentMethods = pgTable(
   ]
 );
 
-export const paymentRequests = pgTable(
+export const paymentRequests = sqliteTable(
   'payment_requests',
   {
     id: id(),
-    eventId: uuid('event_id').notNull(),
-    collectionId: uuid('collection_id')
+    eventId: text('event_id').notNull(),
+    collectionId: text('collection_id')
       .notNull()
       .references(() => collections.id),
-    registrationId: uuid('registration_id')
+    registrationId: text('registration_id')
       .notNull()
       .references(() => registrations.id),
-    collectionPaymentMethodId: uuid('collection_payment_method_id')
+    collectionPaymentMethodId: text('collection_payment_method_id')
       .notNull()
       .references(() => collectionPaymentMethods.id),
     amountMinor: money('amount_minor'),
     currency: text('currency').notNull(),
     status: text('status').notNull(),
-    dueAt: timestamp('due_at', { withTimezone: true }),
+    dueAt: integer('due_at', { mode: 'timestamp_ms' }),
     stripeAccountId: text('stripe_account_id').notNull().default(''),
     checkoutSessionId: text('checkout_session_id').notNull().default(''),
     paymentIntentId: text('payment_intent_id').notNull().default(''),
@@ -526,18 +551,18 @@ export const paymentRequests = pgTable(
   ]
 );
 
-export const paymentRecords = pgTable(
+export const paymentRecords = sqliteTable(
   'payment_records',
   {
     id: id(),
-    paymentRequestId: uuid('payment_request_id')
+    paymentRequestId: text('payment_request_id')
       .notNull()
       .references(() => paymentRequests.id),
-    registrationId: uuid('registration_id')
+    registrationId: text('registration_id')
       .notNull()
       .references(() => registrations.id),
-    collectionId: uuid('collection_id').notNull(),
-    collectionPaymentMethodId: uuid('collection_payment_method_id')
+    collectionId: text('collection_id').notNull(),
+    collectionPaymentMethodId: text('collection_payment_method_id')
       .notNull()
       .references(() => collectionPaymentMethods.id),
     externalReference: text('external_reference').notNull().default(''),
@@ -545,11 +570,11 @@ export const paymentRecords = pgTable(
     amountMinor: money('amount_minor'),
     currency: text('currency').notNull(),
     status: text('status').notNull(),
-    confirmedByUserId: uuid('confirmed_by_user_id').references(() => users.id, {
+    confirmedByUserId: text('confirmed_by_user_id').references(() => users.id, {
       onDelete: 'set null'
     }),
-    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
-    rawPayloadJson: jsonb('raw_payload_json'),
+    confirmedAt: integer('confirmed_at', { mode: 'timestamp_ms' }),
+    rawPayloadJson: text('raw_payload_json', { mode: 'json' }).$type<unknown>(),
     idempotencyKey: text('idempotency_key').notNull().default(''),
     createdAt: createdAt()
   },
@@ -572,6 +597,7 @@ export const paymentRecords = pgTable(
       columns: [table.collectionId, table.collectionPaymentMethodId],
       foreignColumns: [collectionPaymentMethods.collectionId, collectionPaymentMethods.id]
     }),
+    check('payment_records_raw_payload_json_check', sql`json_valid(${table.rawPayloadJson})`),
     check('payment_records_amount_minor_check', sql`${table.amountMinor} >= 0`),
     check('payment_records_currency_check', sql`length(${table.currency}) = 3`),
     check(
@@ -584,35 +610,36 @@ export const paymentRecords = pgTable(
   ]
 );
 
-export const stripeWebhookEvents = pgTable(
+export const stripeWebhookEvents = sqliteTable(
   'stripe_webhook_events',
   {
     id: id(),
     stripeEventId: text('stripe_event_id').notNull(),
     stripeAccountId: text('stripe_account_id').notNull().default(''),
     eventType: text('event_type').notNull(),
-    payloadJson: jsonb('payload_json').notNull(),
-    processedAt: timestamp('processed_at', { withTimezone: true }),
+    payloadJson: text('payload_json', { mode: 'json' }).$type<unknown>().notNull(),
+    processedAt: integer('processed_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt()
   },
   (table) => [
     unique('stripe_webhook_events_stripe_event_id_key').on(table.stripeEventId),
+    check('stripe_webhook_events_payload_json_check', sql`json_valid(${table.payloadJson})`),
     check('stripe_webhook_events_stripe_event_id_check', sql`length(${table.stripeEventId}) > 0`),
     check('stripe_webhook_events_event_type_check', sql`length(${table.eventType}) > 0`)
   ]
 );
 
-export const checkinRecords = pgTable(
+export const checkinRecords = sqliteTable(
   'checkin_records',
   {
     id: id(),
-    eventId: uuid('event_id')
+    eventId: text('event_id')
       .notNull()
       .references(() => events.id),
-    registrationId: uuid('registration_id')
+    registrationId: text('registration_id')
       .notNull()
       .references(() => registrations.id),
-    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    actorUserId: text('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
     status: text('status').notNull(),
     method: text('method').notNull(),
     clientMetadata: text('client_metadata').notNull().default(''),
@@ -626,50 +653,57 @@ export const checkinRecords = pgTable(
     }),
     check('checkin_records_status_check', sql`${table.status} in ('checked_in', 'manual_review')`),
     check('checkin_records_method_check', sql`${table.method} in ('manual', 'search', 'qr')`),
-    index('checkin_records_event_idx').on(table.eventId, table.createdAt.desc()),
+    index('checkin_records_event_idx').on(table.eventId, desc(table.createdAt)),
     index('checkin_records_registration_idx').on(table.registrationId)
   ]
 );
 
-export const auditLogs = pgTable(
+export const auditLogs = sqliteTable(
   'audit_logs',
   {
     id: id(),
-    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
-    eventId: uuid('event_id').references(() => events.id, { onDelete: 'set null' }),
+    actorUserId: text('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    eventId: text('event_id').references(() => events.id, { onDelete: 'set null' }),
     action: text('action').notNull(),
     targetType: text('target_type').notNull(),
-    targetId: uuid('target_id'),
-    beforeJson: jsonb('before_json'),
-    afterJson: jsonb('after_json'),
+    targetId: text('target_id'),
+    beforeJson: text('before_json', { mode: 'json' }).$type<unknown>(),
+    afterJson: text('after_json', { mode: 'json' }).$type<unknown>(),
     reason: text('reason').notNull().default(''),
-    metadataJson: jsonb('metadata_json'),
+    metadataJson: text('metadata_json', { mode: 'json' }).$type<unknown>(),
     createdAt: createdAt()
   },
   (table) => [
+    check('audit_logs_before_json_check', sql`json_valid(${table.beforeJson})`),
+    check('audit_logs_after_json_check', sql`json_valid(${table.afterJson})`),
+    check('audit_logs_metadata_json_check', sql`json_valid(${table.metadataJson})`),
     check('audit_logs_action_check', sql`length(${table.action}) > 0`),
     check('audit_logs_target_type_check', sql`length(${table.targetType}) > 0`),
-    index('audit_logs_event_created_idx').on(table.eventId, table.createdAt.desc()),
+    index('audit_logs_event_created_idx').on(table.eventId, desc(table.createdAt)),
     index('audit_logs_target_idx').on(table.targetType, table.targetId)
   ]
 );
 
-export const outboxEvents = pgTable(
+export const outboxEvents = sqliteTable(
   'outbox_events',
   {
     id: id(),
     type: text('type').notNull(),
-    payloadJson: jsonb('payload_json').notNull(),
+    payloadJson: text('payload_json', { mode: 'json' }).$type<unknown>().notNull(),
     status: text('status').notNull(),
     attempts: integer('attempts').notNull().default(0),
     lastError: text('last_error').notNull().default(''),
-    claimedUntil: timestamp('claimed_until', { withTimezone: true }),
-    processedAt: timestamp('processed_at', { withTimezone: true }),
+    nextAttemptAt: integer('next_attempt_at', { mode: 'timestamp_ms' }),
+    processedAt: integer('processed_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt()
   },
   (table) => [
+    check('outbox_events_payload_json_check', sql`json_valid(${table.payloadJson})`),
     check('outbox_events_type_check', sql`${table.type} in ('discord.role_sync_requested')`),
-    check('outbox_events_status_check', sql`${table.status} in ('pending', 'processed', 'failed')`),
+    check(
+      'outbox_events_status_check',
+      sql`${table.status} in ('pending', 'processing', 'processed', 'failed')`
+    ),
     check('outbox_events_attempts_check', sql`${table.attempts} >= 0`),
     index('outbox_events_pending_idx')
       .on(table.createdAt)

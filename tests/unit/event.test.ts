@@ -35,7 +35,6 @@ describe('event lifecycle transition table', () => {
     cancelled: [false, false, true, true],
     archived: [false, false, false, false]
   } as const;
-
   for (const [name, state] of Object.entries(states)) {
     it(`enforces transitions from ${name}`, () => {
       expect(transitions.map((transition) => canTransitionEvent(state, transition))).toEqual(
@@ -43,7 +42,6 @@ describe('event lifecycle transition table', () => {
       );
     });
   }
-
   it('toggles only listed visibility values', () => {
     expect(toggledVisibility('public')).toBe('unlisted');
     expect(toggledVisibility('unlisted')).toBe('public');

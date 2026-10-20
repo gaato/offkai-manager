@@ -1,5 +1,7 @@
 export { authorizeOrganizationRole, type AuthorizedOrganization } from './authorization';
+
 export { OrganizationError, type OrganizationErrorCode } from './errors';
+
 export {
   createOrganization,
   listOrganizationsForUser,
@@ -10,7 +12,9 @@ export {
   disableMembership,
   enableMembership
 } from './service';
+
 export { availableOrganizationSlug, organizationSlugBase } from './slug';
+
 export type {
   ChangeMembershipStatusInput,
   ChangeRoleInput,
@@ -19,6 +23,7 @@ export type {
   OrganizationMember,
   OrganizationSummary
 } from './types';
+
 export {
   capabilitiesForRole,
   organizationRoleRank,

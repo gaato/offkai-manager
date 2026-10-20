@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write, read } from '$lib/server/db/client';
 import { eq } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import { stripeConnectAccounts } from '$lib/server/db/schema';
@@ -31,34 +33,41 @@ export interface OnboardingInput {
 export async function startOnboarding(
   client: DatabaseClient,
   gateway: ConnectGateway,
-  input: OnboardingInput
+  input: OnboardingInput,
+  clock: Clock = systemClock
 ): Promise<string> {
   let account = await findAuthorizedAccount(client, input.organizationId, input.actor, 'owner');
   if (!account) {
     const created = await gateway.createExpressAccount({ organizationId: input.organizationId });
     try {
-      account = await client.db.transaction(async (tx) => {
-        await authorizeOwner(tx, input.organizationId, input.actor);
-        const concurrent = await findAccount(tx, input.organizationId);
+      account = write(client, (tx) => {
+        authorizeOwner(tx, input.organizationId, input.actor);
+        const concurrent = findAccount(tx, input.organizationId);
         if (concurrent) return concurrent;
-
-        const rows = await tx
+        const rows = tx
           .insert(stripeConnectAccounts)
           .values({
+            createdAt: clock.now(),
+            updatedAt: clock.now(),
             organizationId: input.organizationId,
             stripeAccountId: created.accountId,
             dashboardType: 'express',
             onboardingStatus: 'onboarding_required'
           })
-          .returning();
+          .returning()
+          .all();
         const persisted = parseAccount(rows[0]);
-        await appendAudit(tx, {
-          actorUserId: input.actor.userId,
-          action: 'stripe.onboard_start',
-          targetType: 'stripe_connect_account',
-          targetId: persisted.id,
-          after: { onboardingStatus: persisted.onboardingStatus }
-        });
+        appendAudit(
+          tx,
+          {
+            actorUserId: input.actor.userId,
+            action: 'stripe.onboard_start',
+            targetType: 'stripe_connect_account',
+            targetId: persisted.id,
+            after: { onboardingStatus: persisted.onboardingStatus }
+          },
+          clock
+        );
         return persisted;
       });
     } catch (cause) {
@@ -75,16 +84,28 @@ export async function syncAccount(
   client: DatabaseClient,
   gateway: ConnectGateway,
   organizationId: string,
-  actor: ConnectActor
+  actor: ConnectActor,
+  clock: Clock = systemClock
 ): Promise<ConnectAccountRecord> {
-  return client.db.transaction(async (tx) => {
-    await authorizeOwner(tx, organizationId, actor);
-    const current = await findAccount(tx, organizationId, true);
+  const intent = read(client, (tx) => {
+    authorizeOwner(tx, organizationId, actor);
+    const current = findAccount(tx, organizationId);
     if (!current) throw new ConnectError('not_connected', 'organization has no Stripe account');
-
-    const live = await gateway.getAccount(current.stripeAccountId);
+    return current;
+  });
+  const live = await gateway.getAccount(intent.stripeAccountId);
+  return write(client, (tx) => {
+    authorizeOwner(tx, organizationId, actor);
+    const current = findAccount(tx, organizationId);
+    if (
+      !current ||
+      current.id !== intent.id ||
+      current.stripeAccountId !== intent.stripeAccountId
+    ) {
+      throw new ConnectError('not_connected', 'connected account changed during sync');
+    }
     const onboardingStatus = onboardingStatusForAccount(live);
-    const rows = await tx
+    const rows = tx
       .update(stripeConnectAccounts)
       .set({
         dashboardType: live.dashboardType,
@@ -94,33 +115,39 @@ export async function syncAccount(
         onboardingStatus,
         country: live.country,
         defaultCurrency: live.defaultCurrency.toLowerCase(),
-        updatedAt: new Date()
+        updatedAt: clock.now()
       })
       .where(eq(stripeConnectAccounts.id, current.id))
-      .returning();
+      .returning()
+      .all();
     const updated = parseAccount(rows[0]);
     if (updated.onboardingStatus !== current.onboardingStatus) {
-      await appendAudit(tx, {
-        actorUserId: actor.userId,
-        action: 'stripe.status_change',
-        targetType: 'stripe_connect_account',
-        targetId: updated.id,
-        before: { onboardingStatus: current.onboardingStatus },
-        after: { onboardingStatus: updated.onboardingStatus },
-        reason: `${current.onboardingStatus} -> ${updated.onboardingStatus}`
-      });
+      appendAudit(
+        tx,
+        {
+          actorUserId: actor.userId,
+          action: 'stripe.status_change',
+          targetType: 'stripe_connect_account',
+          targetId: updated.id,
+          before: { onboardingStatus: current.onboardingStatus },
+          after: { onboardingStatus: updated.onboardingStatus },
+          reason: `${current.onboardingStatus} -> ${updated.onboardingStatus}`
+        },
+        clock
+      );
     }
     return updated;
   });
 }
 
-export function handleReturn(
+export async function handleReturn(
   client: DatabaseClient,
   gateway: ConnectGateway,
   organizationId: string,
-  actor: ConnectActor
+  actor: ConnectActor,
+  clock: Clock = systemClock
 ): Promise<ConnectAccountRecord> {
-  return syncAccount(client, gateway, organizationId, actor);
+  return syncAccount(client, gateway, organizationId, actor, clock);
 }
 
 /** Replaces an expired account link without creating or changing the connected account. */
@@ -135,7 +162,7 @@ export async function refreshOnboarding(
 }
 
 /** Loads persisted billing state for any active organization member. */
-export function getConnectAccount(
+export async function getConnectAccount(
   client: DatabaseClient,
   organizationId: string,
   actor: ConnectActor
@@ -169,20 +196,20 @@ async function findAuthorizedAccount(
   actor: ConnectActor,
   role: 'viewer' | 'owner'
 ): Promise<ConnectAccountRecord | null> {
-  return client.db.transaction(async (tx) => {
-    if (role === 'owner') await authorizeOwner(tx, organizationId, actor);
-    else await authorizeOrganizationRole(tx, organizationId, actor.userId, 'viewer', false, true);
+  return read(client, (tx) => {
+    if (role === 'owner') authorizeOwner(tx, organizationId, actor);
+    else authorizeOrganizationRole(tx, organizationId, actor.userId, 'viewer', true);
     return findAccount(tx, organizationId);
   });
 }
 
-async function authorizeOwner(
+function authorizeOwner(
   tx: DatabaseTransaction,
   organizationId: string,
   actor: ConnectActor
-): Promise<void> {
+): void {
   try {
-    await authorizeOrganizationRole(tx, organizationId, actor.userId, 'owner');
+    authorizeOrganizationRole(tx, organizationId, actor.userId, 'owner');
   } catch (cause) {
     if (cause instanceof OrganizationError && cause.code === 'forbidden') {
       throw new ConnectError('forbidden', 'only an organization owner can manage Stripe', {
@@ -196,17 +223,13 @@ async function authorizeOwner(
   }
 }
 
-async function findAccount(
-  tx: DatabaseTransaction,
-  organizationId: string,
-  lock = false
-): Promise<ConnectAccountRecord | null> {
+function findAccount(tx: DatabaseTransaction, organizationId: string): ConnectAccountRecord | null {
   const query = tx
     .select()
     .from(stripeConnectAccounts)
     .where(eq(stripeConnectAccounts.organizationId, organizationId))
     .limit(1);
-  const rows = lock ? await query.for('update') : await query;
+  const rows = query.all();
   return rows[0] ? parseAccount(rows[0]) : null;
 }
 
@@ -230,10 +253,14 @@ function parseAccount(row: typeof stripeConnectAccounts.$inferSelect): ConnectAc
 
 function isOrganizationAccountCollision(cause: unknown): boolean {
   if (!cause || typeof cause !== 'object') return false;
-  const postgresError = cause as { cause?: unknown; code?: unknown; constraint_name?: unknown };
+  const error = cause as {
+    cause?: unknown;
+    code?: unknown;
+    message?: string;
+  };
   return (
-    (postgresError.code === '23505' &&
-      postgresError.constraint_name === 'stripe_connect_accounts_organization_id_key') ||
-    isOrganizationAccountCollision(postgresError.cause)
+    (error.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+      error.message?.includes('stripe_connect_accounts.organization_id') === true) ||
+    isOrganizationAccountCollision(error.cause)
   );
 }

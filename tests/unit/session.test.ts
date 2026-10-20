@@ -7,6 +7,7 @@ import {
 } from '$lib/server/auth/session';
 
 const secret = 'unit-test-session-secret';
+
 const now = new Date('2026-07-19T00:00:00Z');
 
 describe('sessions', () => {
@@ -22,7 +23,6 @@ describe('sessions', () => {
       platformAdmin: true
     });
   });
-
   it('rejects tampering and expiry', () => {
     const value = signSession(
       { userId: 'user-1', displayName: 'Test User', platformAdmin: false },
@@ -32,7 +32,6 @@ describe('sessions', () => {
     expect(verifySession(`${value}x`, secret, now)).toBeNull();
     expect(verifySession(value, secret, new Date('2026-07-21T00:00:00Z'))).toBeNull();
   });
-
   it('signs a short-lived OAuth state together with its return path', () => {
     const oauth = createOAuthState('/app?tab=team', secret, now);
     expect(verifyOAuthState(oauth.cookieValue, oauth.state, secret, now)).toBe('/app?tab=team');

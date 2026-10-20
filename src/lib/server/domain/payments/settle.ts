@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write, read } from '$lib/server/db/client';
 import { and, eq } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
@@ -40,9 +42,10 @@ export interface MarkRefundedInput {
 }
 
 /** Settles verified Checkout money once, preserving late-arrival conflicts as ledger facts. */
-export function settleCheckout(
+export async function settleCheckout(
   client: DatabaseClient,
-  input: SettleCheckoutInput
+  input: SettleCheckoutInput,
+  clock: Clock = systemClock
 ): Promise<CheckoutSettlement> {
   if (!input.sessionId) throw new SettlementError('validation', 'checkout session id is required');
   if (input.amountTotal < 0n) {
@@ -56,29 +59,29 @@ export function settleCheckout(
   if (input.stripeEventId !== undefined && !stripeEventId) {
     throw new SettlementError('validation', 'stripe event id cannot be blank');
   }
-
-  return client.db.transaction(async (tx) => {
-    const webhookInserted = await insertWebhookEvent(tx, {
-      stripeEventId,
-      stripeAccountId: input.stripeAccountId,
-      eventType: input.eventType?.trim() || 'checkout.session.completed',
-      raw: input.raw
-    });
-
-    const requestRows = await tx
+  return read(client, (tx) => {
+    const webhookInserted = insertWebhookEvent(
+      tx,
+      {
+        stripeEventId,
+        stripeAccountId: input.stripeAccountId,
+        eventType: input.eventType?.trim() || 'checkout.session.completed',
+        raw: input.raw
+      },
+      clock
+    );
+    const requestRows = tx
       .select({ request: paymentRequests })
       .from(paymentRequests)
       .where(eq(paymentRequests.checkoutSessionId, input.sessionId))
       .limit(1)
-      .for('update');
+      .all();
     const request = requestRows[0]?.request;
     if (request) {
       if (!webhookInserted) return alreadyProcessed('payment_request');
-      return settlePaymentRequest(tx, request, input, currency, stripeEventId);
+      return settlePaymentRequest(tx, request, input, currency, stripeEventId, clock);
     }
-
     if (!webhookInserted) return alreadyProcessed();
-
     throw new SettlementError(
       'resolution_miss',
       `no payment request for checkout session ${input.sessionId}`
@@ -86,18 +89,19 @@ export function settleCheckout(
   });
 }
 
-async function settlePaymentRequest(
+function settlePaymentRequest(
   tx: DatabaseTransaction,
   request: typeof paymentRequests.$inferSelect,
   input: SettleCheckoutInput,
   currency: string,
-  stripeEventId: string
-): Promise<CheckoutSettlement> {
+  stripeEventId: string,
+  clock: Clock = systemClock
+): CheckoutSettlement {
   if (request.stripeAccountId && request.stripeAccountId !== input.stripeAccountId) {
     throw new SettlementError('account_mismatch', 'webhook connected account does not match');
   }
   if (input.paymentStatus !== 'paid') {
-    await markWebhookProcessed(tx, stripeEventId);
+    markWebhookProcessed(tx, stripeEventId, clock);
     return {
       alreadyProcessed: false,
       ignoredUnpaid: true,
@@ -107,16 +111,16 @@ async function settlePaymentRequest(
     };
   }
   if (request.status === 'paid') {
-    await markWebhookProcessed(tx, stripeEventId);
+    markWebhookProcessed(tx, stripeEventId, clock);
     return alreadyProcessed('payment_request');
   }
   if (input.amountTotal !== request.amountMinor || currency !== request.currency.toUpperCase()) {
     throw new SettlementError('amount_mismatch', 'checkout amount or currency does not match');
   }
-
-  const recordRows = await tx
+  const recordRows = tx
     .insert(paymentRecords)
     .values({
+      createdAt: clock.now(),
       paymentRequestId: request.id,
       registrationId: request.registrationId,
       collectionId: request.collectionId,
@@ -126,39 +130,44 @@ async function settlePaymentRequest(
       amountMinor: request.amountMinor,
       currency: request.currency,
       status: 'settled',
-      confirmedAt: new Date(),
+      confirmedAt: clock.now(),
       rawPayloadJson: jsonPayload(input.raw),
       idempotencyKey: stripeEventId
     })
-    .returning();
+    .returning()
+    .all();
   const record = recordRows[0];
   const conflict = request.status === 'cancelled' || request.status === 'waived';
   if (!conflict) {
-    await tx
-      .update(paymentRequests)
+    tx.update(paymentRequests)
       .set({
         status: 'paid',
         paymentIntentId: input.paymentIntentId ?? request.paymentIntentId,
-        updatedAt: new Date()
+        updatedAt: clock.now()
       })
-      .where(eq(paymentRequests.id, request.id));
+      .where(eq(paymentRequests.id, request.id))
+      .run();
   }
-  await markWebhookProcessed(tx, stripeEventId);
-  await appendAudit(tx, {
-    actorUserId: null,
-    eventId: request.eventId,
-    action: conflict ? 'payment.stripe_settle_conflict' : 'payment.stripe_settle',
-    targetType: 'payment_request',
-    targetId: request.id,
-    before: { status: request.status },
-    after: {
-      status: conflict ? request.status : 'paid',
-      paymentRecordId: record.id,
-      amountMinor: record.amountMinor.toString(),
-      currency: record.currency,
-      conflict
-    }
-  });
+  markWebhookProcessed(tx, stripeEventId, clock);
+  appendAudit(
+    tx,
+    {
+      actorUserId: null,
+      eventId: request.eventId,
+      action: conflict ? 'payment.stripe_settle_conflict' : 'payment.stripe_settle',
+      targetType: 'payment_request',
+      targetId: request.id,
+      before: { status: request.status },
+      after: {
+        status: conflict ? request.status : 'paid',
+        paymentRecordId: record.id,
+        amountMinor: record.amountMinor.toString(),
+        currency: record.currency,
+        conflict
+      }
+    },
+    clock
+  );
   return {
     alreadyProcessed: false,
     ignoredUnpaid: false,
@@ -168,33 +177,42 @@ async function settlePaymentRequest(
   };
 }
 
-async function insertWebhookEvent(
+function insertWebhookEvent(
   tx: DatabaseTransaction,
-  input: { stripeEventId: string; stripeAccountId: string; eventType: string; raw: unknown }
-): Promise<boolean> {
+  input: {
+    stripeEventId: string;
+    stripeAccountId: string;
+    eventType: string;
+    raw: unknown;
+  },
+  clock: Clock = systemClock
+): boolean {
   if (!input.stripeEventId) return true;
-  const inserted = await tx
+  const inserted = tx
     .insert(stripeWebhookEvents)
     .values({
+      createdAt: clock.now(),
       stripeEventId: input.stripeEventId,
       stripeAccountId: input.stripeAccountId,
       eventType: input.eventType,
       payloadJson: jsonPayload(input.raw)
     })
     .onConflictDoNothing({ target: stripeWebhookEvents.stripeEventId })
-    .returning({ id: stripeWebhookEvents.id });
+    .returning({ id: stripeWebhookEvents.id })
+    .all();
   return Boolean(inserted[0]);
 }
 
 /** Adds the manual refund fact for one unresolved late-settlement conflict. */
-export function markConflictRefunded(
+export async function markConflictRefunded(
   client: DatabaseClient,
-  input: MarkRefundedInput
+  input: MarkRefundedInput,
+  clock: Clock = systemClock
 ): Promise<PaymentRecord> {
   const note = input.note.trim();
-  if (note.length > 2_000) throw new PaymentError('validation', 'refund note is too long');
-  return client.db.transaction(async (tx) => {
-    const rows = await tx
+  if (note.length > 2000) throw new PaymentError('validation', 'refund note is too long');
+  return write(client, (tx) => {
+    const rows = tx
       .select({
         record: paymentRecords,
         requestStatus: paymentRequests.status,
@@ -208,15 +226,14 @@ export function markConflictRefunded(
       .innerJoin(registrations, eq(registrations.id, paymentRecords.registrationId))
       .where(eq(paymentRecords.id, input.paymentRecordId))
       .limit(1)
-      .for('update', { of: paymentRecords });
+      .all();
     const row = rows[0];
     if (!row || row.requestEventId !== input.eventId) {
       throw new PaymentError('not_found', 'settlement conflict record not found');
     }
-    await authorizeOrganizationRole(tx, row.organizationId, input.actorUserId, 'organizer');
-
+    authorizeOrganizationRole(tx, row.organizationId, input.actorUserId, 'organizer');
     const idempotencyKey = `manual_refund:${row.record.id}`;
-    const existing = await tx
+    const existing = tx
       .select()
       .from(paymentRecords)
       .where(
@@ -225,9 +242,9 @@ export function markConflictRefunded(
           eq(paymentRecords.status, 'refunded')
         )
       )
-      .limit(1);
+      .limit(1)
+      .all();
     if (existing[0]) return existing[0];
-
     const conflict =
       row.record.status === 'settled' &&
       row.record.amountMinor > 0n &&
@@ -237,10 +254,10 @@ export function markConflictRefunded(
     if (!conflict) {
       throw new PaymentError('conflict', 'payment record is not an unresolved conflict');
     }
-
-    const refundRows = await tx
+    const refundRows = tx
       .insert(paymentRecords)
       .values({
+        createdAt: clock.now(),
         paymentRequestId: row.record.paymentRequestId,
         registrationId: row.record.registrationId,
         collectionId: row.record.collectionId,
@@ -251,20 +268,25 @@ export function markConflictRefunded(
         currency: row.record.currency,
         status: 'refunded',
         confirmedByUserId: input.actorUserId,
-        confirmedAt: new Date(),
+        confirmedAt: clock.now(),
         idempotencyKey
       })
-      .returning();
+      .returning()
+      .all();
     const refund = refundRows[0];
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: input.eventId,
-      action: 'payment.mark_refunded',
-      targetType: 'payment_record',
-      targetId: row.record.id,
-      reason: note,
-      after: { refundRecordId: refund.id, status: 'refunded' }
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: input.eventId,
+        action: 'payment.mark_refunded',
+        targetType: 'payment_record',
+        targetId: row.record.id,
+        reason: note,
+        after: { refundRecordId: refund.id, status: 'refunded' }
+      },
+      clock
+    );
     return refund;
   });
 }
@@ -279,12 +301,16 @@ function alreadyProcessed(kind: CheckoutSettlement['kind'] = null): CheckoutSett
   };
 }
 
-async function markWebhookProcessed(tx: DatabaseTransaction, stripeEventId: string): Promise<void> {
+function markWebhookProcessed(
+  tx: DatabaseTransaction,
+  stripeEventId: string,
+  clock: Clock = systemClock
+): void {
   if (!stripeEventId) return;
-  await tx
-    .update(stripeWebhookEvents)
-    .set({ processedAt: new Date() })
-    .where(eq(stripeWebhookEvents.stripeEventId, stripeEventId));
+  tx.update(stripeWebhookEvents)
+    .set({ processedAt: clock.now() })
+    .where(eq(stripeWebhookEvents.stripeEventId, stripeEventId))
+    .run();
 }
 
 function jsonPayload(raw: unknown): unknown {

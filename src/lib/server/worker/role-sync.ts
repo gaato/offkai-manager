@@ -1,18 +1,22 @@
+import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import type { DatabaseClient } from '$lib/server/db/client';
+import { systemClock, type Clock } from '$lib/server/clock';
+import { read, write, type DatabaseClient } from '$lib/server/db/client';
+import {
+  eventDiscordIntegrations,
+  externalAccounts,
+  outboxEvents,
+  registrations
+} from '$lib/server/db/schema';
 import type { DiscordGateway } from '$lib/server/domain/discord';
 import { DiscordRateLimitError } from '$lib/server/gateways/discord/rest';
 
 export const roleSyncClaimLimit = 10;
-export const roleSyncClaimLeaseMs = 60_000;
 export const roleSyncMaxAttempts = 5;
 export const roleSyncIntervalMs = 15_000;
 
-const payloadSchema = z.object({
-  registration_id: z.uuid(),
-  event_id: z.uuid()
-});
+const payloadSchema = z.object({ registration_id: z.uuid(), event_id: z.uuid() });
 
 export interface ClaimedRoleSyncEvent {
   id: string;
@@ -20,153 +24,161 @@ export interface ClaimedRoleSyncEvent {
   attempts: number;
 }
 
-interface RoleSyncTask {
-  skip: boolean;
-  guildId: string;
-  roleId: string;
-  discordUserId: string;
-  assignRole: boolean;
+export function resetProcessingRoleSyncEvents(client: DatabaseClient): void {
+  write(client, (tx) => {
+    tx.update(outboxEvents)
+      .set({ status: 'pending', nextAttemptAt: null })
+      .where(
+        and(
+          eq(outboxEvents.type, 'discord.role_sync_requested'),
+          eq(outboxEvents.status, 'processing')
+        )
+      )
+      .run();
+  });
 }
 
-export async function claimRoleSyncEvents(
+export function claimRoleSyncEvents(
   client: DatabaseClient,
   limit = roleSyncClaimLimit,
-  leaseMs = roleSyncClaimLeaseMs
-): Promise<ClaimedRoleSyncEvent[]> {
-  const safeLimit = Math.max(1, Math.floor(limit));
-  const safeLeaseMs = Math.max(1, Math.floor(leaseMs));
-  const rows = await client.sql<{ id: string; payloadJson: unknown; attempts: number }[]>`
-    update outbox_events
-    set claimed_until = now() + (${safeLeaseMs} * interval '1 millisecond'),
-        attempts = attempts + 1
-    where id in (
-      select id
-      from outbox_events
-      where type = 'discord.role_sync_requested'
-        and status = 'pending'
-        and (claimed_until is null or claimed_until < now())
-      order by created_at asc, id asc
-      limit ${safeLimit}
-      for update skip locked
-    )
-    returning id::text as id, payload_json as "payloadJson", attempts
-  `;
-  return [...rows];
+  clock: Clock = systemClock
+): ClaimedRoleSyncEvent[] {
+  return write(client, (tx) => {
+    const due = tx
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .where(
+        and(
+          eq(outboxEvents.type, 'discord.role_sync_requested'),
+          eq(outboxEvents.status, 'pending'),
+          or(isNull(outboxEvents.nextAttemptAt), lte(outboxEvents.nextAttemptAt, clock.now()))
+        )
+      )
+      .orderBy(asc(outboxEvents.createdAt), asc(outboxEvents.id))
+      .limit(Math.max(1, Math.floor(limit)))
+      .all();
+    if (!due.length) return [];
+    return tx
+      .update(outboxEvents)
+      .set({
+        status: 'processing',
+        attempts: sql`${outboxEvents.attempts} + 1`,
+        nextAttemptAt: null
+      })
+      .where(
+        inArray(
+          outboxEvents.id,
+          due.map(({ id }) => id)
+        )
+      )
+      .returning({
+        id: outboxEvents.id,
+        payloadJson: outboxEvents.payloadJson,
+        attempts: outboxEvents.attempts
+      })
+      .all();
+  });
 }
 
 export async function processRoleSyncBatch(
   client: DatabaseClient,
   gateway: DiscordGateway,
-  logger?: Logger
+  logger?: Logger,
+  clock: Clock = systemClock
 ): Promise<number> {
-  const claimed = await claimRoleSyncEvents(client);
+  const claimed = claimRoleSyncEvents(client, undefined, clock);
   for (const event of claimed) {
     try {
-      const task = await resolveRoleSyncTask(client, event.payloadJson);
-      if (!task.skip) {
-        if (task.assignRole) {
+      const task = resolveRoleSyncTask(client, event.payloadJson);
+      if (task?.guildId && task.roleId && task.discordUserId) {
+        if (task.status === 'confirmed') {
           await gateway.addGuildMemberRole(task.guildId, task.discordUserId, task.roleId);
         } else {
           await gateway.removeGuildMemberRole(task.guildId, task.discordUserId, task.roleId);
         }
       }
-      await completeRoleSyncEvent(client, event.id);
+      write(client, (tx) => {
+        tx.update(outboxEvents)
+          .set({ status: 'processed', processedAt: clock.now(), nextAttemptAt: null })
+          .where(eq(outboxEvents.id, event.id))
+          .run();
+      });
     } catch (cause) {
-      const reason = errorMessage(cause);
       logger?.warn(
         { err: cause, outbox_event_id: event.id, attempts: event.attempts },
         'Discord role sync attempt failed'
       );
-      await failRoleSyncEvent(
+      failRoleSyncEvent(
         client,
         event.id,
-        reason,
+        cause instanceof Error ? cause.message : String(cause),
         roleSyncMaxAttempts,
-        cause instanceof DiscordRateLimitError ? cause.retryAfterMs : 0
+        cause instanceof DiscordRateLimitError ? cause.retryAfterMs : 0,
+        clock
       );
     }
   }
   return claimed.length;
 }
 
-export async function failRoleSyncEvent(
+export function failRoleSyncEvent(
   client: DatabaseClient,
   id: string,
   reason: string,
   maxAttempts = roleSyncMaxAttempts,
-  retryAfterMs = 0
-): Promise<void> {
-  const message = reason.slice(0, 2_000);
-  const delay = Math.max(0, Math.floor(retryAfterMs));
-  await client.sql`
-    update outbox_events
-    set last_error = ${message},
-        status = case when attempts >= ${maxAttempts} then 'failed' else 'pending' end,
-        claimed_until = case
-          when attempts >= ${maxAttempts} then null
-          when ${delay} > 0 then now() + (${delay} * interval '1 millisecond')
-          else null
-        end
-    where id = ${id}::uuid
-  `;
+  retryAfterMs = 0,
+  clock: Clock = systemClock
+): void {
+  write(client, (tx) => {
+    const row = tx
+      .select({ attempts: outboxEvents.attempts })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, id))
+      .get();
+    if (!row) return;
+    const failed = row.attempts >= maxAttempts;
+    const delay = Math.max(0, Math.floor(retryAfterMs));
+    tx.update(outboxEvents)
+      .set({
+        lastError: reason.slice(0, 2_000),
+        status: failed ? 'failed' : 'pending',
+        nextAttemptAt: !failed && delay > 0 ? new Date(clock.now().getTime() + delay) : null
+      })
+      .where(eq(outboxEvents.id, id))
+      .run();
+  });
 }
 
-async function completeRoleSyncEvent(client: DatabaseClient, id: string): Promise<void> {
-  await client.sql`
-    update outbox_events
-    set status = 'processed', processed_at = now(), claimed_until = null
-    where id = ${id}::uuid
-  `;
-}
-
-async function resolveRoleSyncTask(
-  client: DatabaseClient,
-  rawPayload: unknown
-): Promise<RoleSyncTask> {
+function resolveRoleSyncTask(client: DatabaseClient, rawPayload: unknown) {
   const payload = payloadSchema.parse(rawPayload);
-  const rows = await client.sql<
-    {
-      status: string;
-      eventId: string;
-      guildId: string;
-      roleId: string;
-      discordUserId: string;
-    }[]
-  >`
-    select
-      r.status,
-      r.event_id::text as "eventId",
-      coalesce(i.guild_id, '') as "guildId",
-      coalesce(i.role_id, '') as "roleId",
-      coalesce(ea.provider_user_id, '') as "discordUserId"
-    from registrations r
-    left join event_discord_integrations i on i.event_id = r.event_id
-    left join external_accounts ea on ea.user_id = r.user_id and ea.provider = 'discord'
-    where r.id = ${payload.registration_id}::uuid
-      and r.event_id = ${payload.event_id}::uuid
-    limit 1
-  `;
-  const row = rows[0];
-  if (!row || !row.guildId || !row.roleId || !row.discordUserId) {
-    return {
-      skip: true,
-      guildId: '',
-      roleId: '',
-      discordUserId: '',
-      assignRole: false
-    };
-  }
-  return {
-    skip: false,
-    guildId: row.guildId,
-    roleId: row.roleId,
-    discordUserId: row.discordUserId,
-    assignRole: row.status === 'confirmed'
-  };
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+  return read(client, (tx) =>
+    tx
+      .select({
+        status: registrations.status,
+        guildId: eventDiscordIntegrations.guildId,
+        roleId: eventDiscordIntegrations.roleId,
+        discordUserId: externalAccounts.providerUserId
+      })
+      .from(registrations)
+      .leftJoin(
+        eventDiscordIntegrations,
+        eq(eventDiscordIntegrations.eventId, registrations.eventId)
+      )
+      .leftJoin(
+        externalAccounts,
+        and(
+          eq(externalAccounts.userId, registrations.userId),
+          eq(externalAccounts.provider, 'discord')
+        )
+      )
+      .where(
+        and(
+          eq(registrations.id, payload.registration_id),
+          eq(registrations.eventId, payload.event_id)
+        )
+      )
+      .get()
+  );
 }
 
 export class RoleSyncWorker {
@@ -177,11 +189,13 @@ export class RoleSyncWorker {
     private readonly client: DatabaseClient,
     private readonly gateway: DiscordGateway,
     private readonly logger: Logger,
-    private readonly intervalMs = roleSyncIntervalMs
+    private readonly intervalMs = roleSyncIntervalMs,
+    private readonly clock: Clock = systemClock
   ) {}
 
   start(): void {
     if (this.timer) return;
+    resetProcessingRoleSyncEvents(this.client);
     this.timer = setInterval(() => this.tick(), this.intervalMs);
     this.timer.unref();
   }
@@ -194,7 +208,7 @@ export class RoleSyncWorker {
 
   private tick(): void {
     if (this.inFlight) return;
-    this.inFlight = processRoleSyncBatch(this.client, this.gateway, this.logger)
+    this.inFlight = processRoleSyncBatch(this.client, this.gateway, this.logger, this.clock)
       .then(() => undefined)
       .catch((cause: unknown) => {
         this.logger.error({ err: cause }, 'Discord role sync pass failed');

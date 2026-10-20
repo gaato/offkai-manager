@@ -16,7 +16,7 @@ module.exports = {
     {
       name: 'routes-use-database-and-stripe-adapters',
       from: { path: '^src/routes/' },
-      to: { path: '^(postgres|stripe)$' }
+      to: { path: '^(better-sqlite3|stripe)$' }
     },
     {
       name: 'timezone-library-is-centralized',

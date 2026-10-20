@@ -7,7 +7,6 @@ describe('registration form field keys', () => {
     expect(deriveFieldKey('Dietary   &   Access Needs')).toBe('dietary_and_access_needs');
     expect(deriveFieldKey('Ｘ　アカウント')).toBe('x_アカウント');
   });
-
   it('uses a stable fallback when a label has no letters or numbers', () => {
     expect(deriveFieldKey('***')).toBe('field');
     expect(deriveFieldKey(' *** ')).toBe('field');

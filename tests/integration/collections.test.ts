@@ -1,9 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { testDatabase, fixedClock } from '../database';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { and, count, eq } from 'drizzle-orm';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { loadConfig } from '$lib/server/config';
-import { closeDatabase, createDatabaseClient, type DatabaseClient } from '$lib/server/db/client';
-import { runMigrations } from '$lib/server/db/migrate';
+import { closeDatabase, type DatabaseClient } from '$lib/server/db/client';
 import {
   auditLogs,
   collectionPaymentMethods,
@@ -29,108 +27,119 @@ import { changeRegistrationStatus, createRegistration } from '$lib/server/domain
 import { createOrganization } from '$lib/server/domain/orgs';
 
 describe('collection and payment request lifecycle', () => {
-  let container: StartedPostgreSqlContainer;
   let client: DatabaseClient;
   let ownerId: string;
   let participantSequence = 0;
   let eventSequence = 0;
-
-  beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:17-alpine').start();
-    client = createDatabaseClient(
-      loadConfig({
-        OFFKAI_DATABASE_URL: container.getConnectionUri(),
-        OFFKAI_SESSION_SECRET: 'collection-integration-secret',
-        OFFKAI_AUTH_DEV_BYPASS: 'true'
-      })
-    );
-    await runMigrations(client);
+  beforeEach(async () => {
+    client = testDatabase();
     ownerId = await createUser('collection-owner', 'Collection Owner');
   });
-
-  afterAll(async () => {
+  afterEach(async () => {
     if (client) await closeDatabase(client);
-    if (container) await container.stop();
   });
-
   it('validates JPY and backfills confirmed registrations when a draft opens', async () => {
     const event = await publishedEvent('approval');
     const person = await participant();
-    const registration = await createRegistration(client, registrationInput(event, person));
-    await changeRegistrationStatus(client, {
-      actorUserId: ownerId,
-      registrationId: registration.id,
-      status: 'confirmed'
-    });
-
+    const registration = await createRegistration(
+      client,
+      registrationInput(event, person),
+      fixedClock
+    );
+    await changeRegistrationStatus(
+      client,
+      {
+        actorUserId: ownerId,
+        registrationId: registration.id,
+        status: 'confirmed'
+      },
+      fixedClock
+    );
     await expect(
-      createCollection(client, collectionInput(event.id, { currency: 'USD' }))
+      createCollection(client, collectionInput(event.id, { currency: 'USD' }), fixedClock)
     ).rejects.toMatchObject({ code: 'validation' } satisfies Partial<CollectionError>);
-    const collection = await createCollection(client, collectionInput(event.id));
+    const collection = await createCollection(client, collectionInput(event.id), fixedClock);
     expect(collection.status).toBe('draft');
     expect(collection.currency).toBe('JPY');
     expect(await requestRows(collection.id)).toHaveLength(0);
-
-    await openCollection(client, { actorUserId: ownerId, eventId: event.id });
+    await openCollection(client, { actorUserId: ownerId, eventId: event.id }, fixedClock);
     const requests = await requestRows(collection.id);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
       registrationId: registration.id,
-      amountMinor: 5_000n,
+      amountMinor: 5000n,
       currency: 'JPY',
       status: 'pending'
     });
   });
-
   it('creates requests on auto-confirm and organizer-confirm paths, then cancels pending requests', async () => {
     const automatic = await publishedEvent('auto_confirm');
-    const automaticCollection = await createCollection(client, collectionInput(automatic.id));
-    await openCollection(client, { actorUserId: ownerId, eventId: automatic.id });
+    const automaticCollection = await createCollection(
+      client,
+      collectionInput(automatic.id),
+      fixedClock
+    );
+    await openCollection(client, { actorUserId: ownerId, eventId: automatic.id }, fixedClock);
     const autoParticipant = await participant();
     const autoRegistration = await createRegistration(
       client,
-      registrationInput(automatic, autoParticipant)
+      registrationInput(automatic, autoParticipant),
+      fixedClock
     );
     expect(autoRegistration.status).toBe('confirmed');
     expect(await requestRows(automaticCollection.id)).toHaveLength(1);
-
-    await changeRegistrationStatus(client, {
-      actorUserId: ownerId,
-      registrationId: autoRegistration.id,
-      status: 'cancelled'
-    });
+    await changeRegistrationStatus(
+      client,
+      {
+        actorUserId: ownerId,
+        registrationId: autoRegistration.id,
+        status: 'cancelled'
+      },
+      fixedClock
+    );
     expect((await requestRows(automaticCollection.id))[0].status).toBe('cancelled');
-
     const approval = await publishedEvent('approval');
-    const approvalCollection = await createCollection(client, collectionInput(approval.id));
-    await openCollection(client, { actorUserId: ownerId, eventId: approval.id });
+    const approvalCollection = await createCollection(
+      client,
+      collectionInput(approval.id),
+      fixedClock
+    );
+    await openCollection(client, { actorUserId: ownerId, eventId: approval.id }, fixedClock);
     const approvalParticipant = await participant();
     const applied = await createRegistration(
       client,
-      registrationInput(approval, approvalParticipant)
+      registrationInput(approval, approvalParticipant),
+      fixedClock
     );
     expect(await requestRows(approvalCollection.id)).toHaveLength(0);
-    await changeRegistrationStatus(client, {
-      actorUserId: ownerId,
-      registrationId: applied.id,
-      status: 'confirmed'
-    });
+    await changeRegistrationStatus(
+      client,
+      {
+        actorUserId: ownerId,
+        registrationId: applied.id,
+        status: 'confirmed'
+      },
+      fixedClock
+    );
     expect(await requestRows(approvalCollection.id)).toHaveLength(1);
   });
-
   it('freezes collection amount once a request starts and confirms manual payments idempotently', async () => {
     const { event, collectionId, requestId } = await openCollectionWithRequest();
-    await client.db
+    client.db
       .update(paymentRequests)
       .set({ status: 'payment_pending' })
-      .where(eq(paymentRequests.id, requestId));
+      .where(eq(paymentRequests.id, requestId))
+      .run();
     await expect(
-      updateCollection(client, {
-        ...collectionInput(event.id),
-        amountMinor: 6_000n
-      })
+      updateCollection(
+        client,
+        {
+          ...collectionInput(event.id),
+          amountMinor: 6000n
+        },
+        fixedClock
+      )
     ).rejects.toMatchObject({ code: 'amount_frozen' } satisfies Partial<CollectionError>);
-
     const cash = await method(collectionId, 'payments.default_method.cash.label');
     const command = {
       actorUserId: ownerId,
@@ -140,22 +149,23 @@ describe('collection and payment request lifecycle', () => {
       externalReference: 'cash desk',
       note: 'received'
     };
-    const first = await confirmManualPayment(client, command);
-    const duplicate = await confirmManualPayment(client, command);
+    const first = await confirmManualPayment(client, command, fixedClock);
+    const duplicate = await confirmManualPayment(client, command, fixedClock);
     expect(duplicate.id).toBe(first.id);
-    const recordCount = await client.db
+    const recordCount = client.db
       .select({ value: count(paymentRecords.id) })
       .from(paymentRecords)
-      .where(eq(paymentRecords.paymentRequestId, requestId));
+      .where(eq(paymentRecords.paymentRequestId, requestId))
+      .all();
     expect(recordCount[0].value).toBe(1);
     expect((await requestRows(collectionId))[0].status).toBe('paid');
-    const audits = await client.db
+    const audits = client.db
       .select({ action: auditLogs.action })
       .from(auditLogs)
-      .where(and(eq(auditLogs.targetType, 'payment_request'), eq(auditLogs.targetId, requestId)));
+      .where(and(eq(auditLogs.targetType, 'payment_request'), eq(auditLogs.targetId, requestId)))
+      .all();
     expect(audits.filter(({ action }) => action === 'payment.confirm_manual')).toHaveLength(1);
   });
-
   it('waives a request idempotently with one zero-value settled record', async () => {
     const { requestId } = await openCollectionWithRequest();
     const command = {
@@ -164,29 +174,28 @@ describe('collection and payment request lifecycle', () => {
       idempotencyKey: `payment-waive:${requestId}`,
       reason: 'organizer waiver'
     };
-    const first = await waivePaymentRequest(client, command);
-    const duplicate = await waivePaymentRequest(client, command);
+    const first = await waivePaymentRequest(client, command, fixedClock);
+    const duplicate = await waivePaymentRequest(client, command, fixedClock);
     expect(duplicate.id).toBe(first.id);
     expect(first).toMatchObject({ amountMinor: 0n, status: 'settled' });
-    const request = await client.db
+    const request = client.db
       .select({ status: paymentRequests.status })
       .from(paymentRequests)
-      .where(eq(paymentRequests.id, requestId));
+      .where(eq(paymentRequests.id, requestId))
+      .all();
     expect(request[0].status).toBe('waived');
   });
-
   async function openCollectionWithRequest() {
     const event = await publishedEvent('auto_confirm');
-    const collection = await createCollection(client, collectionInput(event.id));
-    await openCollection(client, { actorUserId: ownerId, eventId: event.id });
+    const collection = await createCollection(client, collectionInput(event.id), fixedClock);
+    await openCollection(client, { actorUserId: ownerId, eventId: event.id }, fixedClock);
     const person = await participant();
-    await createRegistration(client, registrationInput(event, person));
+    await createRegistration(client, registrationInput(event, person), fixedClock);
     const request = (await requestRows(collection.id))[0];
     return { event, collectionId: collection.id, requestId: request.id };
   }
-
   async function method(collectionId: string, label: string) {
-    const rows = await client.db
+    const rows = client.db
       .select()
       .from(collectionPaymentMethods)
       .where(
@@ -194,17 +203,17 @@ describe('collection and payment request lifecycle', () => {
           eq(collectionPaymentMethods.collectionId, collectionId),
           eq(collectionPaymentMethods.label, label)
         )
-      );
+      )
+      .all();
     return rows[0];
   }
-
   function requestRows(collectionId: string) {
     return client.db
       .select()
       .from(paymentRequests)
-      .where(eq(paymentRequests.collectionId, collectionId));
+      .where(eq(paymentRequests.collectionId, collectionId))
+      .all();
   }
-
   async function participant() {
     participantSequence += 1;
     const displayName = `Collection Participant ${participantSequence}`;
@@ -213,24 +222,30 @@ describe('collection and payment request lifecycle', () => {
       displayName
     };
   }
-
   async function createUser(providerUserId: string, displayName: string): Promise<string> {
     return (
-      await upsertDiscordIdentity(client, {
-        providerUserId,
-        username: providerUserId,
-        displayName,
-        avatarUrl: ''
-      })
+      await upsertDiscordIdentity(
+        client,
+        {
+          providerUserId,
+          username: providerUserId,
+          displayName,
+          avatarUrl: ''
+        },
+        fixedClock
+      )
     ).userId;
   }
-
   async function publishedEvent(mode: 'auto_confirm' | 'approval'): Promise<EventSummary> {
     eventSequence += 1;
-    const organization = await createOrganization(client, {
-      actorUserId: ownerId,
-      name: `Collection Group ${eventSequence}`
-    });
+    const organization = await createOrganization(
+      client,
+      {
+        actorUserId: ownerId,
+        name: `Collection Group ${eventSequence}`
+      },
+      fixedClock
+    );
     const slug = `collection-event-${eventSequence}`;
     const event = await createEvent(
       client,
@@ -243,31 +258,41 @@ describe('collection and payment request lifecycle', () => {
         registrationMode: mode,
         timeZone: 'Asia/Tokyo'
       },
-      () => slug
+      () => slug,
+      fixedClock
     );
-    await updateSettings(client, {
-      actorUserId: ownerId,
-      eventId: event.id,
-      title: event.title,
-      description: '',
-      startsAt: '2027-10-01T18:00',
-      endsAt: '2027-10-01T21:00',
-      capacity: null,
-      venueName: '',
-      venueAddress: '',
-      venueReveal: 'public',
-      contact: '',
-      cancellationPolicy: '',
-      registrationOpensAt: '2026-01-01T00:00',
-      registrationClosesAt: '2027-10-01T17:00',
-      registrationMode: mode,
-      discordPolicy: 'not_used',
-      timeZone: 'Asia/Tokyo'
-    });
-    return publishEvent(client, { actorUserId: ownerId, eventId: event.id });
+    await updateSettings(
+      client,
+      {
+        actorUserId: ownerId,
+        eventId: event.id,
+        title: event.title,
+        description: '',
+        startsAt: '2027-10-01T18:00',
+        endsAt: '2027-10-01T21:00',
+        capacity: null,
+        venueName: '',
+        venueAddress: '',
+        venueReveal: 'public',
+        contact: '',
+        cancellationPolicy: '',
+        registrationOpensAt: '2026-01-01T00:00',
+        registrationClosesAt: '2027-10-01T17:00',
+        registrationMode: mode,
+        discordPolicy: 'not_used',
+        timeZone: 'Asia/Tokyo'
+      },
+      fixedClock
+    );
+    return publishEvent(client, { actorUserId: ownerId, eventId: event.id }, fixedClock);
   }
-
-  function registrationInput(event: EventSummary, person: { userId: string; displayName: string }) {
+  function registrationInput(
+    event: EventSummary,
+    person: {
+      userId: string;
+      displayName: string;
+    }
+  ) {
     return {
       organizationSlug: `collection-group-${eventSequence}`,
       eventSlug: event.slug,
@@ -276,13 +301,17 @@ describe('collection and payment request lifecycle', () => {
       answers: []
     };
   }
-
-  function collectionInput(eventId: string, overrides: Partial<{ currency: string }> = {}) {
+  function collectionInput(
+    eventId: string,
+    overrides: Partial<{
+      currency: string;
+    }> = {}
+  ) {
     return {
       actorUserId: ownerId,
       eventId,
       title: 'Participation fee',
-      amountMinor: 5_000n,
+      amountMinor: 5000n,
       currency: 'jpy',
       dueAt: new Date('2027-09-20T15:00:00Z'),
       instructions: 'Follow the selected payment instructions.',

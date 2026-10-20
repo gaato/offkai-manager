@@ -1,0 +1,412 @@
+CREATE TABLE `audit_logs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`actor_user_id` text,
+	`event_id` text,
+	`action` text NOT NULL,
+	`target_type` text NOT NULL,
+	`target_id` text,
+	`before_json` text,
+	`after_json` text,
+	`reason` text DEFAULT '' NOT NULL,
+	`metadata_json` text,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`actor_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE set null,
+	CONSTRAINT "audit_logs_before_json_check" CHECK(json_valid("audit_logs"."before_json")),
+	CONSTRAINT "audit_logs_after_json_check" CHECK(json_valid("audit_logs"."after_json")),
+	CONSTRAINT "audit_logs_metadata_json_check" CHECK(json_valid("audit_logs"."metadata_json")),
+	CONSTRAINT "audit_logs_action_check" CHECK(length("audit_logs"."action") > 0),
+	CONSTRAINT "audit_logs_target_type_check" CHECK(length("audit_logs"."target_type") > 0)
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `audit_logs_event_created_idx` ON `audit_logs` (`event_id`,"created_at" desc);--> statement-breakpoint
+CREATE INDEX `audit_logs_target_idx` ON `audit_logs` (`target_type`,`target_id`);--> statement-breakpoint
+CREATE TABLE `checkin_records` (
+	`id` text PRIMARY KEY NOT NULL,
+	`event_id` text NOT NULL,
+	`registration_id` text NOT NULL,
+	`actor_user_id` text,
+	`status` text NOT NULL,
+	`method` text NOT NULL,
+	`client_metadata` text DEFAULT '' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`registration_id`) REFERENCES `registrations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`actor_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`event_id`,`registration_id`) REFERENCES `registrations`(`event_id`,`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "checkin_records_status_check" CHECK("checkin_records"."status" in ('checked_in', 'manual_review')),
+	CONSTRAINT "checkin_records_method_check" CHECK("checkin_records"."method" in ('manual', 'search', 'qr'))
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `checkin_records_event_idx` ON `checkin_records` (`event_id`,"created_at" desc);--> statement-breakpoint
+CREATE INDEX `checkin_records_registration_idx` ON `checkin_records` (`registration_id`);--> statement-breakpoint
+CREATE TABLE `collection_payment_methods` (
+	`id` text PRIMARY KEY NOT NULL,
+	`collection_id` text NOT NULL,
+	`label` text NOT NULL,
+	`enabled` integer DEFAULT true NOT NULL,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	`timing` text DEFAULT 'onsite' NOT NULL,
+	`confirmation` text DEFAULT 'manual' NOT NULL,
+	`instructions` text DEFAULT '' NOT NULL,
+	FOREIGN KEY (`collection_id`) REFERENCES `collections`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "collection_payment_methods_enabled_check" CHECK("collection_payment_methods"."enabled" in (0, 1)),
+	CONSTRAINT "collection_payment_methods_label_check" CHECK(length("collection_payment_methods"."label") > 0),
+	CONSTRAINT "collection_payment_methods_timing_check" CHECK("collection_payment_methods"."timing" in ('advance', 'onsite', 'none')),
+	CONSTRAINT "collection_payment_methods_confirmation_check" CHECK("collection_payment_methods"."confirmation" in ('internal', 'manual', 'none'))
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `collection_payment_methods_collection_id_label_key` ON `collection_payment_methods` (`collection_id`,`label`);--> statement-breakpoint
+CREATE UNIQUE INDEX `collection_payment_methods_collection_id_id_key` ON `collection_payment_methods` (`collection_id`,`id`);--> statement-breakpoint
+CREATE TABLE `collections` (
+	`id` text PRIMARY KEY NOT NULL,
+	`event_id` text NOT NULL,
+	`title` text NOT NULL,
+	`amount_minor` integer NOT NULL,
+	`currency` text NOT NULL,
+	`status` text NOT NULL,
+	`due_at` integer,
+	`instructions` text DEFAULT '' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "collections_title_check" CHECK(length("collections"."title") > 0),
+	CONSTRAINT "collections_amount_minor_check" CHECK("collections"."amount_minor" >= 0),
+	CONSTRAINT "collections_currency_check" CHECK(length("collections"."currency") = 3),
+	CONSTRAINT "collections_status_check" CHECK("collections"."status" in ('draft', 'open', 'closed', 'archived'))
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `collections_event_idx` ON `collections` (`event_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `collections_event_id_id_key` ON `collections` (`event_id`,`id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `collections_id_currency_key` ON `collections` (`id`,`currency`);--> statement-breakpoint
+CREATE TABLE `event_discord_integrations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`event_id` text NOT NULL,
+	`guild_id` text DEFAULT '' NOT NULL,
+	`guild_name_snapshot` text DEFAULT '' NOT NULL,
+	`invite_url` text DEFAULT '' NOT NULL,
+	`announcement_channel_id` text DEFAULT '' NOT NULL,
+	`staff_channel_id` text DEFAULT '' NOT NULL,
+	`role_id` text DEFAULT '' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE cascade
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `event_discord_integrations_event_id_key` ON `event_discord_integrations` (`event_id`);--> statement-breakpoint
+CREATE TABLE `event_form_field_options` (
+	`id` text PRIMARY KEY NOT NULL,
+	`field_id` text NOT NULL,
+	`option_key` text NOT NULL,
+	`label` text NOT NULL,
+	`position` integer DEFAULT 0 NOT NULL,
+	`archived_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`field_id`) REFERENCES `event_form_fields`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "event_form_field_options_option_key_check" CHECK(length("event_form_field_options"."option_key") > 0),
+	CONSTRAINT "event_form_field_options_label_check" CHECK(length("event_form_field_options"."label") > 0)
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `event_form_field_options_field_position_idx` ON `event_form_field_options` (`field_id`,`position`);--> statement-breakpoint
+CREATE UNIQUE INDEX `event_form_field_options_field_id_option_key_key` ON `event_form_field_options` (`field_id`,`option_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `event_form_field_options_field_id_id_key` ON `event_form_field_options` (`field_id`,`id`);--> statement-breakpoint
+CREATE TABLE `event_form_fields` (
+	`id` text PRIMARY KEY NOT NULL,
+	`event_id` text NOT NULL,
+	`field_key` text NOT NULL,
+	`label` text NOT NULL,
+	`field_type` text NOT NULL,
+	`required` integer DEFAULT false NOT NULL,
+	`position` integer DEFAULT 0 NOT NULL,
+	`help_text` text DEFAULT '' NOT NULL,
+	`archived_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "event_form_fields_required_check" CHECK("event_form_fields"."required" in (0, 1)),
+	CONSTRAINT "event_form_fields_field_key_check" CHECK(length("event_form_fields"."field_key") > 0),
+	CONSTRAINT "event_form_fields_label_check" CHECK(length("event_form_fields"."label") > 0),
+	CONSTRAINT "event_form_fields_field_type_check" CHECK("event_form_fields"."field_type" in ('text', 'textarea', 'select', 'multiselect', 'checkbox', 'consent'))
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `event_form_fields_event_position_idx` ON `event_form_fields` (`event_id`,`position`);--> statement-breakpoint
+CREATE UNIQUE INDEX `event_form_fields_event_id_field_key_key` ON `event_form_fields` (`event_id`,`field_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `event_form_fields_event_id_id_key` ON `event_form_fields` (`event_id`,`id`);--> statement-breakpoint
+CREATE TABLE `events` (
+	`id` text PRIMARY KEY NOT NULL,
+	`organization_id` text NOT NULL,
+	`title` text NOT NULL,
+	`slug` text NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
+	`starts_at` integer NOT NULL,
+	`ends_at` integer NOT NULL,
+	`capacity` integer,
+	`visibility` text NOT NULL,
+	`discord_policy` text NOT NULL,
+	`registration_opens_at` integer NOT NULL,
+	`registration_closes_at` integer NOT NULL,
+	`venue_name` text DEFAULT '' NOT NULL,
+	`venue_address` text DEFAULT '' NOT NULL,
+	`venue_reveal` text DEFAULT 'public' NOT NULL,
+	`contact` text DEFAULT '' NOT NULL,
+	`cancellation_policy` text DEFAULT '' NOT NULL,
+	`registration_mode` text DEFAULT 'auto_confirm' NOT NULL,
+	`cancelled_at` integer,
+	`archived_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "events_title_check" CHECK(length("events"."title") > 0),
+	CONSTRAINT "events_slug_check" CHECK(length("events"."slug") > 0),
+	CONSTRAINT "events_ends_at_check" CHECK("events"."ends_at" > "events"."starts_at"),
+	CONSTRAINT "events_capacity_check" CHECK("events"."capacity" >= 0),
+	CONSTRAINT "events_visibility_check" CHECK("events"."visibility" in ('draft', 'public', 'unlisted')),
+	CONSTRAINT "events_discord_policy_check" CHECK("events"."discord_policy" in ('not_used', 'optional', 'login_required', 'guild_join_required')),
+	CONSTRAINT "events_venue_reveal_check" CHECK("events"."venue_reveal" in ('public', 'confirmed')),
+	CONSTRAINT "events_registration_mode_check" CHECK("events"."registration_mode" in ('auto_confirm', 'approval'))
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `events_archived_at_idx` ON `events` (`archived_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `events_organization_id_slug_key` ON `events` (`organization_id`,`slug`);--> statement-breakpoint
+CREATE TABLE `external_accounts` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`provider` text NOT NULL,
+	`provider_user_id` text NOT NULL,
+	`username` text DEFAULT '' NOT NULL,
+	`display_name` text DEFAULT '' NOT NULL,
+	`avatar_url` text DEFAULT '' NOT NULL,
+	`linked_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "external_accounts_provider_check" CHECK("external_accounts"."provider" in ('discord'))
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `external_accounts_provider_provider_user_id_key` ON `external_accounts` (`provider`,`provider_user_id`);--> statement-breakpoint
+CREATE TABLE `organization_memberships` (
+	`id` text PRIMARY KEY NOT NULL,
+	`organization_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`role` text NOT NULL,
+	`status` text DEFAULT 'active' NOT NULL,
+	`joined_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`invited_by_user_id` text,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`invited_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "organization_memberships_role_check" CHECK("organization_memberships"."role" in ('owner', 'organizer', 'staff', 'viewer')),
+	CONSTRAINT "organization_memberships_status_check" CHECK("organization_memberships"."status" in ('active', 'disabled'))
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `organization_memberships_user_idx` ON `organization_memberships` (`user_id`);--> statement-breakpoint
+CREATE INDEX `organization_memberships_organization_status_idx` ON `organization_memberships` (`organization_id`,`status`);--> statement-breakpoint
+CREATE UNIQUE INDEX `organization_memberships_organization_id_user_id_key` ON `organization_memberships` (`organization_id`,`user_id`);--> statement-breakpoint
+CREATE TABLE `organizations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`slug` text NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`suspended_at` integer,
+	CONSTRAINT "organizations_name_check" CHECK(length("organizations"."name") > 0),
+	CONSTRAINT "organizations_slug_check" CHECK(length("organizations"."slug") > 0)
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `organizations_suspended_at_idx` ON `organizations` (`suspended_at`) WHERE "organizations"."suspended_at" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `organizations_slug_key` ON `organizations` (`slug`);--> statement-breakpoint
+CREATE TABLE `outbox_events` (
+	`id` text PRIMARY KEY NOT NULL,
+	`type` text NOT NULL,
+	`payload_json` text NOT NULL,
+	`status` text NOT NULL,
+	`attempts` integer DEFAULT 0 NOT NULL,
+	`last_error` text DEFAULT '' NOT NULL,
+	`next_attempt_at` integer,
+	`processed_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	CONSTRAINT "outbox_events_payload_json_check" CHECK(json_valid("outbox_events"."payload_json")),
+	CONSTRAINT "outbox_events_type_check" CHECK("outbox_events"."type" in ('discord.role_sync_requested')),
+	CONSTRAINT "outbox_events_status_check" CHECK("outbox_events"."status" in ('pending', 'processing', 'processed', 'failed')),
+	CONSTRAINT "outbox_events_attempts_check" CHECK("outbox_events"."attempts" >= 0)
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `outbox_events_pending_idx` ON `outbox_events` (`created_at`) WHERE "outbox_events"."status" = 'pending';--> statement-breakpoint
+CREATE INDEX `outbox_events_claimable_idx` ON `outbox_events` (`type`,`created_at`) WHERE "outbox_events"."status" = 'pending';--> statement-breakpoint
+CREATE TABLE `payment_records` (
+	`id` text PRIMARY KEY NOT NULL,
+	`payment_request_id` text NOT NULL,
+	`registration_id` text NOT NULL,
+	`collection_id` text NOT NULL,
+	`collection_payment_method_id` text NOT NULL,
+	`external_reference` text DEFAULT '' NOT NULL,
+	`note` text DEFAULT '' NOT NULL,
+	`amount_minor` integer NOT NULL,
+	`currency` text NOT NULL,
+	`status` text NOT NULL,
+	`confirmed_by_user_id` text,
+	`confirmed_at` integer,
+	`raw_payload_json` text,
+	`idempotency_key` text DEFAULT '' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`payment_request_id`) REFERENCES `payment_requests`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`registration_id`) REFERENCES `registrations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`collection_payment_method_id`) REFERENCES `collection_payment_methods`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`confirmed_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`payment_request_id`,`registration_id`) REFERENCES `payment_requests`(`id`,`registration_id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`payment_request_id`,`collection_id`) REFERENCES `payment_requests`(`id`,`collection_id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`collection_id`,`collection_payment_method_id`) REFERENCES `collection_payment_methods`(`collection_id`,`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "payment_records_raw_payload_json_check" CHECK(json_valid("payment_records"."raw_payload_json")),
+	CONSTRAINT "payment_records_amount_minor_check" CHECK("payment_records"."amount_minor" >= 0),
+	CONSTRAINT "payment_records_currency_check" CHECK(length("payment_records"."currency") = 3),
+	CONSTRAINT "payment_records_status_check" CHECK("payment_records"."status" in ('pending', 'settled', 'failed', 'voided', 'refunded'))
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `payment_records_idempotency_key_idx` ON `payment_records` (`idempotency_key`) WHERE "payment_records"."idempotency_key" <> '';--> statement-breakpoint
+CREATE INDEX `payment_records_request_idx` ON `payment_records` (`payment_request_id`);--> statement-breakpoint
+CREATE INDEX `payment_records_registration_idx` ON `payment_records` (`registration_id`);--> statement-breakpoint
+CREATE INDEX `payment_records_collection_idx` ON `payment_records` (`collection_id`);--> statement-breakpoint
+CREATE TABLE `payment_requests` (
+	`id` text PRIMARY KEY NOT NULL,
+	`event_id` text NOT NULL,
+	`collection_id` text NOT NULL,
+	`registration_id` text NOT NULL,
+	`collection_payment_method_id` text NOT NULL,
+	`amount_minor` integer NOT NULL,
+	`currency` text NOT NULL,
+	`status` text NOT NULL,
+	`due_at` integer,
+	`stripe_account_id` text DEFAULT '' NOT NULL,
+	`checkout_session_id` text DEFAULT '' NOT NULL,
+	`payment_intent_id` text DEFAULT '' NOT NULL,
+	`charge_type` text DEFAULT '' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`collection_id`) REFERENCES `collections`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`registration_id`) REFERENCES `registrations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`collection_payment_method_id`) REFERENCES `collection_payment_methods`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`event_id`,`collection_id`) REFERENCES `collections`(`event_id`,`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`event_id`,`registration_id`) REFERENCES `registrations`(`event_id`,`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`collection_id`,`collection_payment_method_id`) REFERENCES `collection_payment_methods`(`collection_id`,`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`collection_id`,`currency`) REFERENCES `collections`(`id`,`currency`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "payment_requests_amount_minor_check" CHECK("payment_requests"."amount_minor" >= 0),
+	CONSTRAINT "payment_requests_currency_check" CHECK(length("payment_requests"."currency") = 3),
+	CONSTRAINT "payment_requests_status_check" CHECK("payment_requests"."status" in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled')),
+	CONSTRAINT "payment_requests_charge_type_check" CHECK("payment_requests"."charge_type" in ('', 'direct'))
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `payment_requests_checkout_session_id_key` ON `payment_requests` (`checkout_session_id`) WHERE "payment_requests"."checkout_session_id" <> '';--> statement-breakpoint
+CREATE UNIQUE INDEX `payment_requests_payment_intent_id_key` ON `payment_requests` (`payment_intent_id`) WHERE "payment_requests"."payment_intent_id" <> '';--> statement-breakpoint
+CREATE INDEX `payment_requests_registration_idx` ON `payment_requests` (`registration_id`);--> statement-breakpoint
+CREATE INDEX `payment_requests_collection_status_idx` ON `payment_requests` (`collection_id`,`status`);--> statement-breakpoint
+CREATE INDEX `payment_requests_event_status_idx` ON `payment_requests` (`event_id`,`status`);--> statement-breakpoint
+CREATE UNIQUE INDEX `payment_requests_collection_id_registration_id_key` ON `payment_requests` (`collection_id`,`registration_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `payment_requests_id_registration_id_key` ON `payment_requests` (`id`,`registration_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `payment_requests_id_collection_id_key` ON `payment_requests` (`id`,`collection_id`);--> statement-breakpoint
+CREATE TABLE `registration_form_answer_options` (
+	`answer_id` text NOT NULL,
+	`field_id` text NOT NULL,
+	`option_id` text NOT NULL,
+	`option_key_snapshot` text NOT NULL,
+	`option_label_snapshot` text NOT NULL,
+	PRIMARY KEY(`answer_id`, `option_id`),
+	FOREIGN KEY (`answer_id`) REFERENCES `registration_form_answers`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`option_id`) REFERENCES `event_form_field_options`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`answer_id`,`field_id`) REFERENCES `registration_form_answers`(`id`,`field_id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`field_id`,`option_id`) REFERENCES `event_form_field_options`(`field_id`,`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "registration_form_answer_options_option_key_snapshot_check" CHECK(length("registration_form_answer_options"."option_key_snapshot") > 0),
+	CONSTRAINT "registration_form_answer_options_option_label_snapshot_check" CHECK(length("registration_form_answer_options"."option_label_snapshot") > 0)
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `registration_form_answer_options_option_idx` ON `registration_form_answer_options` (`option_id`);--> statement-breakpoint
+CREATE TABLE `registration_form_answers` (
+	`id` text PRIMARY KEY NOT NULL,
+	`event_id` text NOT NULL,
+	`registration_id` text NOT NULL,
+	`field_id` text NOT NULL,
+	`field_key_snapshot` text NOT NULL,
+	`field_label_snapshot` text NOT NULL,
+	`field_type_snapshot` text NOT NULL,
+	`value_text` text DEFAULT '' NOT NULL,
+	`value_bool` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`registration_id`) REFERENCES `registrations`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`field_id`) REFERENCES `event_form_fields`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`event_id`,`registration_id`) REFERENCES `registrations`(`event_id`,`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`event_id`,`field_id`) REFERENCES `event_form_fields`(`event_id`,`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "registration_form_answers_value_bool_check" CHECK("registration_form_answers"."value_bool" in (0, 1)),
+	CONSTRAINT "registration_form_answers_field_key_snapshot_check" CHECK(length("registration_form_answers"."field_key_snapshot") > 0),
+	CONSTRAINT "registration_form_answers_field_label_snapshot_check" CHECK(length("registration_form_answers"."field_label_snapshot") > 0),
+	CONSTRAINT "registration_form_answers_field_type_snapshot_check" CHECK("registration_form_answers"."field_type_snapshot" in ('text', 'textarea', 'select', 'multiselect', 'checkbox', 'consent'))
+) STRICT;
+--> statement-breakpoint
+CREATE INDEX `registration_form_answers_registration_idx` ON `registration_form_answers` (`registration_id`);--> statement-breakpoint
+CREATE INDEX `registration_form_answers_field_idx` ON `registration_form_answers` (`field_id`);--> statement-breakpoint
+CREATE INDEX `registration_form_answers_event_idx` ON `registration_form_answers` (`event_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `registration_form_answers_registration_id_field_id_key` ON `registration_form_answers` (`registration_id`,`field_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `registration_form_answers_id_field_id_key` ON `registration_form_answers` (`id`,`field_id`);--> statement-breakpoint
+CREATE TABLE `registrations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`event_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`status` text NOT NULL,
+	`display_name_snapshot` text NOT NULL,
+	`search_text` text DEFAULT '' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "registrations_status_check" CHECK("registrations"."status" in ('applied', 'confirmed', 'waitlisted', 'cancelled')),
+	CONSTRAINT "registrations_display_name_snapshot_check" CHECK(length("registrations"."display_name_snapshot") > 0)
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `registrations_one_active_per_user_event` ON `registrations` (`event_id`,`user_id`) WHERE "registrations"."status" <> 'cancelled';--> statement-breakpoint
+CREATE INDEX `registrations_event_status_idx` ON `registrations` (`event_id`,`status`);--> statement-breakpoint
+CREATE UNIQUE INDEX `registrations_event_id_id_key` ON `registrations` (`event_id`,`id`);--> statement-breakpoint
+CREATE TABLE `stripe_connect_accounts` (
+	`id` text PRIMARY KEY NOT NULL,
+	`organization_id` text NOT NULL,
+	`stripe_account_id` text NOT NULL,
+	`dashboard_type` text NOT NULL,
+	`charges_enabled` integer DEFAULT false NOT NULL,
+	`payouts_enabled` integer DEFAULT false NOT NULL,
+	`details_submitted` integer DEFAULT false NOT NULL,
+	`onboarding_status` text NOT NULL,
+	`country` text DEFAULT '' NOT NULL,
+	`default_currency` text DEFAULT '' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "stripe_connect_accounts_charges_enabled_check" CHECK("stripe_connect_accounts"."charges_enabled" in (0, 1)),
+	CONSTRAINT "stripe_connect_accounts_payouts_enabled_check" CHECK("stripe_connect_accounts"."payouts_enabled" in (0, 1)),
+	CONSTRAINT "stripe_connect_accounts_details_submitted_check" CHECK("stripe_connect_accounts"."details_submitted" in (0, 1)),
+	CONSTRAINT "stripe_connect_accounts_stripe_account_id_check" CHECK(length("stripe_connect_accounts"."stripe_account_id") > 0),
+	CONSTRAINT "stripe_connect_accounts_dashboard_type_check" CHECK("stripe_connect_accounts"."dashboard_type" in ('express', 'full', 'none')),
+	CONSTRAINT "stripe_connect_accounts_onboarding_status_check" CHECK("stripe_connect_accounts"."onboarding_status" in ('not_connected', 'onboarding_required', 'pending_verification', 'ready', 'disabled'))
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `stripe_connect_accounts_organization_id_key` ON `stripe_connect_accounts` (`organization_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `stripe_connect_accounts_stripe_account_id_key` ON `stripe_connect_accounts` (`stripe_account_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `stripe_connect_accounts_organization_id_stripe_account_id_key` ON `stripe_connect_accounts` (`organization_id`,`stripe_account_id`);--> statement-breakpoint
+CREATE TABLE `stripe_webhook_events` (
+	`id` text PRIMARY KEY NOT NULL,
+	`stripe_event_id` text NOT NULL,
+	`stripe_account_id` text DEFAULT '' NOT NULL,
+	`event_type` text NOT NULL,
+	`payload_json` text NOT NULL,
+	`processed_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	CONSTRAINT "stripe_webhook_events_payload_json_check" CHECK(json_valid("stripe_webhook_events"."payload_json")),
+	CONSTRAINT "stripe_webhook_events_stripe_event_id_check" CHECK(length("stripe_webhook_events"."stripe_event_id") > 0),
+	CONSTRAINT "stripe_webhook_events_event_type_check" CHECK(length("stripe_webhook_events"."event_type") > 0)
+) STRICT;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `stripe_webhook_events_stripe_event_id_key` ON `stripe_webhook_events` (`stripe_event_id`);--> statement-breakpoint
+CREATE TABLE `users` (
+	`id` text PRIMARY KEY NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`suspended_at` integer
+) STRICT;

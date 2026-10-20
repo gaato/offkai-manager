@@ -1,3 +1,4 @@
+import { read } from '$lib/server/db/client';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
 import {
@@ -48,28 +49,22 @@ export async function participantExport(
   actorUserId: string,
   eventId: string
 ): Promise<ParticipantExport> {
-  return client.db.transaction(async (tx) => {
-    const eventRows = await tx
+  return read(client, (tx) => {
+    const eventRows = tx
       .select({ organizationId: events.organizationId })
       .from(events)
       .where(eq(events.id, eventId))
-      .limit(1);
+      .limit(1)
+      .all();
     if (!eventRows[0]) throw new RegistrationError('not_found', 'event not found');
-    await authorizeOrganizationRole(
-      tx,
-      eventRows[0].organizationId,
-      actorUserId,
-      'staff',
-      false,
-      true
-    );
-
-    const fields = await tx
+    authorizeOrganizationRole(tx, eventRows[0].organizationId, actorUserId, 'staff', true);
+    const fields = tx
       .select()
       .from(eventFormFields)
       .where(and(eq(eventFormFields.eventId, eventId), isNull(eventFormFields.archivedAt)))
-      .orderBy(asc(eventFormFields.position), asc(eventFormFields.id));
-    const registrationsRows = await tx
+      .orderBy(asc(eventFormFields.position), asc(eventFormFields.id))
+      .all();
+    const registrationsRows = tx
       .select({
         id: registrations.id,
         displayName: registrations.displayNameSnapshot,
@@ -86,20 +81,22 @@ export async function participantExport(
         )
       )
       .where(eq(registrations.eventId, eventId))
-      .orderBy(asc(registrations.createdAt), asc(registrations.id));
+      .orderBy(asc(registrations.createdAt), asc(registrations.id))
+      .all();
     const registrationIds = registrationsRows.map(({ id }) => id);
     const answerRows =
       registrationIds.length === 0
         ? []
-        : await tx
+        : tx
             .select()
             .from(registrationFormAnswers)
-            .where(inArray(registrationFormAnswers.registrationId, registrationIds));
+            .where(inArray(registrationFormAnswers.registrationId, registrationIds))
+            .all();
     const answerIds = answerRows.map(({ id }) => id);
     const optionRows =
       answerIds.length === 0
         ? []
-        : await tx
+        : tx
             .select({
               answerId: registrationFormAnswerOptions.answerId,
               label: registrationFormAnswerOptions.optionLabelSnapshot
@@ -114,7 +111,8 @@ export async function participantExport(
               asc(registrationFormAnswerOptions.answerId),
               asc(eventFormFieldOptions.position),
               asc(eventFormFieldOptions.id)
-            );
+            )
+            .all();
     const optionLabels = new Map<string, string[]>();
     for (const option of optionRows) {
       const labels = optionLabels.get(option.answerId) ?? [];
@@ -133,7 +131,6 @@ export async function participantExport(
       });
       answersByRegistration.set(answer.registrationId, answers);
     }
-
     return {
       fields: fields.map((field) => ({
         id: field.id,

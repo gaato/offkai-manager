@@ -2,6 +2,8 @@ packages:
   - .
 
 allowBuilds:
+  # v13 ships N-API prebuilds; pnpm otherwise synthesizes a node-gyp install.
+  better-sqlite3: false
   cpu-features: false
   esbuild: true
   protobufjs: true

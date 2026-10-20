@@ -1,9 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { testDatabase, fixedClock } from '../database';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { loadConfig } from '$lib/server/config';
-import { closeDatabase, createDatabaseClient, type DatabaseClient } from '$lib/server/db/client';
-import { runMigrations } from '$lib/server/db/migrate';
+import { closeDatabase, type DatabaseClient } from '$lib/server/db/client';
 import { auditLogs, checkinRecords, registrations } from '$lib/server/db/schema';
 import { upsertDiscordIdentity } from '$lib/server/domain/auth/discord';
 import {
@@ -16,90 +14,99 @@ import { createEvent } from '$lib/server/domain/events';
 import { createOrganization } from '$lib/server/domain/orgs';
 
 describe('event-day check-in', () => {
-  let container: StartedPostgreSqlContainer;
   let client: DatabaseClient;
   let actorUserId: string;
   let eventId: string;
   let registrationId: string;
-
-  beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:17-alpine').start();
-    client = createDatabaseClient(
-      loadConfig({
-        OFFKAI_DATABASE_URL: container.getConnectionUri(),
-        OFFKAI_SESSION_SECRET: 'checkin-integration-secret',
-        OFFKAI_AUTH_DEV_BYPASS: 'true'
-      })
-    );
-    await runMigrations(client);
+  beforeEach(async () => {
+    client = testDatabase();
     actorUserId = (
-      await upsertDiscordIdentity(client, {
-        providerUserId: '140000000000000001',
-        username: 'checkin-owner',
-        displayName: 'Check-in Owner',
-        avatarUrl: ''
-      })
+      await upsertDiscordIdentity(
+        client,
+        {
+          providerUserId: '140000000000000001',
+          username: 'checkin-owner',
+          displayName: 'Check-in Owner',
+          avatarUrl: ''
+        },
+        fixedClock
+      )
     ).userId;
-    const participant = await upsertDiscordIdentity(client, {
-      providerUserId: '140000000000000002',
-      username: 'arrival-participant',
-      displayName: 'Arrival Participant',
-      avatarUrl: ''
-    });
-    const organization = await createOrganization(client, {
-      actorUserId,
-      name: 'Check-in integration'
-    });
-    eventId = (
-      await createEvent(client, {
+    const participant = await upsertDiscordIdentity(
+      client,
+      {
+        providerUserId: '140000000000000002',
+        username: 'arrival-participant',
+        displayName: 'Arrival Participant',
+        avatarUrl: ''
+      },
+      fixedClock
+    );
+    const organization = await createOrganization(
+      client,
+      {
         actorUserId,
-        organizationId: organization.id,
-        title: 'Arrival desk',
-        startsAt: '2027-09-20T18:00',
-        timeZone: 'Asia/Tokyo'
-      })
+        name: 'Check-in integration'
+      },
+      fixedClock
+    );
+    eventId = (
+      await createEvent(
+        client,
+        {
+          actorUserId,
+          organizationId: organization.id,
+          title: 'Arrival desk',
+          startsAt: '2027-09-20T18:00',
+          timeZone: 'Asia/Tokyo'
+        },
+        undefined,
+        fixedClock
+      )
     ).id;
-    const rows = await client.db
+    const rows = client.db
       .insert(registrations)
       .values({
+        createdAt: fixedClock.now(),
+        updatedAt: fixedClock.now(),
         eventId,
         userId: participant.userId,
         status: 'confirmed',
         displayNameSnapshot: 'Arrival Participant',
         searchText: 'Arrival Participant arrival-participant'
       })
-      .returning({ id: registrations.id });
+      .returning({ id: registrations.id })
+      .all();
     registrationId = rows[0].id;
   });
-
-  afterAll(async () => {
+  afterEach(async () => {
     if (client) await closeDatabase(client);
-    if (container) await container.stop();
   });
-
   it('serializes duplicate check-in and records one row and one audit', async () => {
     const outcomes = await Promise.allSettled([
-      recordCheckIn(client, { actorUserId, registrationId }),
-      recordCheckIn(client, { actorUserId, registrationId })
+      recordCheckIn(client, { actorUserId, registrationId }, fixedClock),
+      recordCheckIn(client, { actorUserId, registrationId }, fixedClock)
     ]);
     expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
     const rejected = outcomes.find(({ status }) => status === 'rejected');
     expect(rejected).toMatchObject({
       reason: { code: 'duplicate' }
     } satisfies Partial<PromiseRejectedResult>);
-    const records = await client.db
+    const records = client.db
       .select()
       .from(checkinRecords)
-      .where(eq(checkinRecords.registrationId, registrationId));
+      .where(eq(checkinRecords.registrationId, registrationId))
+      .all();
     expect(records).toHaveLength(1);
-    const audits = await client.db
+    const audits = client.db
       .select({ action: auditLogs.action })
       .from(auditLogs)
-      .where(eq(auditLogs.targetId, registrationId));
+      .where(eq(auditLogs.targetId, registrationId))
+      .all();
     expect(audits.filter(({ action }) => action === 'checkin.record')).toHaveLength(1);
   });
-
   it('shows checked-in state, undoes it, and appends the undo audit', async () => {
+    await recordCheckIn(client, { actorUserId, registrationId }, fixedClock);
     const before = await getCheckInOverview(client, {
       actorUserId,
       eventId,
@@ -112,21 +119,24 @@ describe('event-day check-in', () => {
       paymentState: 'none'
     });
     expect(before.rows[0].checkedInAt).toBeInstanceOf(Date);
-
-    await undoCheckIn(client, { actorUserId, registrationId });
-    const records = await client.db
+    await undoCheckIn(client, { actorUserId, registrationId }, fixedClock);
+    const records = client.db
       .select()
       .from(checkinRecords)
-      .where(eq(checkinRecords.registrationId, registrationId));
+      .where(eq(checkinRecords.registrationId, registrationId))
+      .all();
     expect(records).toHaveLength(0);
-    const audits = await client.db
+    const audits = client.db
       .select({ action: auditLogs.action })
       .from(auditLogs)
-      .where(eq(auditLogs.targetId, registrationId));
+      .where(eq(auditLogs.targetId, registrationId))
+      .all();
     expect(audits.map(({ action }) => action)).toEqual(
       expect.arrayContaining(['checkin.record', 'checkin.undo'])
     );
-    await expect(undoCheckIn(client, { actorUserId, registrationId })).rejects.toMatchObject({
+    await expect(
+      undoCheckIn(client, { actorUserId, registrationId }, fixedClock)
+    ).rejects.toMatchObject({
       code: 'not_checked_in'
     } satisfies Partial<CheckInError>);
   });

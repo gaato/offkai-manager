@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write, read } from '$lib/server/db/client';
 import { and, eq } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import { eventDiscordIntegrations, events, externalAccounts } from '$lib/server/db/schema';
@@ -52,10 +54,10 @@ export async function getEventDiscordSettings(
   actorUserId: string,
   eventId: string
 ): Promise<EventDiscordSettings> {
-  return client.db.transaction(async (tx) => {
-    const event = await loadEvent(tx, eventId);
-    await authorizeOrganizationRole(tx, event.organizationId, actorUserId, 'viewer', false, true);
-    const integration = await loadIntegration(tx, eventId);
+  return read(client, (tx) => {
+    const event = loadEvent(tx, eventId);
+    authorizeOrganizationRole(tx, event.organizationId, actorUserId, 'viewer', true);
+    const integration = loadIntegration(tx, eventId);
     return {
       policy: discordPolicySchema.parse(event.discordPolicy),
       integration: integration ? parseIntegration(integration) : null
@@ -67,16 +69,17 @@ export async function getEventDiscordSettings(
 export async function updateEventDiscordSettings(
   client: DatabaseClient,
   gateway: DiscordGateway,
-  rawInput: UpdateDiscordSettingsInput
+  rawInput: UpdateDiscordSettingsInput,
+  clock: Clock = systemClock
 ): Promise<EventDiscordSettings> {
   const input = validateInput(rawInput);
-  const preflight = await client.db.transaction(async (tx) => {
-    const event = await loadEvent(tx, input.eventId);
-    await authorizeOrganizationRole(tx, event.organizationId, input.actorUserId, 'organizer');
+  const preflight = read(client, (tx) => {
+    const event = loadEvent(tx, input.eventId);
+    authorizeOrganizationRole(tx, event.organizationId, input.actorUserId, 'organizer');
     if (event.archivedAt) {
       throw new DiscordSettingsError('forbidden', 'archived events cannot be changed');
     }
-    const providerRows = await tx
+    const providerRows = tx
       .select({ providerUserId: externalAccounts.providerUserId })
       .from(externalAccounts)
       .where(
@@ -85,13 +88,13 @@ export async function updateEventDiscordSettings(
           eq(externalAccounts.provider, 'discord')
         )
       )
-      .limit(1);
+      .limit(1)
+      .all();
     return {
       providerUserId: providerRows[0]?.providerUserId ?? '',
-      integration: await loadIntegration(tx, input.eventId)
+      integration: loadIntegration(tx, input.eventId)
     };
   });
-
   let guildNameSnapshot =
     preflight.integration?.guildId === input.guildId ? preflight.integration.guildNameSnapshot : '';
   if (gateway.enabled && input.guildId) {
@@ -114,21 +117,22 @@ export async function updateEventDiscordSettings(
       throw new DiscordSettingsError('gateway', 'Discord guild verification failed', { cause });
     }
   }
-
-  return client.db.transaction(async (tx) => {
-    const event = await loadEvent(tx, input.eventId, true);
-    await authorizeOrganizationRole(tx, event.organizationId, input.actorUserId, 'organizer');
+  return write(client, (tx) => {
+    const event = loadEvent(tx, input.eventId);
+    authorizeOrganizationRole(tx, event.organizationId, input.actorUserId, 'organizer');
     if (event.archivedAt) {
       throw new DiscordSettingsError('forbidden', 'archived events cannot be changed');
     }
-    const beforeIntegration = await loadIntegration(tx, input.eventId);
-    await tx
-      .update(events)
-      .set({ discordPolicy: input.policy, updatedAt: new Date() })
-      .where(eq(events.id, input.eventId));
-    const rows = await tx
+    const beforeIntegration = loadIntegration(tx, input.eventId);
+    tx.update(events)
+      .set({ discordPolicy: input.policy, updatedAt: clock.now() })
+      .where(eq(events.id, input.eventId))
+      .run();
+    const rows = tx
       .insert(eventDiscordIntegrations)
       .values({
+        createdAt: clock.now(),
+        updatedAt: clock.now(),
         eventId: input.eventId,
         guildId: input.guildId,
         guildNameSnapshot,
@@ -142,26 +146,31 @@ export async function updateEventDiscordSettings(
           guildNameSnapshot,
           inviteUrl: input.inviteUrl,
           roleId: input.roleId,
-          updatedAt: new Date()
+          updatedAt: clock.now()
         }
       })
-      .returning();
+      .returning()
+      .all();
     const integration = parseIntegration(rows[0]);
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: input.eventId,
-      action: 'event.discord_update',
-      targetType: 'event_discord_integration',
-      targetId: integration.id,
-      before: {
-        policy: discordPolicySchema.parse(event.discordPolicy),
-        integration: integrationAuditSnapshot(beforeIntegration)
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: input.eventId,
+        action: 'event.discord_update',
+        targetType: 'event_discord_integration',
+        targetId: integration.id,
+        before: {
+          policy: discordPolicySchema.parse(event.discordPolicy),
+          integration: integrationAuditSnapshot(beforeIntegration)
+        },
+        after: {
+          policy: input.policy,
+          integration: integrationAuditSnapshot(rows[0])
+        }
       },
-      after: {
-        policy: input.policy,
-        integration: integrationAuditSnapshot(rows[0])
-      }
-    });
+      clock
+    );
     return { policy: input.policy, integration };
   });
 }
@@ -200,7 +209,7 @@ function validateInput(input: UpdateDiscordSettingsInput): UpdateDiscordSettings
   return { ...input, policy: policy.data, guildId, roleId, inviteUrl };
 }
 
-async function loadEvent(tx: DatabaseTransaction, eventId: string, lock = false) {
+function loadEvent(tx: DatabaseTransaction, eventId: string) {
   const query = tx
     .select({
       id: events.id,
@@ -211,17 +220,18 @@ async function loadEvent(tx: DatabaseTransaction, eventId: string, lock = false)
     .from(events)
     .where(eq(events.id, eventId))
     .limit(1);
-  const rows = lock ? await query.for('update') : await query;
+  const rows = query.all();
   if (!rows[0]) throw new DiscordSettingsError('not_found', 'event not found');
   return rows[0];
 }
 
-async function loadIntegration(tx: DatabaseTransaction, eventId: string) {
-  const rows = await tx
+function loadIntegration(tx: DatabaseTransaction, eventId: string) {
+  const rows = tx
     .select()
     .from(eventDiscordIntegrations)
     .where(eq(eventDiscordIntegrations.eventId, eventId))
-    .limit(1);
+    .limit(1)
+    .all();
   return rows[0] ?? null;
 }
 

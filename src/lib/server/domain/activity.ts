@@ -1,3 +1,4 @@
+import { read } from '$lib/server/db/client';
 import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
@@ -24,27 +25,22 @@ export async function listEventActivity(
   actorUserId: string,
   eventId: string
 ): Promise<ActivityRow[]> {
-  return client.db.transaction(async (tx) => {
-    const eventRows = await tx
+  return read(client, (tx) => {
+    const eventRows = tx
       .select({ organizationId: events.organizationId })
       .from(events)
       .where(eq(events.id, eventId))
-      .limit(1);
+      .limit(1)
+      .all();
     if (!eventRows[0]) return [];
-    await authorizeOrganizationRole(
-      tx,
-      eventRows[0].organizationId,
-      actorUserId,
-      'staff',
-      false,
-      true
-    );
-    const rows = await tx
+    authorizeOrganizationRole(tx, eventRows[0].organizationId, actorUserId, 'staff', true);
+    const rows = tx
       .select({ audit: auditLogs })
       .from(auditLogs)
       .where(eq(auditLogs.eventId, eventId))
       .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-      .limit(activityLimit);
+      .limit(activityLimit)
+      .all();
     return addActorNames(
       tx,
       rows.map(({ audit }) => ({ ...audit, eventTitle: '' }))
@@ -57,9 +53,9 @@ export async function listOrganizationActivity(
   actorUserId: string,
   organizationId: string
 ): Promise<ActivityRow[]> {
-  return client.db.transaction(async (tx) => {
-    await authorizeOrganizationRole(tx, organizationId, actorUserId, 'staff', false, true);
-    const rows = await tx
+  return read(client, (tx) => {
+    authorizeOrganizationRole(tx, organizationId, actorUserId, 'staff', true);
+    const rows = tx
       .select({
         audit: auditLogs,
         eventTitle: events.title
@@ -81,7 +77,8 @@ export async function listOrganizationActivity(
         )
       )
       .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-      .limit(activityLimit);
+      .limit(activityLimit)
+      .all();
     return addActorNames(
       tx,
       rows.map(({ audit, eventTitle }) => ({ ...audit, eventTitle: eventTitle ?? '' }))
@@ -89,15 +86,17 @@ export async function listOrganizationActivity(
   });
 }
 
-async function addActorNames(
+function addActorNames(
   tx: DatabaseTransaction,
-  rows: (typeof auditLogs.$inferSelect & { eventTitle: string })[]
-): Promise<ActivityRow[]> {
+  rows: (typeof auditLogs.$inferSelect & {
+    eventTitle: string;
+  })[]
+): ActivityRow[] {
   const actorIds = [...new Set(rows.map(({ actorUserId }) => actorUserId).filter(isString))];
   const actors =
     actorIds.length === 0
       ? []
-      : await tx
+      : tx
           .select({
             userId: externalAccounts.userId,
             displayName: externalAccounts.displayName,
@@ -109,7 +108,8 @@ async function addActorNames(
               eq(externalAccounts.provider, 'discord'),
               inArray(externalAccounts.userId, actorIds)
             )
-          );
+          )
+          .all();
   const actorNames = new Map(
     actors.map(({ userId, displayName, username }) => [userId, displayName || username])
   );

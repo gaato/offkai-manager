@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 import { requireSession } from '$lib/server/auth/guards';
 import { getConfig } from '$lib/server/config';
-import { getDatabaseClient, type DatabaseClient } from '$lib/server/db/client';
+import { read, getDatabaseClient, type DatabaseClient } from '$lib/server/db/client';
 import {
   changeRole,
   authorizeOrganizationRole,
@@ -134,9 +134,7 @@ async function parseAction(event: RequestEvent, schema: z.ZodType<MembershipActi
   }
   const client = getDatabaseClient(getConfig());
   try {
-    await client.db.transaction((tx) =>
-      authorizeOrganizationRole(tx, organizationId, session.userId, 'owner')
-    );
+    read(client, (tx) => authorizeOrganizationRole(tx, organizationId, session.userId, 'owner'));
   } catch (cause) {
     event.locals.logger[cause instanceof OrganizationError ? 'warn' : 'error'](
       { err: cause },

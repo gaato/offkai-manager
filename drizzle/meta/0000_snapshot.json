@@ -1,125 +1,102 @@
 {
-  "id": "ef5ee173-0838-4227-8879-4b72091437e6",
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "d0cd5e19-a4e1-434e-97a5-914393fd6960",
   "prevId": "00000000-0000-0000-0000-000000000000",
-  "version": "7",
-  "dialect": "postgresql",
   "tables": {
-    "public.audit_logs": {
+    "audit_logs": {
       "name": "audit_logs",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "actor_user_id": {
           "name": "actor_user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "action": {
           "name": "action",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "target_type": {
           "name": "target_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "target_id": {
           "name": "target_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "before_json": {
           "name": "before_json",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "after_json": {
           "name": "after_json",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "reason": {
           "name": "reason",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "metadata_json": {
           "name": "metadata_json",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "audit_logs_event_created_idx": {
           "name": "audit_logs_event_created_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["event_id", "\"created_at\" desc"],
+          "isUnique": false
         },
         "audit_logs_target_idx": {
           "name": "audit_logs_target_idx",
-          "columns": [
-            {
-              "expression": "target_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "target_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["target_type", "target_id"],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -144,8 +121,19 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
+        "audit_logs_before_json_check": {
+          "name": "audit_logs_before_json_check",
+          "value": "json_valid(\"audit_logs\".\"before_json\")"
+        },
+        "audit_logs_after_json_check": {
+          "name": "audit_logs_after_json_check",
+          "value": "json_valid(\"audit_logs\".\"after_json\")"
+        },
+        "audit_logs_metadata_json_check": {
+          "name": "audit_logs_metadata_json_check",
+          "value": "json_valid(\"audit_logs\".\"metadata_json\")"
+        },
         "audit_logs_action_check": {
           "name": "audit_logs_action_check",
           "value": "length(\"audit_logs\".\"action\") > 0"
@@ -154,101 +142,80 @@
           "name": "audit_logs_target_type_check",
           "value": "length(\"audit_logs\".\"target_type\") > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.checkin_records": {
+    "checkin_records": {
       "name": "checkin_records",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "registration_id": {
           "name": "registration_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "actor_user_id": {
           "name": "actor_user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "method": {
           "name": "method",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "client_metadata": {
           "name": "client_metadata",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "checkin_records_event_idx": {
           "name": "checkin_records_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["event_id", "\"created_at\" desc"],
+          "isUnique": false
         },
         "checkin_records_registration_idx": {
           "name": "checkin_records_registration_idx",
-          "columns": [
-            {
-              "expression": "registration_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["registration_id"],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -291,7 +258,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "checkin_records_status_check": {
           "name": "checkin_records_status_check",
@@ -301,37 +267,38 @@
           "name": "checkin_records_method_check",
           "value": "\"checkin_records\".\"method\" in ('manual', 'search', 'qr')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.collection_payment_methods": {
+    "collection_payment_methods": {
       "name": "collection_payment_methods",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "collection_id": {
           "name": "collection_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "label": {
           "name": "label",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "enabled": {
           "name": "enabled",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": true
         },
         "sort_order": {
@@ -339,6 +306,7 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "timing": {
@@ -346,6 +314,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "'onsite'"
         },
         "confirmation": {
@@ -353,6 +322,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "'manual'"
         },
         "instructions": {
@@ -360,10 +330,22 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "collection_payment_methods_collection_id_label_key": {
+          "name": "collection_payment_methods_collection_id_label_key",
+          "columns": ["collection_id", "label"],
+          "isUnique": true
+        },
+        "collection_payment_methods_collection_id_id_key": {
+          "name": "collection_payment_methods_collection_id_id_key",
+          "columns": ["collection_id", "id"],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "collection_payment_methods_collection_id_collections_id_fk": {
           "name": "collection_payment_methods_collection_id_collections_id_fk",
@@ -376,20 +358,12 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "collection_payment_methods_collection_id_label_key": {
-          "name": "collection_payment_methods_collection_id_label_key",
-          "nullsNotDistinct": false,
-          "columns": ["collection_id", "label"]
-        },
-        "collection_payment_methods_collection_id_id_key": {
-          "name": "collection_payment_methods_collection_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["collection_id", "id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
+        "collection_payment_methods_enabled_check": {
+          "name": "collection_payment_methods_enabled_check",
+          "value": "\"collection_payment_methods\".\"enabled\" in (0, 1)"
+        },
         "collection_payment_methods_label_check": {
           "name": "collection_payment_methods_label_check",
           "value": "length(\"collection_payment_methods\".\"label\") > 0"
@@ -402,93 +376,100 @@
           "name": "collection_payment_methods_confirmation_check",
           "value": "\"collection_payment_methods\".\"confirmation\" in ('internal', 'manual', 'none')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.collections": {
+    "collections": {
       "name": "collections",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "title": {
           "name": "title",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "amount_minor": {
           "name": "amount_minor",
-          "type": "bigint",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "currency": {
           "name": "currency",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "due_at": {
           "name": "due_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "instructions": {
           "name": "instructions",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "collections_event_idx": {
           "name": "collections_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["event_id"],
+          "isUnique": false
+        },
+        "collections_event_id_id_key": {
+          "name": "collections_event_id_id_key",
+          "columns": ["event_id", "id"],
+          "isUnique": true
+        },
+        "collections_id_currency_key": {
+          "name": "collections_id_currency_key",
+          "columns": ["id", "currency"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -503,19 +484,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "collections_event_id_id_key": {
-          "name": "collections_event_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["event_id", "id"]
-        },
-        "collections_id_currency_key": {
-          "name": "collections_id_currency_key",
-          "nullsNotDistinct": false,
-          "columns": ["id", "currency"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "collections_title_check": {
           "name": "collections_title_check",
@@ -533,31 +502,31 @@
           "name": "collections_status_check",
           "value": "\"collections\".\"status\" in ('draft', 'open', 'closed', 'archived')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.event_discord_integrations": {
+    "event_discord_integrations": {
       "name": "event_discord_integrations",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "guild_id": {
           "name": "guild_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "guild_name_snapshot": {
@@ -565,6 +534,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "invite_url": {
@@ -572,6 +542,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "announcement_channel_id": {
@@ -579,6 +550,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "staff_channel_id": {
@@ -586,6 +558,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "role_id": {
@@ -593,24 +566,33 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "event_discord_integrations_event_id_key": {
+          "name": "event_discord_integrations_event_id_key",
+          "columns": ["event_id"],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "event_discord_integrations_event_id_events_id_fk": {
           "name": "event_discord_integrations_event_id_events_id_fk",
@@ -623,95 +605,87 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "event_discord_integrations_event_id_key": {
-          "name": "event_discord_integrations_event_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["event_id"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
-    "public.event_form_field_options": {
+    "event_form_field_options": {
       "name": "event_form_field_options",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "field_id": {
           "name": "field_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "option_key": {
           "name": "option_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "label": {
           "name": "label",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "position": {
           "name": "position",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "archived_at": {
           "name": "archived_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "event_form_field_options_field_position_idx": {
           "name": "event_form_field_options_field_position_idx",
-          "columns": [
-            {
-              "expression": "field_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["field_id", "position"],
+          "isUnique": false
+        },
+        "event_form_field_options_field_id_option_key_key": {
+          "name": "event_form_field_options_field_id_option_key_key",
+          "columns": ["field_id", "option_key"],
+          "isUnique": true
+        },
+        "event_form_field_options_field_id_id_key": {
+          "name": "event_form_field_options_field_id_id_key",
+          "columns": ["field_id", "id"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -726,19 +700,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "event_form_field_options_field_id_option_key_key": {
-          "name": "event_form_field_options_field_id_option_key_key",
-          "nullsNotDistinct": false,
-          "columns": ["field_id", "option_key"]
-        },
-        "event_form_field_options_field_id_id_key": {
-          "name": "event_form_field_options_field_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["field_id", "id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "event_form_field_options_option_key_check": {
           "name": "event_form_field_options_option_key_check",
@@ -748,49 +710,52 @@
           "name": "event_form_field_options_label_check",
           "value": "length(\"event_form_field_options\".\"label\") > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.event_form_fields": {
+    "event_form_fields": {
       "name": "event_form_fields",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "field_key": {
           "name": "field_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "label": {
           "name": "label",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "field_type": {
           "name": "field_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "required": {
           "name": "required",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         },
         "position": {
@@ -798,6 +763,7 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "help_text": {
@@ -805,50 +771,48 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "archived_at": {
           "name": "archived_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "event_form_fields_event_position_idx": {
           "name": "event_form_fields_event_position_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["event_id", "position"],
+          "isUnique": false
+        },
+        "event_form_fields_event_id_field_key_key": {
+          "name": "event_form_fields_event_id_field_key_key",
+          "columns": ["event_id", "field_key"],
+          "isUnique": true
+        },
+        "event_form_fields_event_id_id_key": {
+          "name": "event_form_fields_event_id_id_key",
+          "columns": ["event_id", "id"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -863,20 +827,12 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "event_form_fields_event_id_field_key_key": {
-          "name": "event_form_fields_event_id_field_key_key",
-          "nullsNotDistinct": false,
-          "columns": ["event_id", "field_key"]
-        },
-        "event_form_fields_event_id_id_key": {
-          "name": "event_form_fields_event_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["event_id", "id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
+        "event_form_fields_required_check": {
+          "name": "event_form_fields_required_check",
+          "value": "\"event_form_fields\".\"required\" in (0, 1)"
+        },
         "event_form_fields_field_key_check": {
           "name": "event_form_fields_field_key_check",
           "value": "length(\"event_form_fields\".\"field_key\") > 0"
@@ -889,92 +845,102 @@
           "name": "event_form_fields_field_type_check",
           "value": "\"event_form_fields\".\"field_type\" in ('text', 'textarea', 'select', 'multiselect', 'checkbox', 'consent')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.events": {
+    "events": {
       "name": "events",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "title": {
           "name": "title",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "slug": {
           "name": "slug",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "description": {
           "name": "description",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "starts_at": {
           "name": "starts_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "ends_at": {
           "name": "ends_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "capacity": {
           "name": "capacity",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "visibility": {
           "name": "visibility",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "discord_policy": {
           "name": "discord_policy",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "registration_opens_at": {
           "name": "registration_opens_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "registration_closes_at": {
           "name": "registration_closes_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "venue_name": {
           "name": "venue_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "venue_address": {
@@ -982,6 +948,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "venue_reveal": {
@@ -989,6 +956,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "'public'"
         },
         "contact": {
@@ -996,6 +964,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "cancellation_policy": {
@@ -1003,6 +972,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "registration_mode": {
@@ -1010,50 +980,50 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "'auto_confirm'"
         },
         "cancelled_at": {
           "name": "cancelled_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "archived_at": {
           "name": "archived_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "events_archived_at_idx": {
           "name": "events_archived_at_idx",
-          "columns": [
-            {
-              "expression": "archived_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["archived_at"],
+          "isUnique": false
+        },
+        "events_organization_id_slug_key": {
+          "name": "events_organization_id_slug_key",
+          "columns": ["organization_id", "slug"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -1068,14 +1038,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "events_organization_id_slug_key": {
-          "name": "events_organization_id_slug_key",
-          "nullsNotDistinct": false,
-          "columns": ["organization_id", "slug"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "events_title_check": {
           "name": "events_title_check",
@@ -1109,43 +1072,45 @@
           "name": "events_registration_mode_check",
           "value": "\"events\".\"registration_mode\" in ('auto_confirm', 'approval')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.external_accounts": {
+    "external_accounts": {
       "name": "external_accounts",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "user_id": {
           "name": "user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "provider": {
           "name": "provider",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "provider_user_id": {
           "name": "provider_user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "username": {
           "name": "username",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "display_name": {
@@ -1153,6 +1118,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "avatar_url": {
@@ -1160,17 +1126,25 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "linked_at": {
           "name": "linked_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "external_accounts_provider_provider_user_id_key": {
+          "name": "external_accounts_provider_provider_user_id_key",
+          "columns": ["provider", "provider_user_id"],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "external_accounts_user_id_users_id_fk": {
           "name": "external_accounts_user_id_users_id_fk",
@@ -1183,122 +1157,100 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "external_accounts_provider_provider_user_id_key": {
-          "name": "external_accounts_provider_provider_user_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["provider", "provider_user_id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "external_accounts_provider_check": {
           "name": "external_accounts_provider_check",
           "value": "\"external_accounts\".\"provider\" in ('discord')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.organization_memberships": {
+    "organization_memberships": {
       "name": "organization_memberships",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "user_id": {
           "name": "user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "role": {
           "name": "role",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "'active'"
         },
         "joined_at": {
           "name": "joined_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "invited_by_user_id": {
           "name": "invited_by_user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "organization_memberships_user_idx": {
           "name": "organization_memberships_user_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["user_id"],
+          "isUnique": false
         },
         "organization_memberships_organization_status_idx": {
           "name": "organization_memberships_organization_status_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["organization_id", "status"],
+          "isUnique": false
+        },
+        "organization_memberships_organization_id_user_id_key": {
+          "name": "organization_memberships_organization_id_user_id_key",
+          "columns": ["organization_id", "user_id"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -1331,14 +1283,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "organization_memberships_organization_id_user_id_key": {
-          "name": "organization_memberships_organization_id_user_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["organization_id", "user_id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "organization_memberships_role_check": {
           "name": "organization_memberships_role_check",
@@ -1348,81 +1293,72 @@
           "name": "organization_memberships_status_check",
           "value": "\"organization_memberships\".\"status\" in ('active', 'disabled')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.organizations": {
+    "organizations": {
       "name": "organizations",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "name": {
           "name": "name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "slug": {
           "name": "slug",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "suspended_at": {
           "name": "suspended_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "organizations_suspended_at_idx": {
           "name": "organizations_suspended_at_idx",
-          "columns": [
-            {
-              "expression": "suspended_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
+          "columns": ["suspended_at"],
           "isUnique": false,
-          "where": "\"organizations\".\"suspended_at\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"organizations\".\"suspended_at\" is not null"
+        },
+        "organizations_slug_key": {
+          "name": "organizations_slug_key",
+          "columns": ["slug"],
+          "isUnique": true
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "organizations_slug_key": {
-          "name": "organizations_slug_key",
-          "nullsNotDistinct": false,
-          "columns": ["slug"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "organizations_name_check": {
           "name": "organizations_name_check",
@@ -1432,43 +1368,45 @@
           "name": "organizations_slug_check",
           "value": "length(\"organizations\".\"slug\") > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.outbox_events": {
+    "outbox_events": {
       "name": "outbox_events",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "type": {
           "name": "type",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "payload_json": {
           "name": "payload_json",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "attempts": {
           "name": "attempts",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "last_error": {
@@ -1476,128 +1414,112 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
-        "claimed_until": {
-          "name": "claimed_until",
-          "type": "timestamp with time zone",
+        "next_attempt_at": {
+          "name": "next_attempt_at",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "processed_at": {
           "name": "processed_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "outbox_events_pending_idx": {
           "name": "outbox_events_pending_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
+          "columns": ["created_at"],
           "isUnique": false,
-          "where": "\"outbox_events\".\"status\" = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"outbox_events\".\"status\" = 'pending'"
         },
         "outbox_events_claimable_idx": {
           "name": "outbox_events_claimable_idx",
-          "columns": [
-            {
-              "expression": "type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
+          "columns": ["type", "created_at"],
           "isUnique": false,
-          "where": "\"outbox_events\".\"status\" = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"outbox_events\".\"status\" = 'pending'"
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
+        "outbox_events_payload_json_check": {
+          "name": "outbox_events_payload_json_check",
+          "value": "json_valid(\"outbox_events\".\"payload_json\")"
+        },
         "outbox_events_type_check": {
           "name": "outbox_events_type_check",
           "value": "\"outbox_events\".\"type\" in ('discord.role_sync_requested')"
         },
         "outbox_events_status_check": {
           "name": "outbox_events_status_check",
-          "value": "\"outbox_events\".\"status\" in ('pending', 'processed', 'failed')"
+          "value": "\"outbox_events\".\"status\" in ('pending', 'processing', 'processed', 'failed')"
         },
         "outbox_events_attempts_check": {
           "name": "outbox_events_attempts_check",
           "value": "\"outbox_events\".\"attempts\" >= 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.payment_records": {
+    "payment_records": {
       "name": "payment_records",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "payment_request_id": {
           "name": "payment_request_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "registration_id": {
           "name": "registration_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "collection_id": {
           "name": "collection_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "collection_payment_method_id": {
           "name": "collection_payment_method_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "external_reference": {
           "name": "external_reference",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "note": {
@@ -1605,120 +1527,89 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "amount_minor": {
           "name": "amount_minor",
-          "type": "bigint",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "currency": {
           "name": "currency",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "confirmed_by_user_id": {
           "name": "confirmed_by_user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "confirmed_at": {
           "name": "confirmed_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "raw_payload_json": {
           "name": "raw_payload_json",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "idempotency_key": {
           "name": "idempotency_key",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "payment_records_idempotency_key_idx": {
           "name": "payment_records_idempotency_key_idx",
-          "columns": [
-            {
-              "expression": "idempotency_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
+          "columns": ["idempotency_key"],
           "isUnique": true,
-          "where": "\"payment_records\".\"idempotency_key\" <> ''",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"payment_records\".\"idempotency_key\" <> ''"
         },
         "payment_records_request_idx": {
           "name": "payment_records_request_idx",
-          "columns": [
-            {
-              "expression": "payment_request_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["payment_request_id"],
+          "isUnique": false
         },
         "payment_records_registration_idx": {
           "name": "payment_records_registration_idx",
-          "columns": [
-            {
-              "expression": "registration_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["registration_id"],
+          "isUnique": false
         },
         "payment_records_collection_idx": {
           "name": "payment_records_collection_idx",
-          "columns": [
-            {
-              "expression": "collection_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["collection_id"],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -1788,8 +1679,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
+        "payment_records_raw_payload_json_check": {
+          "name": "payment_records_raw_payload_json_check",
+          "value": "json_valid(\"payment_records\".\"raw_payload_json\")"
+        },
         "payment_records_amount_minor_check": {
           "name": "payment_records_amount_minor_check",
           "value": "\"payment_records\".\"amount_minor\" >= 0"
@@ -1802,73 +1696,80 @@
           "name": "payment_records_status_check",
           "value": "\"payment_records\".\"status\" in ('pending', 'settled', 'failed', 'voided', 'refunded')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.payment_requests": {
+    "payment_requests": {
       "name": "payment_requests",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "collection_id": {
           "name": "collection_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "registration_id": {
           "name": "registration_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "collection_payment_method_id": {
           "name": "collection_payment_method_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "amount_minor": {
           "name": "amount_minor",
-          "type": "bigint",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "currency": {
           "name": "currency",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "due_at": {
           "name": "due_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "stripe_account_id": {
           "name": "stripe_account_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "checkout_session_id": {
@@ -1876,6 +1777,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "payment_intent_id": {
@@ -1883,6 +1785,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "charge_type": {
@@ -1890,112 +1793,68 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "payment_requests_checkout_session_id_key": {
           "name": "payment_requests_checkout_session_id_key",
-          "columns": [
-            {
-              "expression": "checkout_session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
+          "columns": ["checkout_session_id"],
           "isUnique": true,
-          "where": "\"payment_requests\".\"checkout_session_id\" <> ''",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"payment_requests\".\"checkout_session_id\" <> ''"
         },
         "payment_requests_payment_intent_id_key": {
           "name": "payment_requests_payment_intent_id_key",
-          "columns": [
-            {
-              "expression": "payment_intent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
+          "columns": ["payment_intent_id"],
           "isUnique": true,
-          "where": "\"payment_requests\".\"payment_intent_id\" <> ''",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"payment_requests\".\"payment_intent_id\" <> ''"
         },
         "payment_requests_registration_idx": {
           "name": "payment_requests_registration_idx",
-          "columns": [
-            {
-              "expression": "registration_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["registration_id"],
+          "isUnique": false
         },
         "payment_requests_collection_status_idx": {
           "name": "payment_requests_collection_status_idx",
-          "columns": [
-            {
-              "expression": "collection_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["collection_id", "status"],
+          "isUnique": false
         },
         "payment_requests_event_status_idx": {
           "name": "payment_requests_event_status_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["event_id", "status"],
+          "isUnique": false
+        },
+        "payment_requests_collection_id_registration_id_key": {
+          "name": "payment_requests_collection_id_registration_id_key",
+          "columns": ["collection_id", "registration_id"],
+          "isUnique": true
+        },
+        "payment_requests_id_registration_id_key": {
+          "name": "payment_requests_id_registration_id_key",
+          "columns": ["id", "registration_id"],
+          "isUnique": true
+        },
+        "payment_requests_id_collection_id_key": {
+          "name": "payment_requests_id_collection_id_key",
+          "columns": ["id", "collection_id"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -2064,24 +1923,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "payment_requests_collection_id_registration_id_key": {
-          "name": "payment_requests_collection_id_registration_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["collection_id", "registration_id"]
-        },
-        "payment_requests_id_registration_id_key": {
-          "name": "payment_requests_id_registration_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["id", "registration_id"]
-        },
-        "payment_requests_id_collection_id_key": {
-          "name": "payment_requests_id_collection_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["id", "collection_id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "payment_requests_amount_minor_check": {
           "name": "payment_requests_amount_minor_check",
@@ -2099,59 +1941,52 @@
           "name": "payment_requests_charge_type_check",
           "value": "\"payment_requests\".\"charge_type\" in ('', 'direct')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.registration_form_answer_options": {
+    "registration_form_answer_options": {
       "name": "registration_form_answer_options",
-      "schema": "",
       "columns": {
         "answer_id": {
           "name": "answer_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "field_id": {
           "name": "field_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "option_id": {
           "name": "option_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "option_key_snapshot": {
           "name": "option_key_snapshot",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "option_label_snapshot": {
           "name": "option_label_snapshot",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {
         "registration_form_answer_options_option_idx": {
           "name": "registration_form_answer_options_option_idx",
-          "columns": [
-            {
-              "expression": "option_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["option_id"],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -2194,12 +2029,11 @@
       },
       "compositePrimaryKeys": {
         "registration_form_answer_options_pkey": {
-          "name": "registration_form_answer_options_pkey",
-          "columns": ["answer_id", "option_id"]
+          "columns": ["answer_id", "option_id"],
+          "name": "registration_form_answer_options_pkey"
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "registration_form_answer_options_option_key_snapshot_check": {
           "name": "registration_form_answer_options_option_key_snapshot_check",
@@ -2209,129 +2043,117 @@
           "name": "registration_form_answer_options_option_label_snapshot_check",
           "value": "length(\"registration_form_answer_options\".\"option_label_snapshot\") > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.registration_form_answers": {
+    "registration_form_answers": {
       "name": "registration_form_answers",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "registration_id": {
           "name": "registration_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "field_id": {
           "name": "field_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "field_key_snapshot": {
           "name": "field_key_snapshot",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "field_label_snapshot": {
           "name": "field_label_snapshot",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "field_type_snapshot": {
           "name": "field_type_snapshot",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "value_text": {
           "name": "value_text",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "value_bool": {
           "name": "value_bool",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "registration_form_answers_registration_idx": {
           "name": "registration_form_answers_registration_idx",
-          "columns": [
-            {
-              "expression": "registration_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["registration_id"],
+          "isUnique": false
         },
         "registration_form_answers_field_idx": {
           "name": "registration_form_answers_field_idx",
-          "columns": [
-            {
-              "expression": "field_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["field_id"],
+          "isUnique": false
         },
         "registration_form_answers_event_idx": {
           "name": "registration_form_answers_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["event_id"],
+          "isUnique": false
+        },
+        "registration_form_answers_registration_id_field_id_key": {
+          "name": "registration_form_answers_registration_id_field_id_key",
+          "columns": ["registration_id", "field_id"],
+          "isUnique": true
+        },
+        "registration_form_answers_id_field_id_key": {
+          "name": "registration_form_answers_id_field_id_key",
+          "columns": ["id", "field_id"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -2373,20 +2195,12 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "registration_form_answers_registration_id_field_id_key": {
-          "name": "registration_form_answers_registration_id_field_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["registration_id", "field_id"]
-        },
-        "registration_form_answers_id_field_id_key": {
-          "name": "registration_form_answers_id_field_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["id", "field_id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
+        "registration_form_answers_value_bool_check": {
+          "name": "registration_form_answers_value_bool_check",
+          "value": "\"registration_form_answers\".\"value_bool\" in (0, 1)"
+        },
         "registration_form_answers_field_key_snapshot_check": {
           "name": "registration_form_answers_field_key_snapshot_check",
           "value": "length(\"registration_form_answers\".\"field_key_snapshot\") > 0"
@@ -2399,124 +2213,87 @@
           "name": "registration_form_answers_field_type_snapshot_check",
           "value": "\"registration_form_answers\".\"field_type_snapshot\" in ('text', 'textarea', 'select', 'multiselect', 'checkbox', 'consent')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.registrations": {
+    "registrations": {
       "name": "registrations",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "user_id": {
           "name": "user_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "display_name_snapshot": {
           "name": "display_name_snapshot",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "search_text": {
           "name": "search_text",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
       "indexes": {
         "registrations_one_active_per_user_event": {
           "name": "registrations_one_active_per_user_event",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
+          "columns": ["event_id", "user_id"],
           "isUnique": true,
-          "where": "\"registrations\".\"status\" <> 'cancelled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"registrations\".\"status\" <> 'cancelled'"
         },
         "registrations_event_status_idx": {
           "name": "registrations_event_status_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columns": ["event_id", "status"],
+          "isUnique": false
         },
-        "registrations_event_search_idx": {
-          "name": "registrations_event_search_idx",
-          "columns": [
-            {
-              "expression": "to_tsvector('simple', \"search_text\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
+        "registrations_event_id_id_key": {
+          "name": "registrations_event_id_id_key",
+          "columns": ["event_id", "id"],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -2540,14 +2317,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "registrations_event_id_id_key": {
-          "name": "registrations_event_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["event_id", "id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "registrations_status_check": {
           "name": "registrations_status_check",
@@ -2557,70 +2327,76 @@
           "name": "registrations_display_name_snapshot_check",
           "value": "length(\"registrations\".\"display_name_snapshot\") > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.stripe_connect_accounts": {
+    "stripe_connect_accounts": {
       "name": "stripe_connect_accounts",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "organization_id": {
           "name": "organization_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "stripe_account_id": {
           "name": "stripe_account_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "dashboard_type": {
           "name": "dashboard_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "charges_enabled": {
           "name": "charges_enabled",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         },
         "payouts_enabled": {
           "name": "payouts_enabled",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         },
         "details_submitted": {
           "name": "details_submitted",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         },
         "onboarding_status": {
           "name": "onboarding_status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "country": {
           "name": "country",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "default_currency": {
@@ -2628,24 +2404,43 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "stripe_connect_accounts_organization_id_key": {
+          "name": "stripe_connect_accounts_organization_id_key",
+          "columns": ["organization_id"],
+          "isUnique": true
+        },
+        "stripe_connect_accounts_stripe_account_id_key": {
+          "name": "stripe_connect_accounts_stripe_account_id_key",
+          "columns": ["stripe_account_id"],
+          "isUnique": true
+        },
+        "stripe_connect_accounts_organization_id_stripe_account_id_key": {
+          "name": "stripe_connect_accounts_organization_id_stripe_account_id_key",
+          "columns": ["organization_id", "stripe_account_id"],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "stripe_connect_accounts_organization_id_organizations_id_fk": {
           "name": "stripe_connect_accounts_organization_id_organizations_id_fk",
@@ -2658,25 +2453,20 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "stripe_connect_accounts_organization_id_key": {
-          "name": "stripe_connect_accounts_organization_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["organization_id"]
-        },
-        "stripe_connect_accounts_stripe_account_id_key": {
-          "name": "stripe_connect_accounts_stripe_account_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["stripe_account_id"]
-        },
-        "stripe_connect_accounts_organization_id_stripe_account_id_key": {
-          "name": "stripe_connect_accounts_organization_id_stripe_account_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["organization_id", "stripe_account_id"]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
+        "stripe_connect_accounts_charges_enabled_check": {
+          "name": "stripe_connect_accounts_charges_enabled_check",
+          "value": "\"stripe_connect_accounts\".\"charges_enabled\" in (0, 1)"
+        },
+        "stripe_connect_accounts_payouts_enabled_check": {
+          "name": "stripe_connect_accounts_payouts_enabled_check",
+          "value": "\"stripe_connect_accounts\".\"payouts_enabled\" in (0, 1)"
+        },
+        "stripe_connect_accounts_details_submitted_check": {
+          "name": "stripe_connect_accounts_details_submitted_check",
+          "value": "\"stripe_connect_accounts\".\"details_submitted\" in (0, 1)"
+        },
         "stripe_connect_accounts_stripe_account_id_check": {
           "name": "stripe_connect_accounts_stripe_account_id_check",
           "value": "length(\"stripe_connect_accounts\".\"stripe_account_id\") > 0"
@@ -2689,71 +2479,78 @@
           "name": "stripe_connect_accounts_onboarding_status_check",
           "value": "\"stripe_connect_accounts\".\"onboarding_status\" in ('not_connected', 'onboarding_required', 'pending_verification', 'ready', 'disabled')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.stripe_webhook_events": {
+    "stripe_webhook_events": {
       "name": "stripe_webhook_events",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "stripe_event_id": {
           "name": "stripe_event_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "stripe_account_id": {
           "name": "stripe_account_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "''"
         },
         "event_type": {
           "name": "event_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "payload_json": {
           "name": "payload_json",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "processed_at": {
           "name": "processed_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
+      "indexes": {
         "stripe_webhook_events_stripe_event_id_key": {
           "name": "stripe_webhook_events_stripe_event_id_key",
-          "nullsNotDistinct": false,
-          "columns": ["stripe_event_id"]
+          "columns": ["stripe_event_id"],
+          "isUnique": true
         }
       },
-      "policies": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
+        "stripe_webhook_events_payload_json_check": {
+          "name": "stripe_webhook_events_payload_json_check",
+          "value": "json_valid(\"stripe_webhook_events\".\"payload_json\")"
+        },
         "stripe_webhook_events_stripe_event_id_check": {
           "name": "stripe_webhook_events_stripe_event_id_check",
           "value": "length(\"stripe_webhook_events\".\"stripe_event_id\") > 0"
@@ -2762,59 +2559,72 @@
           "name": "stripe_webhook_events_event_type_check",
           "value": "length(\"stripe_webhook_events\".\"event_type\") > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.users": {
+    "users": {
       "name": "users",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
         },
         "suspended_at": {
           "name": "suspended_at",
-          "type": "timestamp with time zone",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     }
   },
-  "enums": {},
-  "schemas": {},
-  "sequences": {},
-  "roles": {},
-  "policies": {},
   "views": {},
+  "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "audit_logs_event_created_idx": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "checkin_records_event_idx": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

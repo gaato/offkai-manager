@@ -1,4 +1,7 @@
-import { and, asc, desc, eq, ilike, inArray } from 'drizzle-orm';
+import { escapeLikePattern, ilike } from '$lib/server/db/search';
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write, read } from '$lib/server/db/client';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
 import {
   checkinRecords,
@@ -42,26 +45,23 @@ export class CheckInError extends Error {
 
 export async function getCheckInOverview(
   client: DatabaseClient,
-  input: { actorUserId: string; eventId: string; query: string }
+  input: {
+    actorUserId: string;
+    eventId: string;
+    query: string;
+  }
 ): Promise<CheckInOverview> {
-  return client.db.transaction(async (tx) => {
-    const eventRows = await tx
+  return read(client, (tx) => {
+    const eventRows = tx
       .select({ organizationId: events.organizationId })
       .from(events)
       .where(eq(events.id, input.eventId))
-      .limit(1);
+      .limit(1)
+      .all();
     if (!eventRows[0]) throw new CheckInError('not_found', 'event not found');
-    await authorizeOrganizationRole(
-      tx,
-      eventRows[0].organizationId,
-      input.actorUserId,
-      'staff',
-      false,
-      true
-    );
-
+    authorizeOrganizationRole(tx, eventRows[0].organizationId, input.actorUserId, 'staff', true);
     const query = input.query.trim();
-    const registrationRows = await tx
+    const registrationRows = tx
       .select({ registration: registrations, username: externalAccounts.username })
       .from(registrations)
       .leftJoin(
@@ -75,23 +75,25 @@ export async function getCheckInOverview(
         query
           ? and(
               eq(registrations.eventId, input.eventId),
-              ilike(registrations.searchText, `%${query}%`)
+              ilike(registrations.searchText, `%${escapeLikePattern(query)}%`)
             )
           : eq(registrations.eventId, input.eventId)
       )
-      .orderBy(asc(registrations.displayNameSnapshot), asc(registrations.id));
+      .orderBy(asc(registrations.displayNameSnapshot), asc(registrations.id))
+      .all();
     const registrationIds = registrationRows.map(({ registration }) => registration.id);
     const [requestRows, recordRows] =
       registrationIds.length === 0
         ? [[], []]
-        : await Promise.all([
+        : [
             tx
               .select({
                 registrationId: paymentRequests.registrationId,
                 status: paymentRequests.status
               })
               .from(paymentRequests)
-              .where(inArray(paymentRequests.registrationId, registrationIds)),
+              .where(inArray(paymentRequests.registrationId, registrationIds))
+              .all(),
             tx
               .select({
                 registrationId: checkinRecords.registrationId,
@@ -105,7 +107,8 @@ export async function getCheckInOverview(
                 )
               )
               .orderBy(desc(checkinRecords.createdAt), desc(checkinRecords.id))
-          ]);
+              .all()
+          ];
     const paymentStatuses = new Map<string, string[]>();
     for (const request of requestRows) {
       const statuses = paymentStatuses.get(request.registrationId) ?? [];
@@ -140,28 +143,33 @@ export async function getCheckInOverview(
 
 export async function recordCheckIn(
   client: DatabaseClient,
-  input: { actorUserId: string; registrationId: string }
+  input: {
+    actorUserId: string;
+    registrationId: string;
+  },
+  clock: Clock = systemClock
 ): Promise<void> {
-  await client.db.transaction(async (tx) => {
-    const registrationRows = await tx
+  write(client, (tx) => {
+    const registrationRows = tx
       .select()
       .from(registrations)
       .where(eq(registrations.id, input.registrationId))
       .limit(1)
-      .for('update');
+      .all();
     const registration = registrationRows[0];
     if (!registration) throw new CheckInError('not_found', 'registration not found');
-    const eventRows = await tx
+    const eventRows = tx
       .select({ organizationId: events.organizationId })
       .from(events)
       .where(eq(events.id, registration.eventId))
-      .limit(1);
+      .limit(1)
+      .all();
     if (!eventRows[0]) throw new CheckInError('not_found', 'event not found');
-    await authorizeOrganizationRole(tx, eventRows[0].organizationId, input.actorUserId, 'staff');
+    authorizeOrganizationRole(tx, eventRows[0].organizationId, input.actorUserId, 'staff');
     if (registration.status !== 'confirmed') {
       throw new CheckInError('not_confirmed', 'registration is not confirmed');
     }
-    const existing = await tx
+    const existing = tx
       .select({ id: checkinRecords.id })
       .from(checkinRecords)
       .where(
@@ -170,50 +178,62 @@ export async function recordCheckIn(
           eq(checkinRecords.status, 'checked_in')
         )
       )
-      .limit(1);
+      .limit(1)
+      .all();
     if (existing[0]) throw new CheckInError('duplicate', 'registration is already checked in');
-    const records = await tx
+    const records = tx
       .insert(checkinRecords)
       .values({
+        createdAt: clock.now(),
         eventId: registration.eventId,
         registrationId: registration.id,
         actorUserId: input.actorUserId,
         status: 'checked_in',
         method: 'search'
       })
-      .returning({ id: checkinRecords.id });
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: registration.eventId,
-      action: 'checkin.record',
-      targetType: 'registration',
-      targetId: registration.id,
-      after: { checkinRecordId: records[0].id, method: 'search' }
-    });
+      .returning({ id: checkinRecords.id })
+      .all();
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: registration.eventId,
+        action: 'checkin.record',
+        targetType: 'registration',
+        targetId: registration.id,
+        after: { checkinRecordId: records[0].id, method: 'search' }
+      },
+      clock
+    );
   });
 }
 
 export async function undoCheckIn(
   client: DatabaseClient,
-  input: { actorUserId: string; registrationId: string }
+  input: {
+    actorUserId: string;
+    registrationId: string;
+  },
+  clock: Clock = systemClock
 ): Promise<void> {
-  await client.db.transaction(async (tx) => {
-    const registrationRows = await tx
+  write(client, (tx) => {
+    const registrationRows = tx
       .select()
       .from(registrations)
       .where(eq(registrations.id, input.registrationId))
       .limit(1)
-      .for('update');
+      .all();
     const registration = registrationRows[0];
     if (!registration) throw new CheckInError('not_found', 'registration not found');
-    const eventRows = await tx
+    const eventRows = tx
       .select({ organizationId: events.organizationId })
       .from(events)
       .where(eq(events.id, registration.eventId))
-      .limit(1);
+      .limit(1)
+      .all();
     if (!eventRows[0]) throw new CheckInError('not_found', 'event not found');
-    await authorizeOrganizationRole(tx, eventRows[0].organizationId, input.actorUserId, 'staff');
-    const removed = await tx
+    authorizeOrganizationRole(tx, eventRows[0].organizationId, input.actorUserId, 'staff');
+    const removed = tx
       .delete(checkinRecords)
       .where(
         and(
@@ -221,20 +241,25 @@ export async function undoCheckIn(
           eq(checkinRecords.status, 'checked_in')
         )
       )
-      .returning({ id: checkinRecords.id });
+      .returning({ id: checkinRecords.id })
+      .all();
     if (removed.length === 0) {
       throw new CheckInError('not_checked_in', 'registration is not checked in');
     }
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: registration.eventId,
-      action: 'checkin.undo',
-      targetType: 'registration',
-      targetId: registration.id,
-      reason: 'staff undo',
-      before: { checkedIn: true },
-      after: { checkedIn: false }
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: registration.eventId,
+        action: 'checkin.undo',
+        targetType: 'registration',
+        targetId: registration.id,
+        reason: 'staff undo',
+        before: { checkedIn: true },
+        after: { checkedIn: false }
+      },
+      clock
+    );
   });
 }
 

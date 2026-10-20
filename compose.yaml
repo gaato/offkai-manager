@@ -13,10 +13,7 @@ services:
       OFFKAI_CLIENT_IP_HEADER: ${OFFKAI_CLIENT_IP_HEADER:-}
       OFFKAI_TIMEZONE: ${OFFKAI_TIMEZONE:-Asia/Tokyo}
       OFFKAI_LOG_LEVEL: ${OFFKAI_LOG_LEVEL:-info}
-      OFFKAI_DATABASE_URL: postgres://offkai:offkai@db:5432/offkai
-      OFFKAI_DB_MAX_OPEN_CONNS: ${OFFKAI_DB_MAX_OPEN_CONNS:-10}
-      OFFKAI_DB_MAX_IDLE_CONNS: ${OFFKAI_DB_MAX_IDLE_CONNS:-5}
-      OFFKAI_DB_CONN_MAX_LIFETIME: ${OFFKAI_DB_CONN_MAX_LIFETIME:-30m}
+      OFFKAI_DATABASE_PATH: /data/offkai.sqlite
       OFFKAI_DB_MIGRATE: 'true'
       OFFKAI_PUBLIC_BASE_URL: ${OFFKAI_PUBLIC_BASE_URL:-http://127.0.0.1:8080}
       # Local Compose defaults only. Production must disable the bypass and replace the secret.
@@ -30,9 +27,8 @@ services:
       OFFKAI_STRIPE_WEBHOOK_SECRET: ${OFFKAI_STRIPE_WEBHOOK_SECRET:-}
       OFFKAI_PLATFORM_ADMIN_DISCORD_IDS: ${OFFKAI_PLATFORM_ADMIN_DISCORD_IDS:-}
       OFFKAI_WORKER_ENABLED: ${OFFKAI_WORKER_ENABLED:-true}
-    depends_on:
-      db:
-        condition: service_healthy
+    volumes:
+      - offkai-data:/data
     healthcheck:
       test:
         [
@@ -45,19 +41,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-  db:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: offkai
-      POSTGRES_PASSWORD: offkai
-      POSTGRES_DB: offkai
-    volumes:
-      - offkai-pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U offkai -d offkai']
-      interval: 5s
-      timeout: 3s
-      retries: 10
 
 volumes:
-  offkai-pgdata:
+  offkai-data:

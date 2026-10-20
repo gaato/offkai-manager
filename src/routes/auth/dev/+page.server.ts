@@ -51,7 +51,7 @@ export const actions: Actions = {
     if (!form.valid) return fail(400, { form });
 
     const config = getConfig();
-    const linked = config.database.url
+    const linked = config.database.path
       ? await upsertDiscordIdentity(getDatabaseClient(config), {
           providerUserId: form.data.discordUserId,
           username: form.data.username,

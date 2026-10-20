@@ -18,7 +18,6 @@ describe('Discord OAuth', () => {
     expect(url.searchParams.get('scope')).toBe('identify');
     expect(url.searchParams.get('state')).toBe('signed-state');
   });
-
   it('narrows token and user payloads before returning snapshots', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -34,7 +33,6 @@ describe('Discord OAuth', () => {
           ignored: true
         })
       );
-
     await expect(exchangeDiscordCode(oauthConfig, 'code', fetchMock)).resolves.toEqual({
       providerUserId: '123456789012345678',
       username: 'discord-user',
@@ -43,13 +41,11 @@ describe('Discord OAuth', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
-
   it('rejects unsafe return paths and uses the dev login fallback', () => {
     expect(safeReturnTo('https://attacker.example')).toBe('/app');
     expect(safeReturnTo('//attacker.example/path')).toBe('/app');
     expect(safeReturnTo('/\\attacker.example')).toBe('/app');
     expect(safeReturnTo('/app/organizations?tab=team')).toBe('/app/organizations?tab=team');
-
     const config = loadConfig({ OFFKAI_AUTH_DEV_BYPASS: 'true' });
     expect(loginPath(config, '/app')).toBe('/auth/dev?return_to=%2Fapp');
   });

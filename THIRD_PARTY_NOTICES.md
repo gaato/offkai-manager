@@ -6,7 +6,7 @@ AGPL-3.0-or-later; each component remains under its original terms.
 
 ## Scope and generation method
 
-The npm inventory below was regenerated on 2026-07-19 from the frozen
+The npm inventory below was regenerated on 2026-10-21 from the frozen
 `pnpm-lock.yaml` production graph with pnpm 11.9.0:
 
 ```fish
@@ -15,7 +15,7 @@ pnpm licenses list --prod --long --json
 ```
 
 The JSON result was normalized by package name, version, declared SPDX license,
-and upstream homepage. It contains 121 package names and 122 package releases
+and upstream homepage. It contains 123 package names and 124 package releases
 (`real-require` occurs at two versions), including production optional and
 peer packages selected by pnpm for Linux x86-64. Exact copyright notices and
 license files remain in the installed package directories under
@@ -42,7 +42,7 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 - [`aria-query` 5.3.1](https://github.com/A11yance/aria-query#readme)
 - [`axobject-query` 4.1.0](https://github.com/A11yance/axobject-query#readme)
 - [`detect-libc` 2.1.2](https://github.com/lovell/detect-libc#readme)
-- [`drizzle-orm` 0.44.7](https://orm.drizzle.team)
+- [`drizzle-orm` 0.45.4](https://orm.drizzle.team)
 - [`typescript` 5.9.3](https://www.typescriptlang.org/)
 
 ### BSD-3-Clause
@@ -68,7 +68,7 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 ### MIT
 
 - [`@ark/schema` 0.56.2](https://github.com/arktypeio/arktype#readme)
-- [`@ark/util` 0.56.2](https://www.npmjs.com/package/%40ark%2Futil)
+- [`@ark/util` 0.56.2](https://www.npmjs.com/package/@ark/util)
 - [`@babel/runtime` 7.29.7](https://babel.dev/docs/en/next/babel-runtime)
 - [`@date-fns/tz` 1.5.0](https://github.com/date-fns/date-fns#readme)
 - [`@esbuild/linux-x64` 0.28.1](https://github.com/evanw/esbuild#readme)
@@ -87,6 +87,7 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 - [`@sveltejs/kit` 2.70.0](https://svelte.dev)
 - [`@sveltejs/vite-plugin-svelte` 6.2.4](https://github.com/sveltejs/vite-plugin-svelte#readme)
 - [`@sveltejs/vite-plugin-svelte-inspector` 5.0.2](https://github.com/sveltejs/vite-plugin-svelte#readme)
+- [`@types/better-sqlite3` 7.6.13](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/better-sqlite3)
 - [`@types/cookie` 0.6.0](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/cookie)
 - [`@types/estree` 1.0.9](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree)
 - [`@types/json-schema` 7.0.15](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/json-schema)
@@ -103,6 +104,7 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 - [`arkregex` 0.0.8](https://www.npmjs.com/package/arkregex)
 - [`arktype` 2.2.3](https://github.com/arktypeio/arktype#readme)
 - [`atomic-sleep` 1.0.0](https://github.com/davidmarkclements/atomic-sleep#readme)
+- [`better-sqlite3` 13.0.3](http://github.com/WiseLibs/better-sqlite3)
 - [`camelcase` 8.0.0](https://github.com/sindresorhus/camelcase#readme)
 - [`class-validator` 0.14.4](https://github.com/typestack/class-validator#readme)
 - [`clsx` 2.1.1](https://github.com/lukeed/clsx#readme)
@@ -126,6 +128,7 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 - [`magic-string` 0.30.21](https://github.com/Rich-Harris/magic-string#readme)
 - [`mrmime` 2.0.1](https://github.com/lukeed/mrmime#readme)
 - [`nanoid` 3.3.16](https://github.com/ai/nanoid#readme)
+- [`node-addon-api` 8.9.2](https://github.com/nodejs/node-addon-api)
 - [`normalize-url` 8.1.1](https://github.com/sindresorhus/normalize-url#readme)
 - [`obug` 2.1.4](https://github.com/sxzz/obug#readme)
 - [`on-exit-leak-free` 2.1.2](https://github.com/mcollina/on-exit-or-gc#readme)
@@ -170,10 +173,6 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 
 - [`lightningcss` 1.32.0](https://github.com/parcel-bundler/lightningcss#readme)
 - [`lightningcss-linux-x64-gnu` 1.32.0](https://github.com/parcel-bundler/lightningcss#readme)
-
-### Unlicense
-
-- [`postgres` 3.4.9](https://github.com/porsager/postgres)
 
 ## Bundled and vendored material outside the production dependency graph
 

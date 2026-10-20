@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write, read } from '$lib/server/db/client';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
@@ -30,44 +32,54 @@ const discordSnowflakePattern = /^\d{17,20}$/;
 
 export async function createOrganization(
   client: DatabaseClient,
-  input: CreateOrganizationInput
+  input: CreateOrganizationInput,
+  clock: Clock = systemClock
 ): Promise<OrganizationSummary> {
   const name = input.name.trim();
   if (!name || name.length > 120) {
     throw new OrganizationError('validation', 'organization name must be 1 to 120 characters');
   }
-  return client.db.transaction(async (tx) => {
-    const actor = await tx
+  return write(client, (tx) => {
+    const actor = tx
       .select({ id: users.id, suspendedAt: users.suspendedAt })
       .from(users)
       .where(eq(users.id, input.actorUserId))
-      .limit(1);
+      .limit(1)
+      .all();
     if (!actor[0]) throw new OrganizationError('not_found', 'actor user not found');
     if (actor[0].suspendedAt) throw new OrganizationError('forbidden', 'actor user is suspended');
-
-    // Slug selection is short and infrequent. A transaction-scoped global lock
-    // avoids unique races even when one name's suffix is another name's base.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('organization-slug', 0))`);
-    const slugRows = await tx.select({ slug: organizations.slug }).from(organizations);
+    // BEGIN IMMEDIATE serializes slug selection, including collisions between
+    // one name's suffix and another name's base.
+    const slugRows = tx.select({ slug: organizations.slug }).from(organizations).all();
     const slug = availableOrganizationSlug(name, new Set(slugRows.map((row) => row.slug)));
-    const created = await tx
+    const created = tx
       .insert(organizations)
-      .values({ name, slug })
-      .returning({ id: organizations.id, name: organizations.name, slug: organizations.slug });
+      .values({ createdAt: clock.now(), updatedAt: clock.now(), name, slug })
+      .returning({ id: organizations.id, name: organizations.name, slug: organizations.slug })
+      .all();
     const organization = created[0];
-    await tx.insert(organizationMemberships).values({
-      organizationId: organization.id,
-      userId: input.actorUserId,
-      role: 'owner',
-      status: 'active'
-    });
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      action: 'organization.create',
-      targetType: 'organization',
-      targetId: organization.id,
-      after: { name: organization.name, slug: organization.slug }
-    });
+    tx.insert(organizationMemberships)
+      .values({
+        createdAt: clock.now(),
+        updatedAt: clock.now(),
+        joinedAt: clock.now(),
+        organizationId: organization.id,
+        userId: input.actorUserId,
+        role: 'owner',
+        status: 'active'
+      })
+      .run();
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        action: 'organization.create',
+        targetType: 'organization',
+        targetId: organization.id,
+        after: { name: organization.name, slug: organization.slug }
+      },
+      clock
+    );
     return { ...organization, actorRole: 'owner', suspendedAt: null };
   });
 }
@@ -76,25 +88,28 @@ export async function listOrganizationsForUser(
   client: DatabaseClient,
   userId: string
 ): Promise<OrganizationSummary[]> {
-  const rows = await client.db
-    .select({
-      id: organizations.id,
-      name: organizations.name,
-      slug: organizations.slug,
-      suspendedAt: organizations.suspendedAt,
-      actorRole: organizationMemberships.role
-    })
-    .from(organizationMemberships)
-    .innerJoin(organizations, eq(organizations.id, organizationMemberships.organizationId))
-    .where(
-      and(
-        eq(organizationMemberships.userId, userId),
-        eq(organizationMemberships.status, 'active'),
-        sql`${organizations.suspendedAt} is null`
+  return read(client, (tx) => {
+    const rows = tx
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        slug: organizations.slug,
+        suspendedAt: organizations.suspendedAt,
+        actorRole: organizationMemberships.role
+      })
+      .from(organizationMemberships)
+      .innerJoin(organizations, eq(organizations.id, organizationMemberships.organizationId))
+      .where(
+        and(
+          eq(organizationMemberships.userId, userId),
+          eq(organizationMemberships.status, 'active'),
+          sql`${organizations.suspendedAt} is null`
+        )
       )
-    )
-    .orderBy(asc(organizations.createdAt));
-  return rows.map((row) => ({ ...row, actorRole: parseRole(row.actorRole) }));
+      .orderBy(asc(organizations.createdAt))
+      .all();
+    return rows.map((row) => ({ ...row, actorRole: parseRole(row.actorRole) }));
+  });
 }
 
 export async function getOrganizationForUser(
@@ -102,15 +117,8 @@ export async function getOrganizationForUser(
   actorUserId: string,
   organizationId: string
 ): Promise<OrganizationSummary> {
-  return client.db.transaction(async (tx) => {
-    const authorized = await authorizeOrganizationRole(
-      tx,
-      organizationId,
-      actorUserId,
-      'viewer',
-      false,
-      true
-    );
+  return read(client, (tx) => {
+    const authorized = authorizeOrganizationRole(tx, organizationId, actorUserId, 'viewer', true);
     return {
       id: authorized.id,
       name: authorized.name,
@@ -126,10 +134,10 @@ export async function listOrganizationMembers(
   actorUserId: string,
   organizationId: string
 ): Promise<OrganizationMember[]> {
-  return client.db.transaction(async (tx) => {
-    await authorizeOrganizationRole(tx, organizationId, actorUserId, 'viewer', false, true);
-    const rows = await tx
-      .selectDistinctOn([organizationMemberships.id], {
+  return read(client, (tx) => {
+    authorizeOrganizationRole(tx, organizationId, actorUserId, 'viewer', true);
+    const rows = tx
+      .select({
         id: organizationMemberships.id,
         organizationId: organizationMemberships.organizationId,
         userId: organizationMemberships.userId,
@@ -149,7 +157,8 @@ export async function listOrganizationMembers(
         )
       )
       .where(eq(organizationMemberships.organizationId, organizationId))
-      .orderBy(organizationMemberships.id, externalAccounts.linkedAt);
+      .orderBy(organizationMemberships.id, externalAccounts.linkedAt)
+      .all();
     return rows.map((row) => ({
       ...row,
       role: parseRole(row.role),
@@ -164,7 +173,8 @@ export async function listOrganizationMembers(
 
 export async function inviteMember(
   client: DatabaseClient,
-  input: InviteMemberInput
+  input: InviteMemberInput,
+  clock: Clock = systemClock
 ): Promise<OrganizationMember> {
   if (!discordSnowflakePattern.test(input.discordUserId)) {
     throw new OrganizationError('validation', 'invalid Discord user ID');
@@ -172,9 +182,9 @@ export async function inviteMember(
   if (!invitableOrganizationRoleSchema.safeParse(input.role).success) {
     throw new OrganizationError('validation', 'invalid invited role');
   }
-  return client.db.transaction(async (tx) => {
-    await authorizeOrganizationRole(tx, input.organizationId, input.actorUserId, 'owner', true);
-    const accounts = await tx
+  return write(client, (tx) => {
+    authorizeOrganizationRole(tx, input.organizationId, input.actorUserId, 'owner');
+    const accounts = tx
       .select({
         userId: externalAccounts.userId,
         suspendedAt: users.suspendedAt
@@ -187,12 +197,12 @@ export async function inviteMember(
           eq(externalAccounts.providerUserId, input.discordUserId)
         )
       )
-      .limit(1);
+      .limit(1)
+      .all();
     const account = accounts[0];
     if (!account) throw new OrganizationError('not_found', 'Discord account not found');
     if (account.suspendedAt) throw new OrganizationError('forbidden', 'invited user is suspended');
-
-    const currentRows = await tx
+    const currentRows = tx
       .select({
         id: organizationMemberships.id,
         role: organizationMemberships.role,
@@ -205,145 +215,162 @@ export async function inviteMember(
           eq(organizationMemberships.userId, account.userId)
         )
       )
-      .for('update')
-      .limit(1);
+      .limit(1)
+      .all();
     const current = currentRows[0];
     if (current?.status === 'active') {
       throw new OrganizationError('conflict', 'user is already an active member');
     }
-
     let membershipId: string;
     if (current) {
       membershipId = current.id;
-      await tx
-        .update(organizationMemberships)
+      tx.update(organizationMemberships)
         .set({
           role: input.role,
           status: 'active',
-          joinedAt: new Date(),
+          joinedAt: clock.now(),
           invitedByUserId: input.actorUserId,
-          updatedAt: new Date()
+          updatedAt: clock.now()
         })
-        .where(eq(organizationMemberships.id, current.id));
+        .where(eq(organizationMemberships.id, current.id))
+        .run();
     } else {
-      const inserted = await tx
+      const inserted = tx
         .insert(organizationMemberships)
         .values({
+          createdAt: clock.now(),
+          updatedAt: clock.now(),
+          joinedAt: clock.now(),
           organizationId: input.organizationId,
           userId: account.userId,
           role: input.role,
           status: 'active',
           invitedByUserId: input.actorUserId
         })
-        .returning({ id: organizationMemberships.id });
+        .returning({ id: organizationMemberships.id })
+        .all();
       membershipId = inserted[0].id;
     }
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      action: 'membership.invite',
-      targetType: 'organization_membership',
-      targetId: membershipId,
-      before: current ? { role: current.role, status: current.status } : undefined,
-      after: { role: input.role, status: 'active' }
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        action: 'membership.invite',
+        targetType: 'organization_membership',
+        targetId: membershipId,
+        before: current ? { role: current.role, status: current.status } : undefined,
+        after: { role: input.role, status: 'active' }
+      },
+      clock
+    );
     return loadMember(tx, membershipId);
   });
 }
 
 export async function changeRole(
   client: DatabaseClient,
-  input: ChangeRoleInput
+  input: ChangeRoleInput,
+  clock: Clock = systemClock
 ): Promise<OrganizationMember> {
   if (!organizationRoleSchema.safeParse(input.role).success) {
     throw new OrganizationError('validation', 'invalid organization role');
   }
-  return client.db.transaction(async (tx) => {
-    const organizationId = await membershipOrganizationId(tx, input.membershipId);
-    await authorizeOrganizationRole(tx, organizationId, input.actorUserId, 'owner', true);
-    const member = await lockedMember(tx, input.membershipId);
+  return write(client, (tx) => {
+    const organizationId = membershipOrganizationId(tx, input.membershipId);
+    authorizeOrganizationRole(tx, organizationId, input.actorUserId, 'owner');
+    const member = lockedMember(tx, input.membershipId);
     if (member.status !== 'active') {
       throw new OrganizationError('conflict', 'membership is not active');
     }
     if (member.role === input.role) return loadMember(tx, input.membershipId);
     if (member.role === 'owner' && input.role !== 'owner') {
-      await assertAnotherActiveOwner(tx, organizationId);
+      assertAnotherActiveOwner(tx, organizationId);
     }
-    await tx
-      .update(organizationMemberships)
-      .set({ role: input.role, updatedAt: new Date() })
-      .where(eq(organizationMemberships.id, input.membershipId));
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      action: 'membership.role_change',
-      targetType: 'organization_membership',
-      targetId: input.membershipId,
-      reason: input.reason?.trim(),
-      before: { role: member.role },
-      after: { role: input.role }
-    });
+    tx.update(organizationMemberships)
+      .set({ role: input.role, updatedAt: clock.now() })
+      .where(eq(organizationMemberships.id, input.membershipId))
+      .run();
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        action: 'membership.role_change',
+        targetType: 'organization_membership',
+        targetId: input.membershipId,
+        reason: input.reason?.trim(),
+        before: { role: member.role },
+        after: { role: input.role }
+      },
+      clock
+    );
     return loadMember(tx, input.membershipId);
   });
 }
 
 export async function disableMembership(
   client: DatabaseClient,
-  input: ChangeMembershipStatusInput
+  input: ChangeMembershipStatusInput,
+  clock: Clock = systemClock
 ): Promise<OrganizationMember> {
-  return changeMembershipStatus(client, input, 'disabled');
+  return changeMembershipStatus(client, input, 'disabled', clock);
 }
 
 export async function enableMembership(
   client: DatabaseClient,
-  input: ChangeMembershipStatusInput
+  input: ChangeMembershipStatusInput,
+  clock: Clock = systemClock
 ): Promise<OrganizationMember> {
-  return changeMembershipStatus(client, input, 'active');
+  return changeMembershipStatus(client, input, 'active', clock);
 }
 
 async function changeMembershipStatus(
   client: DatabaseClient,
   input: ChangeMembershipStatusInput,
-  status: MembershipStatus
+  status: MembershipStatus,
+  clock: Clock = systemClock
 ): Promise<OrganizationMember> {
-  return client.db.transaction(async (tx) => {
-    const organizationId = await membershipOrganizationId(tx, input.membershipId);
-    await authorizeOrganizationRole(tx, organizationId, input.actorUserId, 'owner', true);
-    const member = await lockedMember(tx, input.membershipId);
+  return write(client, (tx) => {
+    const organizationId = membershipOrganizationId(tx, input.membershipId);
+    authorizeOrganizationRole(tx, organizationId, input.actorUserId, 'owner');
+    const member = lockedMember(tx, input.membershipId);
     if (member.status === status) return loadMember(tx, input.membershipId);
     if (member.role === 'owner' && member.status === 'active' && status === 'disabled') {
-      await assertAnotherActiveOwner(tx, organizationId);
+      assertAnotherActiveOwner(tx, organizationId);
     }
-    await tx
-      .update(organizationMemberships)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(organizationMemberships.id, input.membershipId));
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      action: status === 'active' ? 'membership.enable' : 'membership.disable',
-      targetType: 'organization_membership',
-      targetId: input.membershipId,
-      reason: input.reason?.trim(),
-      before: { status: member.status },
-      after: { status }
-    });
+    tx.update(organizationMemberships)
+      .set({ status, updatedAt: clock.now() })
+      .where(eq(organizationMemberships.id, input.membershipId))
+      .run();
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        action: status === 'active' ? 'membership.enable' : 'membership.disable',
+        targetType: 'organization_membership',
+        targetId: input.membershipId,
+        reason: input.reason?.trim(),
+        before: { status: member.status },
+        after: { status }
+      },
+      clock
+    );
     return loadMember(tx, input.membershipId);
   });
 }
 
-async function membershipOrganizationId(
-  tx: DatabaseTransaction,
-  membershipId: string
-): Promise<string> {
-  const rows = await tx
+function membershipOrganizationId(tx: DatabaseTransaction, membershipId: string): string {
+  const rows = tx
     .select({ organizationId: organizationMemberships.organizationId })
     .from(organizationMemberships)
     .where(eq(organizationMemberships.id, membershipId))
-    .limit(1);
+    .limit(1)
+    .all();
   if (!rows[0]) throw new OrganizationError('not_found', 'membership not found');
   return rows[0].organizationId;
 }
 
-async function lockedMember(tx: DatabaseTransaction, membershipId: string) {
-  const rows = await tx
+function lockedMember(tx: DatabaseTransaction, membershipId: string) {
+  const rows = tx
     .select({
       id: organizationMemberships.id,
       organizationId: organizationMemberships.organizationId,
@@ -352,8 +379,8 @@ async function lockedMember(tx: DatabaseTransaction, membershipId: string) {
     })
     .from(organizationMemberships)
     .where(eq(organizationMemberships.id, membershipId))
-    .for('update')
-    .limit(1);
+    .limit(1)
+    .all();
   if (!rows[0]) throw new OrganizationError('not_found', 'membership not found');
   return {
     ...rows[0],
@@ -362,12 +389,9 @@ async function lockedMember(tx: DatabaseTransaction, membershipId: string) {
   };
 }
 
-async function assertAnotherActiveOwner(
-  tx: DatabaseTransaction,
-  organizationId: string
-): Promise<void> {
-  const rows = await tx
-    .select({ count: sql<number>`count(*)::int` })
+function assertAnotherActiveOwner(tx: DatabaseTransaction, organizationId: string): void {
+  const rows = tx
+    .select({ count: sql<number>`count(*)` })
     .from(organizationMemberships)
     .where(
       and(
@@ -375,17 +399,15 @@ async function assertAnotherActiveOwner(
         eq(organizationMemberships.role, 'owner'),
         eq(organizationMemberships.status, 'active')
       )
-    );
+    )
+    .all();
   if ((rows[0]?.count ?? 0) <= 1) {
     throw new OrganizationError('last_owner', 'organization must keep an active owner');
   }
 }
 
-async function loadMember(
-  tx: DatabaseTransaction,
-  membershipId: string
-): Promise<OrganizationMember> {
-  const rows = await tx
+function loadMember(tx: DatabaseTransaction, membershipId: string): OrganizationMember {
+  const rows = tx
     .select({
       id: organizationMemberships.id,
       organizationId: organizationMemberships.organizationId,
@@ -407,7 +429,8 @@ async function loadMember(
     )
     .where(eq(organizationMemberships.id, membershipId))
     .orderBy(asc(externalAccounts.linkedAt))
-    .limit(1);
+    .limit(1)
+    .all();
   const row = rows[0];
   if (!row) throw new OrganizationError('not_found', 'membership not found');
   return {

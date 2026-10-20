@@ -1,24 +1,57 @@
-import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import postgres, { type Sql } from 'postgres';
+import Database from 'better-sqlite3';
+import { registerSearchFunctions } from './search';
+import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { Config } from '$lib/server/config';
 
 export interface DatabaseClient {
-  db: PostgresJsDatabase;
-  sql: Sql;
+  db: BetterSQLite3Database & { $client: Database.Database };
 }
 
 export type DatabaseTransaction = Parameters<Parameters<DatabaseClient['db']['transaction']>[0]>[0];
 
+type Synchronous<T> = T extends PromiseLike<unknown> ? never : T;
+
+export function write<T>(
+  client: DatabaseClient,
+  fn: (tx: DatabaseTransaction) => T & Synchronous<T>
+): T {
+  return client.db.transaction((tx) => rejectPromise(fn(tx)), { behavior: 'immediate' });
+}
+
+export function read<T>(
+  client: DatabaseClient,
+  fn: (tx: DatabaseTransaction) => T & Synchronous<T>
+): T {
+  return client.db.transaction((tx) => rejectPromise(fn(tx)), { behavior: 'deferred' });
+}
+
+function rejectPromise<T>(value: T): T {
+  if (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    'then' in value &&
+    typeof value.then === 'function'
+  ) {
+    throw new TypeError('Database transactions must be synchronous');
+  }
+  return value;
+}
+
 let singleton: DatabaseClient | undefined;
 
+export function openDatabase(path: string | Buffer): DatabaseClient {
+  const connection = new Database(path);
+  connection.pragma('journal_mode = WAL');
+  connection.pragma('synchronous = NORMAL');
+  connection.pragma('foreign_keys = ON');
+  connection.pragma('busy_timeout = 5000');
+  registerSearchFunctions(connection);
+  return { db: drizzle(connection) };
+}
+
 export function createDatabaseClient(config: Config): DatabaseClient {
-  if (!config.database.url) throw new Error('OFFKAI_DATABASE_URL is not configured');
-  const sql = postgres(config.database.url, {
-    max: config.database.maxOpenConnections,
-    idle_timeout: Math.max(1, Math.floor(config.database.connectionMaxLifetimeMs / 1_000)),
-    max_lifetime: Math.max(1, Math.floor(config.database.connectionMaxLifetimeMs / 1_000))
-  });
-  return { sql, db: drizzle(sql) };
+  if (!config.database.path) throw new Error('OFFKAI_DATABASE_PATH is not configured');
+  return openDatabase(config.database.path);
 }
 
 export function getDatabaseClient(config: Config): DatabaseClient {
@@ -27,10 +60,10 @@ export function getDatabaseClient(config: Config): DatabaseClient {
 }
 
 export async function pingDatabase(client: DatabaseClient): Promise<void> {
-  await client.sql`select 1`;
+  client.db.$client.prepare('select 1').get();
 }
 
 export async function closeDatabase(client: DatabaseClient): Promise<void> {
-  await client.sql.end();
+  client.db.$client.close();
   if (singleton === client) singleton = undefined;
 }

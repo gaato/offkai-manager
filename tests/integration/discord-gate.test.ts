@@ -1,8 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { loadConfig } from '$lib/server/config';
-import { closeDatabase, createDatabaseClient, type DatabaseClient } from '$lib/server/db/client';
-import { runMigrations } from '$lib/server/db/migrate';
+import { testDatabase, fixedClock } from '../database';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { closeDatabase, type DatabaseClient } from '$lib/server/db/client';
 import { eventDiscordIntegrations, users } from '$lib/server/db/schema';
 import {
   checkRegistrationGuildGate,
@@ -17,18 +15,15 @@ import { createOrganization } from '$lib/server/domain/orgs';
 
 class FakeDiscordGateway implements DiscordGateway {
   membershipChecks = 0;
-
   constructor(
     readonly enabled: boolean,
     private readonly member: boolean,
     private readonly managed = true
   ) {}
-
   async isGuildMember(): Promise<boolean> {
     this.membershipChecks += 1;
     return this.member;
   }
-
   async addGuildMemberRole(): Promise<void> {}
   async removeGuildMemberRole(): Promise<void> {}
   async canManageGuild(): Promise<boolean> {
@@ -40,58 +35,62 @@ class FakeDiscordGateway implements DiscordGateway {
 }
 
 describe('registration Discord guild gate', () => {
-  let container: StartedPostgreSqlContainer;
   let client: DatabaseClient;
   let ownerId: string;
   let participantId: string;
   let eventId: string;
-
-  beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:17-alpine').start();
-    client = createDatabaseClient(
-      loadConfig({
-        OFFKAI_DATABASE_URL: container.getConnectionUri(),
-        OFFKAI_SESSION_SECRET: 'discord-gate-secret',
-        OFFKAI_AUTH_DEV_BYPASS: 'true'
-      })
-    );
-    await runMigrations(client);
+  beforeEach(async () => {
+    client = testDatabase();
     ownerId = (
-      await upsertDiscordIdentity(client, {
-        providerUserId: '120000000000000001',
-        username: 'gate-owner',
-        displayName: 'Gate Owner',
-        avatarUrl: ''
-      })
+      await upsertDiscordIdentity(
+        client,
+        {
+          providerUserId: '120000000000000001',
+          username: 'gate-owner',
+          displayName: 'Gate Owner',
+          avatarUrl: ''
+        },
+        fixedClock
+      )
     ).userId;
     participantId = (
-      await upsertDiscordIdentity(client, {
-        providerUserId: '120000000000000002',
-        username: 'gate-participant',
-        displayName: 'Gate Participant',
-        avatarUrl: ''
-      })
+      await upsertDiscordIdentity(
+        client,
+        {
+          providerUserId: '120000000000000002',
+          username: 'gate-participant',
+          displayName: 'Gate Participant',
+          avatarUrl: ''
+        },
+        fixedClock
+      )
     ).userId;
-    const organization = await createOrganization(client, {
-      actorUserId: ownerId,
-      name: 'Discord gate matrix'
-    });
-    eventId = (
-      await createEvent(client, {
+    const organization = await createOrganization(
+      client,
+      {
         actorUserId: ownerId,
-        organizationId: organization.id,
-        title: 'Guild-gated event',
-        startsAt: '2027-09-01T18:00',
-        timeZone: 'Asia/Tokyo'
-      })
+        name: 'Discord gate matrix'
+      },
+      fixedClock
+    );
+    eventId = (
+      await createEvent(
+        client,
+        {
+          actorUserId: ownerId,
+          organizationId: organization.id,
+          title: 'Guild-gated event',
+          startsAt: '2027-09-01T18:00',
+          timeZone: 'Asia/Tokyo'
+        },
+        undefined,
+        fixedClock
+      )
     ).id;
   });
-
-  afterAll(async () => {
+  afterEach(async () => {
     if (client) await closeDatabase(client);
-    if (container) await container.stop();
   });
-
   it.each(['not_used', 'optional', 'login_required'] as const)(
     'allows the %s policy without a membership call',
     async (policy) => {
@@ -106,7 +105,6 @@ describe('registration Discord guild gate', () => {
       expect(gateway.membershipChecks).toBe(0);
     }
   );
-
   it('allows guild policy when the bot is disabled or the integration is missing', async () => {
     const disabled = new FakeDiscordGateway(false, false);
     await expect(
@@ -127,13 +125,17 @@ describe('registration Discord guild gate', () => {
     expect(disabled.membershipChecks).toBe(0);
     expect(enabled.membershipChecks).toBe(0);
   });
-
   it('allows members and sends non-members to the configured invitation', async () => {
-    await client.db.insert(eventDiscordIntegrations).values({
-      eventId,
-      guildId: '120000000000000003',
-      inviteUrl: 'https://discord.gg/offkai'
-    });
+    client.db
+      .insert(eventDiscordIntegrations)
+      .values({
+        createdAt: fixedClock.now(),
+        updatedAt: fixedClock.now(),
+        eventId,
+        guildId: '120000000000000003',
+        inviteUrl: 'https://discord.gg/offkai'
+      })
+      .run();
     await expect(
       checkRegistrationGuildGate(client, new FakeDiscordGateway(true, true), {
         eventId,
@@ -149,9 +151,22 @@ describe('registration Discord guild gate', () => {
       })
     ).resolves.toEqual({ allowed: false, inviteUrl: 'https://discord.gg/offkai' });
   });
-
   it('denies an account without a linked Discord identity', async () => {
-    const rows = await client.db.insert(users).values({}).returning({ id: users.id });
+    client.db
+      .insert(eventDiscordIntegrations)
+      .values({
+        createdAt: fixedClock.now(),
+        updatedAt: fixedClock.now(),
+        eventId,
+        guildId: '120000000000000003',
+        inviteUrl: 'https://discord.gg/offkai'
+      })
+      .run();
+    const rows = client.db
+      .insert(users)
+      .values({ createdAt: fixedClock.now(), updatedAt: fixedClock.now() })
+      .returning({ id: users.id })
+      .all();
     const gateway = new FakeDiscordGateway(true, true);
     await expect(
       checkRegistrationGuildGate(client, gateway, {
@@ -162,11 +177,12 @@ describe('registration Discord guild gate', () => {
     ).resolves.toEqual({ allowed: false, inviteUrl: 'https://discord.gg/offkai' });
     expect(gateway.membershipChecks).toBe(0);
   });
-
   it('refuses to bind the shared bot to a guild the organizer does not manage', async () => {
-    await client.db
+    client.db
       .insert(eventDiscordIntegrations)
       .values({
+        createdAt: fixedClock.now(),
+        updatedAt: fixedClock.now(),
         eventId,
         guildId: '120000000000000003',
         guildNameSnapshot: 'Bound Guild',
@@ -179,21 +195,25 @@ describe('registration Discord guild gate', () => {
           guildNameSnapshot: 'Bound Guild',
           roleId: '120000000000000005'
         }
-      });
-
-    await expect(
-      updateEventDiscordSettings(client, new FakeDiscordGateway(true, false, false), {
-        actorUserId: ownerId,
-        eventId,
-        policy: 'login_required',
-        guildId: '120000000000000004',
-        inviteUrl: 'https://discord.gg/hijacked',
-        roleId: '120000000000000006'
       })
+      .run();
+    await expect(
+      updateEventDiscordSettings(
+        client,
+        new FakeDiscordGateway(true, false, false),
+        {
+          actorUserId: ownerId,
+          eventId,
+          policy: 'login_required',
+          guildId: '120000000000000004',
+          inviteUrl: 'https://discord.gg/hijacked',
+          roleId: '120000000000000006'
+        },
+        fixedClock
+      )
     ).rejects.toEqual(
       expect.objectContaining<Partial<DiscordSettingsError>>({ code: 'guild_not_managed' })
     );
-
     const settings = await getEventDiscordSettings(client, ownerId, eventId);
     expect(settings.integration?.guildId).toBe('120000000000000003');
     expect(settings.integration?.roleId).toBe('120000000000000005');

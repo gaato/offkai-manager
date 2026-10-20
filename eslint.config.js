@@ -49,5 +49,43 @@ export default tseslint.config(
       ]
     }
   },
+  {
+    files: ['**/*.{ts,js,mjs,svelte}'],
+    ignores: ['src/lib/server/db/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression > MemberExpression.callee[property.name='transaction'], CallExpression > MemberExpression.callee[computed=true][property.value='transaction']",
+          message:
+            'Use read/write from server/db/client so async callbacks cannot commit at their first await.'
+        }
+      ]
+    }
+  },
+  {
+    files: ['src/lib/server/{domain,worker}/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression > MemberExpression.callee[property.name='transaction'], CallExpression > MemberExpression.callee[computed=true][property.value='transaction']",
+          message:
+            'Use read/write from server/db/client so async callbacks cannot commit at their first await.'
+        },
+        {
+          selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+          message: 'Use the injected Clock so domain and worker time is deterministic.'
+        },
+        {
+          selector:
+            "MemberExpression[object.name='Date'][property.name='now'], MemberExpression[object.name='Math'][property.name='random']",
+          message: 'Inject time and randomness so domain behavior is reproducible.'
+        }
+      ]
+    }
+  },
   prettier
 );

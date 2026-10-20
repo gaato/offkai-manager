@@ -39,11 +39,10 @@ import {
   stripeSweepFixtures,
   suspendedUserFixture
 } from './fixtures';
-
-export async function seedE2E(databaseUrl: string): Promise<void> {
+export async function seedE2E(databasePath: string): Promise<void> {
   const client = createDatabaseClient(
     loadConfig({
-      OFFKAI_DATABASE_URL: databaseUrl,
+      OFFKAI_DATABASE_PATH: databasePath,
       OFFKAI_SESSION_SECRET: 'e2e-development-session-secret',
       OFFKAI_AUTH_DEV_BYPASS: 'true'
     })
@@ -62,18 +61,24 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       displayName: 'Organizer Scenario',
       avatarUrl: ''
     });
-    await client.db.insert(users).values({
-      id: suspendedUserFixture.userId,
-      suspendedAt: new Date('2026-07-01T00:00:00Z')
-    });
-    await client.db.insert(externalAccounts).values({
-      userId: suspendedUserFixture.userId,
-      provider: 'discord',
-      providerUserId: suspendedUserFixture.discordUserId,
-      username: 'suspended-user',
-      displayName: suspendedUserFixture.displayName,
-      avatarUrl: ''
-    });
+    client.db
+      .insert(users)
+      .values({
+        id: suspendedUserFixture.userId,
+        suspendedAt: new Date('2026-07-01T00:00:00Z')
+      })
+      .run();
+    client.db
+      .insert(externalAccounts)
+      .values({
+        userId: suspendedUserFixture.userId,
+        provider: 'discord',
+        providerUserId: suspendedUserFixture.discordUserId,
+        username: 'suspended-user',
+        displayName: suspendedUserFixture.displayName,
+        avatarUrl: ''
+      })
+      .run();
     await upsertDiscordIdentity(client, {
       providerUserId: e2eUsers.inviteTarget,
       username: 'invited-member',
@@ -147,17 +152,20 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       if (fixture.status === 'not_connected') continue;
       const detailsSubmitted = ['pending_verification', 'ready'].includes(fixture.status);
       const ready = fixture.status === 'ready';
-      await client.db.insert(stripeConnectAccounts).values({
-        organizationId: stateOrganization.id,
-        stripeAccountId: `acct_sweep_${index + 1}`,
-        dashboardType: 'express',
-        chargesEnabled: ready,
-        payoutsEnabled: ready,
-        detailsSubmitted,
-        onboardingStatus: fixture.status,
-        country: 'JP',
-        defaultCurrency: 'jpy'
-      });
+      client.db
+        .insert(stripeConnectAccounts)
+        .values({
+          organizationId: stateOrganization.id,
+          stripeAccountId: `acct_sweep_${index + 1}`,
+          dashboardType: 'express',
+          chargesEnabled: ready,
+          payoutsEnabled: ready,
+          detailsSubmitted,
+          onboardingStatus: fixture.status,
+          country: 'JP',
+          defaultCurrency: 'jpy'
+        })
+        .run();
     }
     for (const name of Object.values(devStripeOrganizations)) {
       await createOrganization(client, { actorUserId: sweepOwner.userId, name });
@@ -237,7 +245,7 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       actorUserId: sweepOwner.userId,
       eventId: draftPaymentEvent.id,
       title: 'Draft participation fee',
-      amountMinor: 4_000n,
+      amountMinor: 4000n,
       currency: 'JPY',
       dueAt: null,
       instructions: ''
@@ -252,19 +260,22 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       timeZone: 'Asia/Tokyo'
     });
     const frozenRegistrationId = '10000000-0000-4000-8000-000000000021';
-    await client.db.insert(registrations).values({
-      id: frozenRegistrationId,
-      eventId: frozenPaymentEvent.id,
-      userId: sweepOwner.userId,
-      status: 'confirmed',
-      displayNameSnapshot: 'Frozen Payment Participant',
-      searchText: 'Frozen Payment Participant sweep-owner'
-    });
+    client.db
+      .insert(registrations)
+      .values({
+        id: frozenRegistrationId,
+        eventId: frozenPaymentEvent.id,
+        userId: sweepOwner.userId,
+        status: 'confirmed',
+        displayNameSnapshot: 'Frozen Payment Participant',
+        searchText: 'Frozen Payment Participant sweep-owner'
+      })
+      .run();
     const frozenCollection = await createCollection(client, {
       actorUserId: sweepOwner.userId,
       eventId: frozenPaymentEvent.id,
       title: 'Frozen participation fee',
-      amountMinor: 7_000n,
+      amountMinor: 7000n,
       currency: 'JPY',
       dueAt: new Date('2027-07-20T15:00:00Z'),
       instructions: ''
@@ -273,12 +284,13 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       actorUserId: sweepOwner.userId,
       eventId: frozenPaymentEvent.id
     });
-    const frozenRequest = await client.db
+    const frozenRequest = client.db
       .select({ id: paymentRequests.id })
       .from(paymentRequests)
       .where(eq(paymentRequests.collectionId, frozenCollection.id))
-      .limit(1);
-    const cashMethod = await client.db
+      .limit(1)
+      .all();
+    const cashMethod = client.db
       .select({ id: collectionPaymentMethods.id })
       .from(collectionPaymentMethods)
       .where(
@@ -287,7 +299,8 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
           eq(collectionPaymentMethods.label, 'payments.default_method.cash.label')
         )
       )
-      .limit(1);
+      .limit(1)
+      .all();
     await confirmManualPayment(client, {
       actorUserId: sweepOwner.userId,
       paymentRequestId: frozenRequest[0].id,
@@ -334,7 +347,6 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       eventId: event.id,
       fieldId: archived.id
     });
-
     const publicOrganization = await createOrganization(client, {
       actorUserId: sweepOwner.userId,
       name: 'Public Fixtures'
@@ -391,7 +403,6 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       actorUserId: sweepOwner.userId,
       eventId: publicFormEventId
     });
-
     for (const [status, fixture] of Object.entries(participantFixtures)) {
       const username = status === 'cancelled' ? 'participant-withdrawn' : `participant-${status}`;
       const participant = await upsertDiscordIdentity(client, {
@@ -400,43 +411,51 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
         displayName: fixture.displayName,
         avatarUrl: ''
       });
-      await client.db.insert(registrations).values({
-        id: fixture.registrationId,
-        eventId: publicFormEventId,
-        userId: participant.userId,
-        status: ['paid', 'conflict', 'refunded'].includes(status) ? 'confirmed' : status,
-        displayNameSnapshot: fixture.displayName,
-        searchText: `${fixture.displayName} ${username}`
-      });
-      await client.db.insert(registrationFormAnswers).values({
-        eventId: publicFormEventId,
-        registrationId: fixture.registrationId,
-        fieldId: publicFormFields[0].id,
-        fieldKeySnapshot: publicFormFields[0].key,
-        fieldLabelSnapshot: publicFormFields[0].label,
-        fieldTypeSnapshot: publicFormFields[0].type,
-        valueText: fixture.displayName,
-        valueBool: null
-      });
-      if (status === 'applied') {
-        await client.db.insert(registrationFormAnswers).values({
+      client.db
+        .insert(registrations)
+        .values({
+          id: fixture.registrationId,
+          eventId: publicFormEventId,
+          userId: participant.userId,
+          status: ['paid', 'conflict', 'refunded'].includes(status) ? 'confirmed' : status,
+          displayNameSnapshot: fixture.displayName,
+          searchText: `${fixture.displayName} ${username}`
+        })
+        .run();
+      client.db
+        .insert(registrationFormAnswers)
+        .values({
           eventId: publicFormEventId,
           registrationId: fixture.registrationId,
-          fieldId: publicFormFields[1].id,
-          fieldKeySnapshot: publicFormFields[1].key,
-          fieldLabelSnapshot: publicFormFields[1].label,
-          fieldTypeSnapshot: publicFormFields[1].type,
-          valueText: '=SUM(1,1)',
+          fieldId: publicFormFields[0].id,
+          fieldKeySnapshot: publicFormFields[0].key,
+          fieldLabelSnapshot: publicFormFields[0].label,
+          fieldTypeSnapshot: publicFormFields[0].type,
+          valueText: fixture.displayName,
           valueBool: null
-        });
+        })
+        .run();
+      if (status === 'applied') {
+        client.db
+          .insert(registrationFormAnswers)
+          .values({
+            eventId: publicFormEventId,
+            registrationId: fixture.registrationId,
+            fieldId: publicFormFields[1].id,
+            fieldKeySnapshot: publicFormFields[1].key,
+            fieldLabelSnapshot: publicFormFields[1].label,
+            fieldTypeSnapshot: publicFormFields[1].type,
+            valueText: '=SUM(1,1)',
+            valueBool: null
+          })
+          .run();
       }
     }
-
     const participantCollection = await createCollection(client, {
       actorUserId: sweepOwner.userId,
       eventId: publicFormEventId,
       title: 'Summer Gathering participation fee',
-      amountMinor: 5_000n,
+      amountMinor: 5000n,
       currency: 'JPY',
       dueAt: new Date('2027-08-01T15:00:00Z'),
       instructions: 'Contact the planning team if you need to change your payment method.'
@@ -446,27 +465,31 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       eventId: participantCollection.eventId
     });
     const publicStripeAccountId = 'acct_sweep_payment_states';
-    await client.db.insert(stripeConnectAccounts).values({
-      organizationId: publicOrganization.id,
-      stripeAccountId: publicStripeAccountId,
-      dashboardType: 'express',
-      chargesEnabled: true,
-      payoutsEnabled: true,
-      detailsSubmitted: true,
-      onboardingStatus: 'ready',
-      country: 'JP',
-      defaultCurrency: 'jpy'
-    });
+    client.db
+      .insert(stripeConnectAccounts)
+      .values({
+        organizationId: publicOrganization.id,
+        stripeAccountId: publicStripeAccountId,
+        dashboardType: 'express',
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        detailsSubmitted: true,
+        onboardingStatus: 'ready',
+        country: 'JP',
+        defaultCurrency: 'jpy'
+      })
+      .run();
     for (const state of ['paid', 'conflict', 'refunded'] as const) {
       const fixture = participantFixtures[state];
-      const requestRows = await client.db
+      const requestRows = client.db
         .select({ id: paymentRequests.id })
         .from(paymentRequests)
         .where(eq(paymentRequests.registrationId, fixture.registrationId))
-        .limit(1);
+        .limit(1)
+        .all();
       const requestId = requestRows[0].id;
       const sessionId = `cs_sweep_${state}`;
-      await client.db
+      client.db
         .update(paymentRequests)
         .set({
           status: 'payment_pending',
@@ -475,7 +498,8 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
           paymentIntentId: `pi_sweep_${state}`,
           chargeType: 'direct'
         })
-        .where(eq(paymentRequests.id, requestId));
+        .where(eq(paymentRequests.id, requestId))
+        .run();
       if (state !== 'paid') {
         await changeRegistrationStatus(client, {
           actorUserId: sweepOwner.userId,
@@ -503,15 +527,15 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
         });
       }
     }
-
     const suspendedOrganization = await createOrganization(client, {
       actorUserId: sweepOwner.userId,
       name: 'Suspended Fixtures'
     });
-    await client.db
+    client.db
       .update(organizations)
-      .set({ suspendedAt: new Date() })
-      .where(eq(organizations.id, suspendedOrganization.id));
+      .set({ suspendedAt: new Date('2026-10-21T00:00:00.000Z') })
+      .where(eq(organizations.id, suspendedOrganization.id))
+      .run();
   } finally {
     await closeDatabase(client);
   }

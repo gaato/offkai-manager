@@ -9,12 +9,6 @@ const boolWithDefault = (fallback: boolean) =>
     z.boolean()
   );
 
-const intWithDefault = (fallback: number) =>
-  z.preprocess(
-    (value) => (value === undefined || value === '' ? fallback : Number(value)),
-    z.number().int()
-  );
-
 function parseDuration(value: unknown, fallback: string, name: string): number {
   const raw = value === undefined || value === '' ? fallback : String(value);
   const part = /(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g;
@@ -45,10 +39,11 @@ const rawSchema = z.object({
   OFFKAI_CLIENT_IP_HEADER: z.string().default(''),
   OFFKAI_TIMEZONE: z.string().default('Asia/Tokyo'),
   OFFKAI_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  OFFKAI_DATABASE_URL: z.string().default(''),
-  OFFKAI_DB_MAX_OPEN_CONNS: intWithDefault(10),
-  OFFKAI_DB_MAX_IDLE_CONNS: intWithDefault(5),
-  OFFKAI_DB_CONN_MAX_LIFETIME: z.string().optional(),
+  OFFKAI_DATABASE_PATH: z
+    .string()
+    .trim()
+    .refine((path) => !path.includes('\0'), 'database path must not contain NUL')
+    .default(''),
   OFFKAI_DB_MIGRATE: boolWithDefault(true),
   OFFKAI_PUBLIC_BASE_URL: z.string().default('http://127.0.0.1:8080'),
   OFFKAI_SESSION_SECRET: z.string().default(''),
@@ -74,10 +69,7 @@ export interface Config {
   time: { zone: string };
   log: { level: 'debug' | 'info' | 'warn' | 'error' };
   database: {
-    url: string;
-    maxOpenConnections: number;
-    maxIdleConnections: number;
-    connectionMaxLifetimeMs: number;
+    path: string;
     migrate: boolean;
   };
   auth: {
@@ -140,18 +132,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const raw = parsed.data;
   const address = parseHttpAddress(raw.OFFKAI_HTTP_ADDR);
 
-  if (raw.OFFKAI_DB_MAX_OPEN_CONNS < 1) {
-    throw new Error('OFFKAI_DB_MAX_OPEN_CONNS must be greater than zero');
-  }
-  if (raw.OFFKAI_DB_MAX_IDLE_CONNS < 0) {
-    throw new Error('OFFKAI_DB_MAX_IDLE_CONNS must be zero or greater');
-  }
-  if (raw.OFFKAI_DB_MAX_IDLE_CONNS > raw.OFFKAI_DB_MAX_OPEN_CONNS) {
-    throw new Error(
-      'OFFKAI_DB_MAX_IDLE_CONNS must be less than or equal to OFFKAI_DB_MAX_OPEN_CONNS'
-    );
-  }
-
   let publicBaseUrl: URL;
   try {
     publicBaseUrl = new URL(raw.OFFKAI_PUBLIC_BASE_URL);
@@ -174,8 +154,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
-  if (!raw.OFFKAI_AUTH_DEV_BYPASS && !raw.OFFKAI_DATABASE_URL) {
-    throw new Error('OFFKAI_DATABASE_URL is required when OFFKAI_AUTH_DEV_BYPASS is not enabled');
+  if (!raw.OFFKAI_AUTH_DEV_BYPASS && !raw.OFFKAI_DATABASE_PATH) {
+    throw new Error('OFFKAI_DATABASE_PATH is required when OFFKAI_AUTH_DEV_BYPASS is not enabled');
   }
   if (!raw.OFFKAI_AUTH_DEV_BYPASS && !raw.OFFKAI_SESSION_SECRET) {
     throw new Error('OFFKAI_SESSION_SECRET is required when OFFKAI_AUTH_DEV_BYPASS is not enabled');
@@ -241,14 +221,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     time: { zone: assertTimeZone(raw.OFFKAI_TIMEZONE) },
     log: { level: raw.OFFKAI_LOG_LEVEL },
     database: {
-      url: raw.OFFKAI_DATABASE_URL,
-      maxOpenConnections: raw.OFFKAI_DB_MAX_OPEN_CONNS,
-      maxIdleConnections: raw.OFFKAI_DB_MAX_IDLE_CONNS,
-      connectionMaxLifetimeMs: parseDuration(
-        raw.OFFKAI_DB_CONN_MAX_LIFETIME,
-        '30m',
-        'OFFKAI_DB_CONN_MAX_LIFETIME'
-      ),
+      path: raw.OFFKAI_DATABASE_PATH,
       migrate: raw.OFFKAI_DB_MIGRATE
     },
     auth: {

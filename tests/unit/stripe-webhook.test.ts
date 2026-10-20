@@ -39,7 +39,6 @@ describe('Stripe webhook stable-field parser', () => {
       currency: 'JPY'
     });
   });
-
   it('rejects a bad signature and ignores unrelated signed events', () => {
     const payload = JSON.stringify({
       id: 'evt_other',

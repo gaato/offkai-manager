@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '$lib/server/clock';
+import { write } from '$lib/server/db/client';
 import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
@@ -21,9 +23,12 @@ import { CollectionError } from './errors';
 import { backfillPaymentRequests } from './requests';
 
 const collectionTitleLimit = 200;
-const collectionInstructionsLimit = 10_000;
+
+const collectionInstructionsLimit = 10000;
+
 const methodLabelLimit = 100;
-const methodInstructionsLimit = 5_000;
+
+const methodInstructionsLimit = 5000;
 
 const defaultPaymentMethods = [
   {
@@ -138,26 +143,29 @@ export interface UpsertPaymentMethodInput {
 /** Creates the one non-archived collection exposed by the MVP event workflow. */
 export async function createCollection(
   client: DatabaseClient,
-  input: CreateCollectionInput
+  input: CreateCollectionInput,
+  clock: Clock = systemClock
 ): Promise<Collection> {
   const normalized = validateCollectionInput(input);
-  return client.db.transaction(async (tx) => {
-    const event = await loadAuthorizedEvent(tx, input.eventId, input.actorUserId, true);
+  return write(client, (tx) => {
+    const event = loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
     if (event.archivedAt) throw new CollectionError('illegal_transition', 'event is archived');
-    if (await findMainCollection(tx, input.eventId)) {
+    if (findMainCollection(tx, input.eventId)) {
       throw new CollectionError('conflict', 'event already has an active collection');
     }
-
-    const rows = await tx
+    const rows = tx
       .insert(collections)
       .values({
+        createdAt: clock.now(),
+        updatedAt: clock.now(),
         eventId: input.eventId,
         ...normalized,
         status: 'draft'
       })
-      .returning();
+      .returning()
+      .all();
     const collection = parseCollection(rows[0]);
-    const methodRows = await tx
+    const methodRows = tx
       .insert(collectionPaymentMethods)
       .values(
         defaultPaymentMethods.map((method) => ({
@@ -166,22 +174,27 @@ export async function createCollection(
           ...method
         }))
       )
-      .returning({ id: collectionPaymentMethods.id });
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: input.eventId,
-      action: 'collection.create',
-      targetType: 'collection',
-      targetId: collection.id,
-      after: {
-        title: collection.title,
-        amountMinor: collection.amountMinor.toString(),
-        currency: collection.currency,
-        dueAt: collection.dueAt,
-        status: collection.status,
-        defaultMethodIds: methodRows.map(({ id }) => id)
-      }
-    });
+      .returning({ id: collectionPaymentMethods.id })
+      .all();
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: input.eventId,
+        action: 'collection.create',
+        targetType: 'collection',
+        targetId: collection.id,
+        after: {
+          title: collection.title,
+          amountMinor: collection.amountMinor.toString(),
+          currency: collection.currency,
+          dueAt: collection.dueAt,
+          status: collection.status,
+          defaultMethodIds: methodRows.map(({ id }) => id)
+        }
+      },
+      clock
+    );
     return collection;
   });
 }
@@ -189,17 +202,18 @@ export async function createCollection(
 /** Updates collection settings while preserving started and settled monetary facts. */
 export async function updateCollection(
   client: DatabaseClient,
-  input: UpdateCollectionInput
+  input: UpdateCollectionInput,
+  clock: Clock = systemClock
 ): Promise<Collection> {
   const normalized = validateCollectionInput({ ...input, currency: 'JPY' });
-  return client.db.transaction(async (tx) => {
-    await loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
-    const current = await requireMainCollection(tx, input.eventId, true);
+  return write(client, (tx) => {
+    loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
+    const current = requireMainCollection(tx, input.eventId);
     if (current.status === 'archived') {
       throw new CollectionError('illegal_transition', 'collection is archived');
     }
     if (current.amountMinor !== normalized.amountMinor) {
-      const started = await tx
+      const started = tx
         .select({ id: paymentRequests.id })
         .from(paymentRequests)
         .where(
@@ -208,14 +222,16 @@ export async function updateCollection(
             inArray(paymentRequests.status, ['payment_pending', 'paid'])
           )
         )
-        .limit(1);
-      const settled = await tx
+        .limit(1)
+        .all();
+      const settled = tx
         .select({ id: paymentRecords.id })
         .from(paymentRecords)
         .where(
           and(eq(paymentRecords.collectionId, current.id), eq(paymentRecords.status, 'settled'))
         )
-        .limit(1);
+        .limit(1)
+        .all();
       if (started[0] || settled[0]) {
         throw new CollectionError(
           'amount_frozen',
@@ -223,93 +239,118 @@ export async function updateCollection(
         );
       }
     }
-
-    const rows = await tx
+    const rows = tx
       .update(collections)
       .set({
         title: normalized.title,
         amountMinor: normalized.amountMinor,
         dueAt: normalized.dueAt,
         instructions: normalized.instructions,
-        updatedAt: new Date()
+        updatedAt: clock.now()
       })
       .where(eq(collections.id, current.id))
-      .returning();
+      .returning()
+      .all();
     const updated = parseCollection(rows[0]);
     if (current.amountMinor !== updated.amountMinor) {
-      await tx
-        .update(paymentRequests)
-        .set({ amountMinor: updated.amountMinor, dueAt: updated.dueAt, updatedAt: new Date() })
+      tx.update(paymentRequests)
+        .set({ amountMinor: updated.amountMinor, dueAt: updated.dueAt, updatedAt: clock.now() })
         .where(
           and(
             eq(paymentRequests.collectionId, current.id),
             inArray(paymentRequests.status, ['pending'])
           )
-        );
+        )
+        .run();
     } else if (current.dueAt?.getTime() !== updated.dueAt?.getTime()) {
-      await tx
-        .update(paymentRequests)
-        .set({ dueAt: updated.dueAt, updatedAt: new Date() })
+      tx.update(paymentRequests)
+        .set({ dueAt: updated.dueAt, updatedAt: clock.now() })
         .where(
           and(
             eq(paymentRequests.collectionId, current.id),
             inArray(paymentRequests.status, ['pending'])
           )
-        );
+        )
+        .run();
     }
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: input.eventId,
-      action: 'collection.update',
-      targetType: 'collection',
-      targetId: current.id,
-      before: collectionSettingsAudit(current),
-      after: collectionSettingsAudit(updated)
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: input.eventId,
+        action: 'collection.update',
+        targetType: 'collection',
+        targetId: current.id,
+        before: collectionSettingsAudit(current),
+        after: collectionSettingsAudit(updated)
+      },
+      clock
+    );
     return updated;
   });
 }
 
-export function openCollection(
+export async function openCollection(
   client: DatabaseClient,
-  input: { actorUserId: string; eventId: string; reason?: string }
+  input: {
+    actorUserId: string;
+    eventId: string;
+    reason?: string;
+  },
+  clock: Clock = systemClock
 ): Promise<Collection> {
-  return changeCollectionStatus(client, input, 'open');
+  return changeCollectionStatus(client, input, 'open', clock);
 }
 
-export function closeCollection(
+export async function closeCollection(
   client: DatabaseClient,
-  input: { actorUserId: string; eventId: string; reason?: string }
+  input: {
+    actorUserId: string;
+    eventId: string;
+    reason?: string;
+  },
+  clock: Clock = systemClock
 ): Promise<Collection> {
-  return changeCollectionStatus(client, input, 'closed');
+  return changeCollectionStatus(client, input, 'closed', clock);
 }
 
-export function reopenCollection(
+export async function reopenCollection(
   client: DatabaseClient,
-  input: { actorUserId: string; eventId: string; reason?: string }
+  input: {
+    actorUserId: string;
+    eventId: string;
+    reason?: string;
+  },
+  clock: Clock = systemClock
 ): Promise<Collection> {
-  return changeCollectionStatus(client, input, 'open');
+  return changeCollectionStatus(client, input, 'open', clock);
 }
 
-export function archiveCollection(
+export async function archiveCollection(
   client: DatabaseClient,
-  input: { actorUserId: string; eventId: string; reason?: string }
+  input: {
+    actorUserId: string;
+    eventId: string;
+    reason?: string;
+  },
+  clock: Clock = systemClock
 ): Promise<Collection> {
-  return changeCollectionStatus(client, input, 'archived');
+  return changeCollectionStatus(client, input, 'archived', clock);
 }
 
 export async function upsertPaymentMethod(
   client: DatabaseClient,
-  input: UpsertPaymentMethodInput
+  input: UpsertPaymentMethodInput,
+  clock: Clock = systemClock
 ): Promise<CollectionPaymentMethod> {
   const values = validateMethodInput(input);
-  return client.db.transaction(async (tx) => {
-    await loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
-    const collection = await requireMainCollection(tx, input.eventId, true);
+  return write(client, (tx) => {
+    loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
+    const collection = requireMainCollection(tx, input.eventId);
     if (collection.status === 'archived') {
       throw new CollectionError('illegal_transition', 'collection is archived');
     }
-    const duplicate = await tx
+    const duplicate = tx
       .select({ id: collectionPaymentMethods.id })
       .from(collectionPaymentMethods)
       .where(
@@ -319,13 +360,13 @@ export async function upsertPaymentMethod(
           input.methodId ? ne(collectionPaymentMethods.id, input.methodId) : undefined
         )
       )
-      .limit(1);
+      .limit(1)
+      .all();
     if (duplicate[0]) throw new CollectionError('conflict', 'payment method label is in use');
-
     let before: CollectionPaymentMethod | null = null;
     let row: typeof collectionPaymentMethods.$inferSelect;
     if (input.methodId) {
-      const currentRows = await tx
+      const currentRows = tx
         .select()
         .from(collectionPaymentMethods)
         .where(
@@ -335,32 +376,38 @@ export async function upsertPaymentMethod(
           )
         )
         .limit(1)
-        .for('update');
+        .all();
       if (!currentRows[0]) throw new CollectionError('not_found', 'payment method not found');
       before = parsePaymentMethod(currentRows[0]);
-      const updatedRows = await tx
+      const updatedRows = tx
         .update(collectionPaymentMethods)
         .set(values)
         .where(eq(collectionPaymentMethods.id, input.methodId))
-        .returning();
+        .returning()
+        .all();
       row = updatedRows[0];
     } else {
-      const insertedRows = await tx
+      const insertedRows = tx
         .insert(collectionPaymentMethods)
         .values({ collectionId: collection.id, ...values })
-        .returning();
+        .returning()
+        .all();
       row = insertedRows[0];
     }
     const method = parsePaymentMethod(row);
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: input.eventId,
-      action: 'payment_method.upsert',
-      targetType: 'collection_payment_method',
-      targetId: method.id,
-      before,
-      after: method
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: input.eventId,
+        action: 'payment_method.upsert',
+        targetType: 'collection_payment_method',
+        targetId: method.id,
+        before,
+        after: method
+      },
+      clock
+    );
     return method;
   });
 }
@@ -368,12 +415,17 @@ export async function upsertPaymentMethod(
 /** Soft-archives a method by disabling it so historical request references stay valid. */
 export async function archivePaymentMethod(
   client: DatabaseClient,
-  input: { actorUserId: string; eventId: string; methodId: string }
+  input: {
+    actorUserId: string;
+    eventId: string;
+    methodId: string;
+  },
+  clock: Clock = systemClock
 ): Promise<CollectionPaymentMethod> {
-  return client.db.transaction(async (tx) => {
-    await loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
-    const collection = await requireMainCollection(tx, input.eventId, true);
-    const rows = await tx
+  return write(client, (tx) => {
+    loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
+    const collection = requireMainCollection(tx, input.eventId);
+    const rows = tx
       .select()
       .from(collectionPaymentMethods)
       .where(
@@ -383,90 +435,101 @@ export async function archivePaymentMethod(
         )
       )
       .limit(1)
-      .for('update');
+      .all();
     if (!rows[0]) throw new CollectionError('not_found', 'payment method not found');
     const current = parsePaymentMethod(rows[0]);
     if (!current.enabled) return current;
-
-    const updatedRows = await tx
+    const updatedRows = tx
       .update(collectionPaymentMethods)
       .set({ enabled: false })
       .where(eq(collectionPaymentMethods.id, current.id))
-      .returning();
+      .returning()
+      .all();
     const updated = parsePaymentMethod(updatedRows[0]);
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: input.eventId,
-      action: 'payment_method.archive',
-      targetType: 'collection_payment_method',
-      targetId: current.id,
-      before: current,
-      after: updated
-    });
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: input.eventId,
+        action: 'payment_method.archive',
+        targetType: 'collection_payment_method',
+        targetId: current.id,
+        before: current,
+        after: updated
+      },
+      clock
+    );
     return updated;
   });
 }
 
-export async function listPaymentMethods(
+export function listPaymentMethods(
   tx: DatabaseTransaction,
   collectionId: string
-): Promise<CollectionPaymentMethod[]> {
-  const rows = await tx
+): CollectionPaymentMethod[] {
+  const rows = tx
     .select()
     .from(collectionPaymentMethods)
     .where(eq(collectionPaymentMethods.collectionId, collectionId))
-    .orderBy(asc(collectionPaymentMethods.sortOrder), asc(collectionPaymentMethods.id));
+    .orderBy(asc(collectionPaymentMethods.sortOrder), asc(collectionPaymentMethods.id))
+    .all();
   return rows.map(parsePaymentMethod);
 }
 
-export async function findMainCollection(
-  tx: DatabaseTransaction,
-  eventId: string,
-  lock = false
-): Promise<Collection | null> {
+export function findMainCollection(tx: DatabaseTransaction, eventId: string): Collection | null {
   const query = tx
     .select()
     .from(collections)
     .where(and(eq(collections.eventId, eventId), ne(collections.status, 'archived')))
     .orderBy(asc(collections.createdAt), asc(collections.id))
     .limit(1);
-  const rows = lock ? await query.for('update') : await query;
+  const rows = query.all();
   return rows[0] ? parseCollection(rows[0]) : null;
 }
 
 async function changeCollectionStatus(
   client: DatabaseClient,
-  input: { actorUserId: string; eventId: string; reason?: string },
-  target: Extract<CollectionStatus, 'open' | 'closed' | 'archived'>
+  input: {
+    actorUserId: string;
+    eventId: string;
+    reason?: string;
+  },
+  target: Extract<CollectionStatus, 'open' | 'closed' | 'archived'>,
+  clock: Clock = systemClock
 ): Promise<Collection> {
-  return client.db.transaction(async (tx) => {
-    const event = await loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
+  return write(client, (tx) => {
+    const event = loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
     if (event.archivedAt) throw new CollectionError('illegal_transition', 'event is archived');
-    const current = await requireMainCollection(tx, input.eventId, true);
+    const current = requireMainCollection(tx, input.eventId);
     if (current.status === target) return current;
     if (!isAllowedCollectionTransition(current.status, target)) {
       throw new CollectionError('illegal_transition', 'collection status transition denied');
     }
-    const rows = await tx
+    const rows = tx
       .update(collections)
-      .set({ status: target, updatedAt: new Date() })
+      .set({ status: target, updatedAt: clock.now() })
       .where(and(eq(collections.id, current.id), eq(collections.status, current.status)))
-      .returning();
+      .returning()
+      .all();
     if (!rows[0]) {
       throw new CollectionError('illegal_transition', 'collection changed concurrently');
     }
     const updated = parseCollection(rows[0]);
-    if (updated.status === 'open') await backfillPaymentRequests(tx, updated);
-    await appendAudit(tx, {
-      actorUserId: input.actorUserId,
-      eventId: input.eventId,
-      action: 'collection.status_change',
-      targetType: 'collection',
-      targetId: current.id,
-      before: { status: current.status },
-      after: { status: updated.status },
-      reason: input.reason?.trim()
-    });
+    if (updated.status === 'open') backfillPaymentRequests(tx, updated, clock);
+    appendAudit(
+      tx,
+      {
+        actorUserId: input.actorUserId,
+        eventId: input.eventId,
+        action: 'collection.status_change',
+        targetType: 'collection',
+        targetId: current.id,
+        before: { status: current.status },
+        after: { status: updated.status },
+        reason: input.reason?.trim()
+      },
+      clock
+    );
     return updated;
   });
 }
@@ -478,29 +541,20 @@ function isAllowedCollectionTransition(from: CollectionStatus, to: CollectionSta
   return false;
 }
 
-async function loadAuthorizedEvent(
-  tx: DatabaseTransaction,
-  eventId: string,
-  actorUserId: string,
-  lock = false
-) {
+function loadAuthorizedEvent(tx: DatabaseTransaction, eventId: string, actorUserId: string) {
   const query = tx
     .select({ organizationId: events.organizationId, archivedAt: events.archivedAt })
     .from(events)
     .where(eq(events.id, eventId))
     .limit(1);
-  const rows = lock ? await query.for('update') : await query;
+  const rows = query.all();
   if (!rows[0]) throw new CollectionError('not_found', 'event not found');
-  await authorizeOrganizationRole(tx, rows[0].organizationId, actorUserId, 'organizer');
+  authorizeOrganizationRole(tx, rows[0].organizationId, actorUserId, 'organizer');
   return rows[0];
 }
 
-async function requireMainCollection(
-  tx: DatabaseTransaction,
-  eventId: string,
-  lock = false
-): Promise<Collection> {
-  const collection = await findMainCollection(tx, eventId, lock);
+function requireMainCollection(tx: DatabaseTransaction, eventId: string): Collection {
+  const collection = findMainCollection(tx, eventId);
   if (!collection) throw new CollectionError('not_found', 'collection not found');
   return collection;
 }
