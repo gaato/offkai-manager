@@ -24,23 +24,4 @@ describe('internationalization catalog', () => {
   it('substitutes placeholders', () => {
     expect(translate('en', 'session.signed_in_as', { name: 'Mika' })).toContain('Mika');
   });
-
-  it('uses the approved public vocabulary and states the All-In rule', () => {
-    const catalogText = `${Object.values(en).join('\n')}\n${Object.values(ja).join('\n')}`;
-    expect(catalogText).not.toMatch(/クラウドファンディング|クラファン/);
-    expect(ja['campaign.kind']).toBe('応援企画');
-    expect(ja['campaign.pledge.all_in_body']).toContain(
-      '集まった金額がそのまま幹事に渡ります。目標未達でも返金はありません。'
-    );
-  });
-
-  it('keeps internal enum tokens out of campaign console copy', () => {
-    const campaignAdminCopy = Object.entries(en)
-      .filter(([key]) => key.startsWith('campaign_admin.'))
-      .map(([, value]) => value)
-      .join('\n');
-    expect(campaignAdminCopy).not.toMatch(
-      /\b(owner|staff|viewer|organizer|active|disabled|draft|public|unlisted|auto_confirm|approval|confirmed|cancelled|archived|pending|pending_external_creation|payment_pending|paid|waived|advance|onsite|internal)\b/
-    );
-  });
 });

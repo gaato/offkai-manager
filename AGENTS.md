@@ -63,16 +63,15 @@ Postgres (partial unique indexes, composite FKs) — do not "optimize" them away
   routes, CSV headers, or emails. `t(locale, key, params)` from `event.locals`.
 - Locale resolution (hooks): `?lang=` query (persist cookie) → `offkai_lang` cookie →
   `Accept-Language` → `en`. Every page emits `<html lang>`.
-- **Raw enum values, internal IDs, or UUIDs on participant-facing pages are release
-  blockers.** Statuses render via `StatusLabel`/label-key mappers only. (Admin pages:
-  still use labels, but leftovers are polish debt, not blockers.)
+- Participant-facing web pages have been removed because participant interactions are moving to
+  Discord; registration and payment services remain for the bot. Statuses use label-key mappers.
 - The brand name appears only via the single brand token in the catalog (rename must stay
   a one-line change).
 
 ## Money & payments
 
 - Amounts: `bigint` minor units + 3-letter lowercase-insensitive currency; snapshot
-  semantics (order/request rows copy amount+currency; composite FK pins currency).
+  semantics (payment request rows copy amount+currency; composite FK pins currency).
 - Direct charges on the organizer's connected account. The platform never holds funds.
 - Settlement happens ONLY in the unified settle service (webhook / dev-pay / manual
   confirm / waive). **Never mark anything paid from a Stripe return URL.**

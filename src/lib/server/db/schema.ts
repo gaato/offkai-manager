@@ -3,7 +3,6 @@ import {
   bigint,
   boolean,
   check,
-  date,
   foreignKey,
   index,
   integer,
@@ -394,103 +393,6 @@ export const stripeConnectAccounts = pgTable(
   ]
 );
 
-export const campaigns = pgTable(
-  'campaigns',
-  {
-    id: id(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
-    title: text('title').notNull(),
-    slug: text('slug').notNull(),
-    description: text('description').notNull().default(''),
-    unitPriceMinor: money('unit_price_minor'),
-    currency: text('currency').notNull(),
-    goalMinor: money('goal_minor'),
-    maxUnitsPerPledge: integer('max_units_per_pledge').notNull().default(10),
-    fulfillmentDate: date('fulfillment_date', { mode: 'string' }),
-    fulfillmentNote: text('fulfillment_note').notNull().default(''),
-    contact: text('contact').notNull().default(''),
-    completionReportText: text('completion_report_text'),
-    completionReportedAt: timestamp('completion_reported_at', { withTimezone: true }),
-    status: text('status').notNull(),
-    createdAt: createdAt(),
-    updatedAt: updatedAt()
-  },
-  (table) => [
-    unique('campaigns_organization_id_slug_key').on(table.organizationId, table.slug),
-    unique('campaigns_id_currency_key').on(table.id, table.currency),
-    check('campaigns_title_check', sql`length(${table.title}) > 0`),
-    check('campaigns_slug_check', sql`length(${table.slug}) > 0`),
-    check('campaigns_unit_price_minor_check', sql`${table.unitPriceMinor} > 0`),
-    check('campaigns_goal_minor_check', sql`${table.goalMinor} >= 0`),
-    check('campaigns_max_units_per_pledge_check', sql`${table.maxUnitsPerPledge} >= 1`),
-    check('campaigns_currency_check', sql`length(${table.currency}) = 3`),
-    check(
-      'campaigns_status_check',
-      sql`${table.status} in ('draft', 'open', 'closed', 'archived')`
-    ),
-    index('campaigns_organization_idx').on(table.organizationId)
-  ]
-);
-
-export const orders = pgTable(
-  'orders',
-  {
-    id: id(),
-    campaignId: uuid('campaign_id')
-      .notNull()
-      .references(() => campaigns.id),
-    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
-    displayName: text('display_name').notNull(),
-    listPublicly: boolean('list_publicly').notNull().default(false),
-    unitCount: integer('unit_count').notNull(),
-    unitPriceMinor: money('unit_price_minor'),
-    amountMinor: money('amount_minor'),
-    currency: text('currency').notNull(),
-    status: text('status').notNull(),
-    paidAt: timestamp('paid_at', { withTimezone: true }),
-    accessToken: text('access_token').notNull(),
-    stripeAccountId: text('stripe_account_id').notNull().default(''),
-    checkoutSessionId: text('checkout_session_id').notNull().default(''),
-    paymentIntentId: text('payment_intent_id').notNull().default(''),
-    createdAt: createdAt(),
-    updatedAt: updatedAt()
-  },
-  (table) => [
-    unique('orders_access_token_key').on(table.accessToken),
-    uniqueIndex('orders_checkout_session_id_key')
-      .on(table.checkoutSessionId)
-      .where(sql`${table.checkoutSessionId} <> ''`),
-    uniqueIndex('orders_payment_intent_id_key')
-      .on(table.paymentIntentId)
-      .where(sql`${table.paymentIntentId} <> ''`),
-    foreignKey({
-      name: 'orders_campaign_currency_fkey',
-      columns: [table.campaignId, table.currency],
-      foreignColumns: [campaigns.id, campaigns.currency]
-    }),
-    check('orders_display_name_check', sql`length(${table.displayName}) > 0`),
-    check('orders_unit_count_check', sql`${table.unitCount} >= 1`),
-    check('orders_unit_price_minor_check', sql`${table.unitPriceMinor} > 0`),
-    check(
-      'orders_amount_minor_check',
-      sql`${table.amountMinor} = ${table.unitPriceMinor} * ${table.unitCount}`
-    ),
-    check('orders_currency_check', sql`length(${table.currency}) = 3`),
-    check(
-      'orders_status_check',
-      sql`${table.status} in ('pending', 'payment_pending', 'paid', 'expired', 'cancelled')`
-    ),
-    check('orders_access_token_check', sql`length(${table.accessToken}) >= 32`),
-    check(
-      'orders_payment_pending_session_check',
-      sql`${table.status} <> 'payment_pending' or ${table.checkoutSessionId} <> ''`
-    ),
-    index('orders_campaign_status_idx').on(table.campaignId, table.status)
-  ]
-);
-
 export const collections = pgTable(
   'collections',
   {
@@ -615,7 +517,7 @@ export const paymentRequests = pgTable(
     check('payment_requests_currency_check', sql`length(${table.currency}) = 3`),
     check(
       'payment_requests_status_check',
-      sql`${table.status} in ('pending', 'pending_external_creation', 'payment_pending', 'paid', 'waived', 'cancelled')`
+      sql`${table.status} in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled')`
     ),
     check('payment_requests_charge_type_check', sql`${table.chargeType} in ('', 'direct')`),
     index('payment_requests_registration_idx').on(table.registrationId),
@@ -766,10 +668,7 @@ export const outboxEvents = pgTable(
     createdAt: createdAt()
   },
   (table) => [
-    check(
-      'outbox_events_type_check',
-      sql`${table.type} in ('discord.role_sync_requested', 'notification.payment_requested', 'stripe.checkout_session_create_requested', 'payment.reconciliation_requested')`
-    ),
+    check('outbox_events_type_check', sql`${table.type} in ('discord.role_sync_requested')`),
     check('outbox_events_status_check', sql`${table.status} in ('pending', 'processed', 'failed')`),
     check('outbox_events_attempts_check', sql`${table.attempts} >= 0`),
     index('outbox_events_pending_idx')

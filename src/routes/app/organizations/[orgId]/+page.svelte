@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CalendarDays, CreditCard, HandHeart, Users } from '@lucide/svelte';
+  import { CalendarDays, CreditCard, Users } from '@lucide/svelte';
   import { resolve } from '$app/paths';
   import { translator } from '$lib/i18n';
   import { eventVisibilityLabelKey } from '$lib/shared/event';
@@ -18,7 +18,6 @@
   const newEventHref = $derived(
     resolve('/app/organizations/[orgId]/events/new', { orgId: data.organization.id })
   );
-  const campaignSummary = $derived(data.campaignSummary);
   type StripeActionResult = {
     stripeActionError?: string;
     stripeActionMessage?: string;
@@ -74,11 +73,7 @@
     </Card>
   </div>
 
-  <div
-    class={campaignSummary
-      ? 'mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-[1.1fr_1.1fr_0.8fr]'
-      : 'mt-4 grid gap-4 lg:grid-cols-[1.35fr_0.65fr]'}
-  >
+  <div class="mt-4 grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
     <Card class="shadow-none">
       <CardHeader class="flex-row items-center justify-between gap-4">
         <div>
@@ -120,52 +115,7 @@
         {/if}
       </CardContent>
     </Card>
-    {#if campaignSummary}
-      <Card class="shadow-none">
-        <CardHeader class="flex-row items-start justify-between gap-4">
-          <div>
-            <HandHeart aria-hidden="true" class="text-primary" size={24} />
-            <CardTitle class="mt-4">{t('organization.campaigns_summary_title')}</CardTitle>
-            <p class="text-muted-foreground mt-2 text-sm">
-              {t('organization.campaigns_summary_total', { count: campaignSummary.total })}
-            </p>
-          </div>
-          <a
-            class="hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-semibold"
-            href={campaignSummary.href}>{t('organization.campaigns_summary_open')}</a
-          >
-        </CardHeader>
-        <CardContent>
-          <dl class="grid grid-cols-2 gap-3">
-            {#each campaignSummary.counts as count (count.label)}
-              <div class="bg-muted/55 rounded-lg px-4 py-3">
-                <dt class="text-muted-foreground text-xs font-semibold">{count.label}</dt>
-                <dd class="mt-1 text-xl font-bold tabular-nums">{count.count}</dd>
-              </div>
-            {/each}
-          </dl>
-          {#if campaignSummary.latest.length > 0}
-            <div class="mt-6">
-              <h3 class="text-sm font-semibold">{t('organization.campaigns_summary_latest')}</h3>
-              <ul class="mt-2 divide-y" role="list">
-                {#each campaignSummary.latest as campaign (campaign.id)}
-                  <li class="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <a
-                      class="hover:text-primary font-semibold"
-                      href={resolve('/app/campaigns/[campaignId]', { campaignId: campaign.id })}
-                      >{campaign.title}</a
-                    >
-                    <Badge class="bg-secondary text-secondary-foreground">
-                      {campaign.statusLabel}
-                    </Badge>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-        </CardContent>
-      </Card>
-    {/if}
+
     <Card class="shadow-none">
       <CardHeader>
         <CreditCard aria-hidden="true" class="text-primary" size={24} />

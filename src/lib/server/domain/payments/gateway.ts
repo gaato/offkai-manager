@@ -30,11 +30,9 @@ export interface CreateCheckoutSessionInput {
   successUrl: string;
   cancelUrl: string;
   idempotencyKey: string;
-  /** Relative session lifetime in milliseconds. */
-  expireAfter?: number;
 }
 
-/** Hosted payment-session creation shared by participant obligations and campaign orders. */
+/** Hosted payment-session creation for participant obligations. */
 export interface PaymentGateway {
   createCheckoutSession(input: CreateCheckoutSessionInput): Promise<{
     sessionId: string;
@@ -44,7 +42,7 @@ export interface PaymentGateway {
 }
 
 interface VerifiedCheckoutEventBase {
-  kind: 'settlement' | 'expiration';
+  kind: 'settlement';
   stripeEventId: string;
   eventType: string;
   stripeAccountId: string;
@@ -60,12 +58,7 @@ export interface VerifiedCheckoutSettlementEvent extends VerifiedCheckoutEventBa
   currency: string;
 }
 
-export interface VerifiedCheckoutExpirationEvent extends VerifiedCheckoutEventBase {
-  kind: 'expiration';
-}
-
-export type VerifiedCheckoutEvent =
-  VerifiedCheckoutSettlementEvent | VerifiedCheckoutExpirationEvent;
+export type VerifiedCheckoutEvent = VerifiedCheckoutSettlementEvent;
 
 /** Signature verification and stable-field extraction for Stripe webhook envelopes. */
 export interface StripeWebhookGateway {

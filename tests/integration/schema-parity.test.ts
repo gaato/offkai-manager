@@ -6,7 +6,6 @@ import { runMigrations } from '$lib/server/db/migrate';
 
 const expectedTables = [
   'audit_logs',
-  'campaigns',
   'checkin_records',
   'collection_payment_methods',
   'collections',
@@ -15,7 +14,6 @@ const expectedTables = [
   'event_form_fields',
   'events',
   'external_accounts',
-  'orders',
   'organization_memberships',
   'organizations',
   'outbox_events',
@@ -43,9 +41,6 @@ const expectedUniqueConstraints = [
   ['stripe_connect_accounts', ['organization_id']],
   ['stripe_connect_accounts', ['stripe_account_id']],
   ['stripe_connect_accounts', ['organization_id', 'stripe_account_id']],
-  ['campaigns', ['organization_id', 'slug']],
-  ['campaigns', ['id', 'currency']],
-  ['orders', ['access_token']],
   ['collections', ['event_id', 'id']],
   ['collections', ['id', 'currency']],
   ['collection_payment_methods', ['collection_id', 'label']],
@@ -62,9 +57,7 @@ const expectedPartialUniqueIndexes = [
   ['registrations', ['event_id', 'user_id'], "status <> 'cancelled'"],
   ['payment_records', ['idempotency_key'], "idempotency_key <> ''"],
   ['payment_requests', ['checkout_session_id'], "checkout_session_id <> ''"],
-  ['payment_requests', ['payment_intent_id'], "payment_intent_id <> ''"],
-  ['orders', ['checkout_session_id'], "checkout_session_id <> ''"],
-  ['orders', ['payment_intent_id'], "payment_intent_id <> ''"]
+  ['payment_requests', ['payment_intent_id'], "payment_intent_id <> ''"]
 ] as const;
 
 const expectedCompositeForeignKeys = [
@@ -114,8 +107,7 @@ const expectedCompositeForeignKeys = [
     'event_form_field_options',
     ['field_id', 'id']
   ],
-  ['checkin_records', ['event_id', 'registration_id'], 'registrations', ['event_id', 'id']],
-  ['orders', ['campaign_id', 'currency'], 'campaigns', ['id', 'currency']]
+  ['checkin_records', ['event_id', 'registration_id'], 'registrations', ['event_id', 'id']]
 ] as const;
 
 const expectedRetentionForeignKeys = [
@@ -128,8 +120,7 @@ const expectedRetentionForeignKeys = [
   ['payment_records', ['payment_request_id'], 'payment_requests', ['id'], 'NO ACTION'],
   ['payment_records', ['registration_id'], 'registrations', ['id'], 'NO ACTION'],
   ['payment_requests', ['collection_id'], 'collections', ['id'], 'NO ACTION'],
-  ['payment_requests', ['registration_id'], 'registrations', ['id'], 'NO ACTION'],
-  ['orders', ['user_id'], 'users', ['id'], 'SET NULL']
+  ['payment_requests', ['registration_id'], 'registrations', ['id'], 'NO ACTION']
 ] as const;
 
 const checkFragments: Readonly<Record<string, readonly string[]>> = {
@@ -190,21 +181,6 @@ const checkFragments: Readonly<Record<string, readonly string[]>> = {
     'ready',
     'disabled'
   ],
-  campaigns_title_check: ['length(title)>0'],
-  campaigns_slug_check: ['length(slug)>0'],
-  campaigns_unit_price_minor_check: ['unit_price_minor>0'],
-  campaigns_goal_minor_check: ['goal_minor>=0'],
-  campaigns_max_units_per_pledge_check: ['max_units_per_pledge>=1'],
-  campaigns_currency_check: ['length(currency)=3'],
-  campaigns_status_check: ['status', 'draft', 'open', 'closed', 'archived'],
-  orders_display_name_check: ['length(display_name)>0'],
-  orders_unit_count_check: ['unit_count>=1'],
-  orders_unit_price_minor_check: ['unit_price_minor>0'],
-  orders_amount_minor_check: ['amount_minor=unit_price_minor*unit_count'],
-  orders_currency_check: ['length(currency)=3'],
-  orders_status_check: ['status', 'pending', 'payment_pending', 'paid', 'expired', 'cancelled'],
-  orders_access_token_check: ['length(access_token)>=32'],
-  orders_payment_pending_session_check: ["status<>'payment_pending'", "checkout_session_id<>''"],
   collections_title_check: ['length(title)>0'],
   collections_amount_minor_check: ['amount_minor>=0'],
   collections_currency_check: ['length(currency)=3'],
@@ -217,7 +193,6 @@ const checkFragments: Readonly<Record<string, readonly string[]>> = {
   payment_requests_status_check: [
     'status',
     'pending',
-    'pending_external_creation',
     'payment_pending',
     'paid',
     'waived',
@@ -233,13 +208,7 @@ const checkFragments: Readonly<Record<string, readonly string[]>> = {
   checkin_records_method_check: ['method', 'manual', 'search', 'qr'],
   audit_logs_action_check: ['length(action)>0'],
   audit_logs_target_type_check: ['length(target_type)>0'],
-  outbox_events_type_check: [
-    'type',
-    'discord.role_sync_requested',
-    'notification.payment_requested',
-    'stripe.checkout_session_create_requested',
-    'payment.reconciliation_requested'
-  ],
+  outbox_events_type_check: ['type', 'discord.role_sync_requested'],
   outbox_events_status_check: ['status', 'pending', 'processed', 'failed'],
   outbox_events_attempts_check: ['attempts>=0']
 };
@@ -305,7 +274,7 @@ describe('database schema parity', () => {
     if (container) await container.stop();
   });
 
-  it('creates the complete 22-table schema with pgcrypto', async () => {
+  it('creates the complete 20-table schema with pgcrypto', async () => {
     const tables = await client.sql<{ tableName: string }[]>`
       select table_name as "tableName"
       from information_schema.tables
@@ -471,18 +440,6 @@ describe('database schema parity', () => {
     for (const tableName of ['collections', 'payment_requests', 'payment_records']) {
       expect(byName.get(`${tableName}.amount_minor`)?.dataType).toBe('bigint');
     }
-    for (const columnName of ['unit_price_minor', 'goal_minor']) {
-      expect(byName.get(`campaigns.${columnName}`)?.dataType).toBe('bigint');
-    }
-    for (const columnName of ['unit_price_minor', 'amount_minor']) {
-      expect(byName.get(`orders.${columnName}`)?.dataType).toBe('bigint');
-    }
-    expect(byName.get('orders.list_publicly')?.defaultValue).toBe('false');
-    expect(byName.get('orders.campaign_id')?.isNullable).toBe('NO');
-    expect(byName.get('campaigns.fulfillment_date')?.dataType).toBe('date');
-    expect(byName.get('campaigns.completion_report_text')?.isNullable).toBe('YES');
-    expect(byName.get('campaigns.completion_report_text')?.dataType).toBe('text');
-    expect(byName.get('campaigns.completion_reported_at')?.isNullable).toBe('YES');
     for (const column of columns.filter(({ dataType }) => dataType.startsWith('timestamp'))) {
       expect(column.dataType, `${column.tableName}.${column.columnName}`).toBe(
         'timestamp with time zone'

@@ -196,7 +196,7 @@ CREATE TABLE "outbox_events" (
 	"claimed_until" timestamp with time zone,
 	"processed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "outbox_events_type_check" CHECK ("outbox_events"."type" in ('discord.role_sync_requested', 'notification.payment_requested', 'stripe.checkout_session_create_requested', 'payment.reconciliation_requested')),
+	CONSTRAINT "outbox_events_type_check" CHECK ("outbox_events"."type" in ('discord.role_sync_requested')),
 	CONSTRAINT "outbox_events_status_check" CHECK ("outbox_events"."status" in ('pending', 'processed', 'failed')),
 	CONSTRAINT "outbox_events_attempts_check" CHECK ("outbox_events"."attempts" >= 0)
 );
@@ -243,7 +243,7 @@ CREATE TABLE "payment_requests" (
 	CONSTRAINT "payment_requests_id_collection_id_key" UNIQUE("id","collection_id"),
 	CONSTRAINT "payment_requests_amount_minor_check" CHECK ("payment_requests"."amount_minor" >= 0),
 	CONSTRAINT "payment_requests_currency_check" CHECK (length("payment_requests"."currency") = 3),
-	CONSTRAINT "payment_requests_status_check" CHECK ("payment_requests"."status" in ('pending', 'pending_external_creation', 'payment_pending', 'paid', 'waived', 'cancelled')),
+	CONSTRAINT "payment_requests_status_check" CHECK ("payment_requests"."status" in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled')),
 	CONSTRAINT "payment_requests_charge_type_check" CHECK ("payment_requests"."charge_type" in ('', 'direct'))
 );
 --> statement-breakpoint

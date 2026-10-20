@@ -25,7 +25,6 @@ export const load: LayoutServerLoad = async (event) => {
     return {
       organization,
       members,
-      campaignsEnabled: config.campaignsEnabled,
       capabilities: organization.suspendedAt
         ? readOnlyOrganizationCapabilities()
         : capabilitiesForRole(organization.actorRole)

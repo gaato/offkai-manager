@@ -1,5 +1,5 @@
 {
-  "id": "27ea00bd-bda7-4dd3-9602-8d81051d538d",
+  "id": "ef5ee173-0838-4227-8879-4b72091437e6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -944,7 +944,7 @@
           "name": "capacity",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "visibility": {
           "name": "visibility",
@@ -1545,7 +1545,7 @@
       "checkConstraints": {
         "outbox_events_type_check": {
           "name": "outbox_events_type_check",
-          "value": "\"outbox_events\".\"type\" in ('discord.role_sync_requested', 'notification.payment_requested', 'stripe.checkout_session_create_requested', 'payment.reconciliation_requested')"
+          "value": "\"outbox_events\".\"type\" in ('discord.role_sync_requested')"
         },
         "outbox_events_status_check": {
           "name": "outbox_events_status_check",
@@ -2093,7 +2093,7 @@
         },
         "payment_requests_status_check": {
           "name": "payment_requests_status_check",
-          "value": "\"payment_requests\".\"status\" in ('pending', 'pending_external_creation', 'payment_pending', 'paid', 'waived', 'cancelled')"
+          "value": "\"payment_requests\".\"status\" in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled')"
         },
         "payment_requests_charge_type_check": {
           "name": "payment_requests_charge_type_check",

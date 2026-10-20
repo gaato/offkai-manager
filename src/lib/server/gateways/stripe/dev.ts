@@ -23,7 +23,6 @@ export interface DevCheckoutSession {
   stripeAccountId: string;
   successUrl: string;
   cancelUrl: string;
-  expireAfter?: number;
 }
 
 export class DevConnectGateway implements ConnectGateway, PaymentGateway {
@@ -96,8 +95,7 @@ export class DevConnectGateway implements ConnectGateway, PaymentGateway {
       currency: input.currency.toUpperCase(),
       stripeAccountId: input.stripeAccountId,
       successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl,
-      ...(input.expireAfter === undefined ? {} : { expireAfter: input.expireAfter })
+      cancelUrl: input.cancelUrl
     };
     this.sessions.set(session.sessionId, session);
     this.checkoutIdempotency.set(input.idempotencyKey, session.sessionId);

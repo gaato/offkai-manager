@@ -97,9 +97,7 @@ export const load: PageServerLoad = async (event) => {
   const config = getConfig();
   const collection = dashboard.collection;
   const unpaidNames = dashboard.requests
-    .filter(({ request }) =>
-      ['pending', 'pending_external_creation', 'payment_pending'].includes(request.status)
-    )
+    .filter(({ request }) => ['pending', 'payment_pending'].includes(request.status))
     .map(({ displayName }) => event.locals.t('payments.reminder_name', { name: displayName }))
     .join('\n');
   const reminder =
@@ -113,10 +111,6 @@ export const load: PageServerLoad = async (event) => {
                 timeStyle: 'short'
               })
             : event.locals.t('payments.due_not_set'),
-          url: new URL(
-            `/events/${encodeURIComponent(dashboard.organizationSlug)}/${encodeURIComponent(dashboard.eventSlug)}`,
-            config.auth.publicBaseUrl
-          ).toString(),
           names: unpaidNames
         })
       : '';

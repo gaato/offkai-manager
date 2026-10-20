@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { signSession } from '../src/lib/server/auth/session';
-import { signInAs } from './auth';
-import { e2eUsers, suspendedUserFixture } from './fixtures';
+import { suspendedUserFixture } from './fixtures';
 
 const primaryOrigin = `http://127.0.0.1:${process.env.OFFKAI_E2E_PRIMARY_PORT ?? '18080'}`;
 const productionOrigin = `http://127.0.0.1:${process.env.OFFKAI_E2E_PRODUCTION_PORT ?? '18081'}`;
@@ -156,79 +155,4 @@ test('rate-limit buckets are isolated by client key', async ({ request }) => {
     maxRedirects: 0
   });
   expect(independent.status()).not.toBe(429);
-});
-
-test('participant checkout is covered by the protected POST limiter', async ({ request }) => {
-  const path = '/registrations/10000000-0000-4000-8000-000000009999?/checkout';
-  for (let index = 0; index <= 60; index += 1) {
-    const response = await request.post(path, {
-      headers: { Origin: primaryOrigin, 'X-Test-Client-IP': 'checkout-rate-limit' },
-      maxRedirects: 0
-    });
-    if (index < 60) expect(response.status()).not.toBe(429);
-    else expect(response.status()).toBe(429);
-  }
-});
-
-test('campaign pledge attempts use a five-per-minute IP-only bucket', async ({ request }) => {
-  const path = '/campaigns/missing-campaign/missing-campaign?/pledge';
-  for (let index = 0; index <= 5; index += 1) {
-    const response = await request.post(path, {
-      headers: {
-        Cookie: `offkai_session=forged-campaign-${index}`,
-        Origin: primaryOrigin,
-        'Accept-Language': 'ja',
-        'X-Test-Client-IP': 'campaign-pledge-rate-limit'
-      },
-      form: {
-        displayName: 'Rate Limit Supporter',
-        unitCount: '1',
-        listPublicly: 'false'
-      },
-      maxRedirects: 0
-    });
-    if (index < 5) {
-      expect(response.status()).not.toBe(429);
-    } else {
-      expect(response.status()).toBe(429);
-      expect(await response.text()).toContain('応援の手続き回数が上限に達しました');
-    }
-  }
-});
-
-test('Stripe webhook accepts a raw JSON body and rejects a CSRF-prone text body', async ({
-  request
-}) => {
-  const jsonResponse = await request.post('/webhooks/stripe', {
-    headers: { 'Content-Type': 'application/json', 'Stripe-Signature': 'invalid' },
-    data: '{"type":"checkout.session.completed"}'
-  });
-  expect(jsonResponse.status()).toBe(503);
-  expect(jsonResponse.headers()['content-type']).toContain('text/plain');
-
-  const textResponse = await request.post('/webhooks/stripe', {
-    headers: { 'Content-Type': 'text/plain', 'Stripe-Signature': 'invalid' },
-    data: '{"type":"checkout.session.completed"}'
-  });
-  expect(textResponse.status()).toBe(403);
-});
-
-test('organizers cannot invoke owner-only membership actions', async ({ page }) => {
-  await signInAs(page, e2eUsers.organizer, '/app', 'Organizer Scenario');
-  const organizationHref = await page
-    .getByRole('link', { name: 'Sweep Workspace', exact: true })
-    .getAttribute('href');
-  expect(organizationHref).toBeTruthy();
-  const response = await page.request.post(`${organizationHref}/team?/invite`, {
-    headers: {
-      Accept: 'application/json',
-      Origin: primaryOrigin,
-      'x-sveltekit-action': 'true'
-    },
-    form: { discordUserId: e2eUsers.inviteTarget, role: 'staff' }
-  });
-  expect(response.status()).toBe(200);
-  await expect(response.json()).resolves.toEqual(
-    expect.objectContaining({ type: 'failure', status: 404 })
-  );
 });

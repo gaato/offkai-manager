@@ -5,9 +5,6 @@ import {
   organizations,
   externalAccounts,
   collectionPaymentMethods,
-  eventDiscordIntegrations,
-  events,
-  orders,
   paymentRequests,
   registrationFormAnswers,
   registrations,
@@ -17,21 +14,13 @@ import {
 import { runMigrations } from '$lib/server/db/migrate';
 import { upsertDiscordIdentity } from '$lib/server/domain/auth/discord';
 import {
-  archiveEvent,
   archiveField,
-  cancelEvent,
   createEvent,
   publishEvent,
-  toggleEventUnlisted,
   updateSettings,
   upsertField
 } from '$lib/server/domain/events';
 import { createOrganization, inviteMember } from '$lib/server/domain/orgs';
-import {
-  changeCampaignStatus,
-  createCampaign,
-  publishCampaignCompletionReport
-} from '$lib/server/domain/campaigns';
 import {
   confirmManualPayment,
   createCollection,
@@ -39,9 +28,8 @@ import {
   openCollection,
   settleCheckout
 } from '$lib/server/domain/payments';
-import { changeRegistrationStatus } from '$lib/server/domain/registrations';
+import { changeRegistrationStatus, createRegistration } from '$lib/server/domain/registrations';
 import {
-  campaignFixtures,
   devStripeOrganizations,
   e2eUsers,
   participantFixtures,
@@ -214,6 +202,19 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       actorUserId: paymentOrganizer.userId,
       eventId: paymentJourneyEvent.id
     });
+    const paymentParticipant = await upsertDiscordIdentity(client, {
+      providerUserId: e2eUsers.paymentParticipant,
+      username: 'payment-participant',
+      displayName: 'Payment Participant',
+      avatarUrl: ''
+    });
+    await createRegistration(client, {
+      userId: paymentParticipant.userId,
+      organizationSlug: paymentOrganization.slug,
+      eventSlug: paymentJourneyEvent.slug,
+      displayName: 'Payment Participant',
+      answers: []
+    });
     const event = await createEvent(client, {
       actorUserId: sweepOwner.userId,
       organizationId: organization.id,
@@ -317,7 +318,8 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       await upsertField(client, {
         actorUserId: sweepOwner.userId,
         eventId: event.id,
-        ...field
+        ...field,
+        optionLabels: [...field.optionLabels]
       });
     }
     const archived = await upsertField(client, {
@@ -337,13 +339,7 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       actorUserId: sweepOwner.userId,
       name: 'Public Fixtures'
     });
-    const publicEvents = [
-      { slug: 'gathering', title: 'Summer Gathering' },
-      { slug: 'invitation', title: 'Invitation Gathering' },
-      { slug: 'called-off', title: 'Called Off Gathering' },
-      { slug: 'hidden-draft', title: 'Hidden Gathering' },
-      { slug: 'past-record', title: 'Past Gathering' }
-    ] as const;
+    const publicEvents = [{ slug: 'gathering', title: 'Summer Gathering' }] as const;
     const createdPublicEvents = new Map<string, Awaited<ReturnType<typeof createEvent>>>();
     for (const fixture of publicEvents) {
       const item = await createEvent(
@@ -386,41 +382,14 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
         await upsertField(client, {
           actorUserId: sweepOwner.userId,
           eventId: publicFormEventId,
-          ...field
+          ...field,
+          optionLabels: [...field.optionLabels]
         })
       );
     }
-    for (const slug of ['gathering', 'invitation', 'called-off', 'past-record'] as const) {
-      await publishEvent(client, {
-        actorUserId: sweepOwner.userId,
-        eventId: createdPublicEvents.get(slug)!.id
-      });
-    }
-    await toggleEventUnlisted(client, {
+    await publishEvent(client, {
       actorUserId: sweepOwner.userId,
-      eventId: createdPublicEvents.get('invitation')!.id
-    });
-    const invitationEvent = createdPublicEvents.get('invitation')!;
-    await client.db
-      .update(events)
-      .set({ discordPolicy: 'guild_join_required' })
-      .where(eq(events.id, invitationEvent.id));
-    await client.db.insert(eventDiscordIntegrations).values({
-      eventId: invitationEvent.id,
-      guildId: '110000000000000099',
-      guildNameSnapshot: 'Invitation Guild',
-      inviteUrl: 'https://discord.gg/offkai-fixture',
-      roleId: '110000000000000098'
-    });
-    await cancelEvent(client, {
-      actorUserId: sweepOwner.userId,
-      eventId: createdPublicEvents.get('called-off')!.id,
-      reason: 'Fixture cancellation'
-    });
-    await archiveEvent(client, {
-      actorUserId: sweepOwner.userId,
-      eventId: createdPublicEvents.get('past-record')!.id,
-      reason: 'Fixture archive'
+      eventId: publicFormEventId
     });
 
     for (const [status, fixture] of Object.entries(participantFixtures)) {
@@ -435,12 +404,7 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
         id: fixture.registrationId,
         eventId: publicFormEventId,
         userId: participant.userId,
-        status:
-          status === 'withdrawal'
-            ? 'applied'
-            : ['paid', 'conflict', 'refunded'].includes(status)
-              ? 'confirmed'
-              : status,
+        status: ['paid', 'conflict', 'refunded'].includes(status) ? 'confirmed' : status,
         displayNameSnapshot: fixture.displayName,
         searchText: `${fixture.displayName} ${username}`
       });
@@ -544,215 +508,10 @@ export async function seedE2E(databaseUrl: string): Promise<void> {
       actorUserId: sweepOwner.userId,
       name: 'Suspended Fixtures'
     });
-    const suspendedEvent = await createEvent(
-      client,
-      {
-        actorUserId: sweepOwner.userId,
-        organizationId: suspendedOrganization.id,
-        title: 'Unavailable Gathering',
-        startsAt: '2027-08-14T13:00',
-        timeZone: 'Asia/Tokyo'
-      },
-      () => 'unavailable'
-    );
-    await publishEvent(client, {
-      actorUserId: sweepOwner.userId,
-      eventId: suspendedEvent.id
-    });
     await client.db
       .update(organizations)
       .set({ suspendedAt: new Date() })
       .where(eq(organizations.id, suspendedOrganization.id));
-
-    const campaignOrganization = await createOrganization(client, {
-      actorUserId: sweepOwner.userId,
-      name: 'Campaign Fixtures'
-    });
-    if (campaignOrganization.slug !== campaignFixtures.organizationSlug) {
-      throw new Error('campaign fixture organization slug changed');
-    }
-    const openCampaign = await createCampaign(client, {
-      actorUserId: sweepOwner.userId,
-      organizationId: campaignOrganization.id,
-      title: 'Community Flower Stand',
-      slug: campaignFixtures.openSlug,
-      description: 'Help the planning team prepare a flower stand for the community celebration.',
-      unitPriceMinor: 1_500n,
-      currency: 'JPY',
-      goalMinor: 12_000n,
-      maxUnitsPerPledge: 5,
-      fulfillmentDate: '2027-12-01',
-      fulfillmentNote: 'The organizer will publish a completion report after the celebration.',
-      contact: 'campaign@example.test'
-    });
-    await changeCampaignStatus(client, {
-      actorUserId: sweepOwner.userId,
-      campaignId: openCampaign.id,
-      status: 'open'
-    });
-    const campaignAccountId = 'acct_dev_campaign_fixtures';
-    await client.db.insert(stripeConnectAccounts).values({
-      organizationId: campaignOrganization.id,
-      stripeAccountId: campaignAccountId,
-      dashboardType: 'express',
-      chargesEnabled: true,
-      payoutsEnabled: true,
-      detailsSubmitted: true,
-      onboardingStatus: 'ready',
-      country: 'JP',
-      defaultCurrency: 'jpy'
-    });
-    const orderBase = {
-      campaignId: openCampaign.id,
-      userId: null,
-      unitPriceMinor: 1_500n,
-      currency: 'JPY',
-      stripeAccountId: campaignAccountId
-    } as const;
-    await client.db.insert(orders).values([
-      {
-        ...orderBase,
-        displayName: campaignFixtures.listedSupporter,
-        listPublicly: true,
-        unitCount: 2,
-        amountMinor: 3_000n,
-        status: 'paid',
-        paidAt: new Date('2026-07-19T01:00:00Z'),
-        accessToken: campaignFixtures.tokens.paid,
-        checkoutSessionId: 'cs_campaign_paid',
-        paymentIntentId: 'pi_campaign_paid',
-        createdAt: new Date('2026-07-19T00:00:00Z')
-      },
-      {
-        ...orderBase,
-        displayName: campaignFixtures.privateSupporter,
-        listPublicly: false,
-        unitCount: 1,
-        amountMinor: 1_500n,
-        status: 'paid',
-        paidAt: new Date('2026-07-19T01:05:00Z'),
-        accessToken: campaignFixtures.tokens.privatePaid,
-        checkoutSessionId: 'cs_campaign_private',
-        paymentIntentId: 'pi_campaign_private',
-        createdAt: new Date('2026-07-19T00:05:00Z')
-      },
-      {
-        ...orderBase,
-        displayName: 'Received Supporter',
-        listPublicly: true,
-        unitCount: 1,
-        amountMinor: 1_500n,
-        status: 'pending',
-        accessToken: campaignFixtures.tokens.pending,
-        stripeAccountId: ''
-      },
-      {
-        ...orderBase,
-        displayName: 'Processing Supporter',
-        listPublicly: true,
-        unitCount: 1,
-        amountMinor: 1_500n,
-        status: 'payment_pending',
-        accessToken: campaignFixtures.tokens.paymentPending,
-        checkoutSessionId: 'cs_campaign_processing'
-      },
-      {
-        ...orderBase,
-        displayName: 'Expired Supporter',
-        listPublicly: true,
-        unitCount: 1,
-        amountMinor: 1_500n,
-        status: 'expired',
-        accessToken: campaignFixtures.tokens.expired,
-        checkoutSessionId: 'cs_campaign_expired'
-      },
-      {
-        ...orderBase,
-        displayName: 'Withdrawn Supporter',
-        listPublicly: true,
-        unitCount: 1,
-        amountMinor: 1_500n,
-        status: 'cancelled',
-        accessToken: campaignFixtures.tokens.cancelled,
-        checkoutSessionId: 'cs_campaign_cancelled'
-      },
-      {
-        ...orderBase,
-        displayName: 'Conflict Supporter',
-        listPublicly: true,
-        unitCount: 1,
-        amountMinor: 1_500n,
-        status: 'expired',
-        paidAt: new Date('2026-07-19T02:00:00Z'),
-        accessToken: campaignFixtures.tokens.conflict,
-        checkoutSessionId: 'cs_campaign_conflict'
-      }
-    ]);
-
-    const closedCampaign = await createCampaign(client, {
-      actorUserId: sweepOwner.userId,
-      organizationId: campaignOrganization.id,
-      title: 'Completed Support Project',
-      slug: campaignFixtures.closedSlug,
-      unitPriceMinor: 1_000n,
-      currency: 'JPY',
-      goalMinor: 5_000n,
-      contact: 'campaign@example.test'
-    });
-    await changeCampaignStatus(client, {
-      actorUserId: sweepOwner.userId,
-      campaignId: closedCampaign.id,
-      status: 'open'
-    });
-    await client.db.insert(orders).values({
-      campaignId: closedCampaign.id,
-      userId: null,
-      displayName: 'Final Supporter',
-      listPublicly: true,
-      unitCount: 1,
-      unitPriceMinor: 1_000n,
-      amountMinor: 1_000n,
-      currency: 'JPY',
-      status: 'paid',
-      paidAt: new Date('2026-07-19T03:00:00Z'),
-      accessToken: campaignFixtures.tokens.closedPaid,
-      stripeAccountId: campaignAccountId,
-      checkoutSessionId: 'cs_campaign_closed',
-      paymentIntentId: 'pi_campaign_closed'
-    });
-    await changeCampaignStatus(client, {
-      actorUserId: sweepOwner.userId,
-      campaignId: closedCampaign.id,
-      status: 'closed'
-    });
-    await publishCampaignCompletionReport(client, {
-      actorUserId: sweepOwner.userId,
-      campaignId: closedCampaign.id,
-      text: 'The project was delivered as planned. Materials cost ¥800 and transport cost ¥200.'
-    });
-
-    const setupOrganization = await createOrganization(client, {
-      actorUserId: sweepOwner.userId,
-      name: 'Campaign Payment Setup'
-    });
-    if (setupOrganization.slug !== campaignFixtures.notReadyOrganizationSlug) {
-      throw new Error('not-ready campaign fixture organization slug changed');
-    }
-    const notReadyCampaign = await createCampaign(client, {
-      actorUserId: sweepOwner.userId,
-      organizationId: setupOrganization.id,
-      title: 'Payment Setup Campaign',
-      slug: campaignFixtures.notReadySlug,
-      unitPriceMinor: 500n,
-      currency: 'JPY',
-      goalMinor: 0n,
-      contact: 'setup@example.test'
-    });
-    await changeCampaignStatus(client, {
-      actorUserId: sweepOwner.userId,
-      campaignId: notReadyCampaign.id,
-      status: 'open'
-    });
   } finally {
     await closeDatabase(client);
   }

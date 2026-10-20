@@ -17,7 +17,6 @@ import { createOrganization } from '$lib/server/domain/orgs';
 import { listPlatformPaymentConflicts } from '$lib/server/domain/platform';
 import {
   createCollection,
-  expireCheckout,
   getCollectionDashboard,
   markConflictRefunded,
   openCollection,
@@ -62,8 +61,7 @@ describe('Stripe checkout settlement', () => {
     expect(first).toMatchObject({
       alreadyProcessed: false,
       conflict: false,
-      kind: 'payment_request',
-      order: null
+      kind: 'payment_request'
     });
     expect(duplicate).toMatchObject({
       alreadyProcessed: true,
@@ -113,29 +111,6 @@ describe('Stripe checkout settlement', () => {
     });
     expect((await request(fixture.requestId)).status).toBe('paid');
     expect(await recordCount(fixture.requestId, 'settled')).toBe(1);
-  });
-
-  it('records expiration idempotently without expiring a payment request', async () => {
-    const fixture = await checkoutFixture();
-    const input = {
-      stripeEventId: `evt_expired_${fixture.requestId}`,
-      eventType: 'checkout.session.expired',
-      sessionId: fixture.sessionId,
-      stripeAccountId: fixture.stripeAccountId,
-      raw: { type: 'checkout.session.expired', session_id: fixture.sessionId }
-    };
-    const first = await expireCheckout(client, input);
-    const duplicate = await expireCheckout(client, input);
-
-    expect(first).toMatchObject({
-      alreadyProcessed: false,
-      expired: false,
-      kind: 'payment_request',
-      order: null
-    });
-    expect(duplicate).toMatchObject({ alreadyProcessed: true, kind: 'payment_request' });
-    expect((await request(fixture.requestId)).status).toBe('payment_pending');
-    expect(await webhookCount(input.stripeEventId)).toBe(1);
   });
 
   it('refuses checkout before calling Stripe when the organization is suspended', async () => {

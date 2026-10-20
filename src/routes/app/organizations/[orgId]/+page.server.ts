@@ -6,7 +6,6 @@ import { getApp } from '$lib/server/app';
 import { getConfig } from '$lib/server/config';
 import { getDatabaseClient } from '$lib/server/db/client';
 import { listEventsForOrganization } from '$lib/server/domain/events';
-import { listCampaignsForOrganization } from '$lib/server/domain/campaigns';
 import {
   ConnectError,
   getConnectAccount,
@@ -14,8 +13,6 @@ import {
   syncAccount
 } from '$lib/server/domain/payments';
 import { formatWallClock } from '$lib/server/time';
-import { campaignStatuses, campaignStatusLabelKey } from '$lib/shared/campaign';
-import { roleAtLeast } from '$lib/shared/organization';
 
 export const load: PageServerLoad = async (event) => {
   const session = requireSession(event);
@@ -23,15 +20,9 @@ export const load: PageServerLoad = async (event) => {
   if (!organizationId.success) throw error(404);
   const config = getConfig();
   const client = getDatabaseClient(config);
-  const parent = await event.parent();
-  const campaignsPromise =
-    config.campaignsEnabled && roleAtLeast(parent.organization.actorRole, 'staff')
-      ? listCampaignsForOrganization(client, session.userId, organizationId.data)
-      : Promise.resolve(null);
-  const [eventRows, stripeAccount, campaignList] = await Promise.all([
+  const [eventRows, stripeAccount] = await Promise.all([
     listEventsForOrganization(client, session.userId, organizationId.data),
-    getConnectAccount(client, organizationId.data, session),
-    campaignsPromise
+    getConnectAccount(client, organizationId.data, session)
   ]);
   return {
     events: eventRows.map((item) => ({
@@ -40,21 +31,6 @@ export const load: PageServerLoad = async (event) => {
     })),
     stripeMode: getApp(config).stripe.mode,
     stripeAccount,
-    campaignSummary: campaignList
-      ? {
-          href: `/app/organizations/${organizationId.data}/campaigns`,
-          total: campaignList.campaigns.length,
-          counts: campaignStatuses.map((status) => ({
-            label: event.locals.t(campaignStatusLabelKey(status)),
-            count: campaignList.campaigns.filter((campaign) => campaign.status === status).length
-          })),
-          latest: campaignList.campaigns.slice(0, 3).map((campaign) => ({
-            id: campaign.id,
-            title: campaign.title,
-            statusLabel: event.locals.t(campaignStatusLabelKey(campaign.status))
-          }))
-        }
-      : null,
     stripeFlash:
       event.url.searchParams.get('stripe') === 'returned'
         ? event.locals.t('stripe.return_success')

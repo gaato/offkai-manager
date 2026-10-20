@@ -31,8 +31,4 @@ export type {
   StripeWebhookGateway,
   StripeDashboardType
 } from './gateway';
-export type {
-  VerifiedCheckoutEvent,
-  VerifiedCheckoutExpirationEvent,
-  VerifiedCheckoutSettlementEvent
-} from './gateway';
+export type { VerifiedCheckoutEvent, VerifiedCheckoutSettlementEvent } from './gateway';

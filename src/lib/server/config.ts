@@ -60,9 +60,7 @@ const rawSchema = z.object({
   OFFKAI_STRIPE_SECRET_KEY: z.string().default(''),
   OFFKAI_STRIPE_WEBHOOK_SECRET: z.string().default(''),
   OFFKAI_PLATFORM_ADMIN_DISCORD_IDS: z.string().default(''),
-  OFFKAI_WORKER_ENABLED: boolWithDefault(true),
-  OFFKAI_CAMPAIGNS_ENABLED: boolWithDefault(false),
-  OFFKAI_ABUSE_REPORT_EMAIL: z.union([z.literal(''), z.email()]).default('')
+  OFFKAI_WORKER_ENABLED: boolWithDefault(true)
 });
 
 export interface Config {
@@ -94,9 +92,8 @@ export interface Config {
     botToken: string;
   };
   stripe: { secretKey: string; webhookSecret: string };
-  platform: { adminDiscordIds: string[]; abuseReportEmail: string };
+  platform: { adminDiscordIds: string[] };
   workerEnabled: boolean;
-  campaignsEnabled: boolean;
 }
 
 export function parseHttpAddress(address: string): { host: string; port: number } {
@@ -272,11 +269,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     platform: {
       adminDiscordIds: raw.OFFKAI_PLATFORM_ADMIN_DISCORD_IDS.split(',')
         .map((value) => value.trim())
-        .filter(Boolean),
-      abuseReportEmail: raw.OFFKAI_ABUSE_REPORT_EMAIL
+        .filter(Boolean)
     },
-    workerEnabled: raw.OFFKAI_WORKER_ENABLED,
-    campaignsEnabled: raw.OFFKAI_CAMPAIGNS_ENABLED
+    workerEnabled: raw.OFFKAI_WORKER_ENABLED
   };
 }
 

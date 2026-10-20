@@ -25,8 +25,6 @@ test('platform admin suspends and restores an organization through the ops conso
     .getByRole('link', { name: opsJourney.eventTitle, exact: true })
     .getAttribute('href');
   expect(organizerEventHref).toBeTruthy();
-  const publicEventPath = `/events/${opsJourney.organizationSlug}/${opsJourney.eventSlug}`;
-  expect((await page.request.get(publicEventPath)).status()).toBe(200);
 
   await page.getByRole('link', { name: 'Suspend organization', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Suspend organization' })).toBeVisible();
@@ -34,7 +32,6 @@ test('platform admin suspends and restores an organization through the ops conso
   await page.getByRole('button', { name: 'Confirm suspension' }).click();
   await expect(page).toHaveURL(new RegExp(`${opsDetailPath!}[?]suspended=1$`));
 
-  expect((await page.request.get(publicEventPath)).status()).toBe(404);
   await page.goto(organizerEventHref!);
   await expect(page.getByText('This organization is suspended', { exact: true })).toBeVisible();
   await expect(page.getByText(/changes are disabled/i)).toBeVisible();
@@ -59,7 +56,6 @@ test('platform admin suspends and restores an organization through the ops conso
   await page.getByRole('button', { name: 'Confirm restoration' }).click();
   await expect(page).toHaveURL(new RegExp(`${opsDetailPath!}[?]unsuspended=1$`));
 
-  expect((await page.request.get(publicEventPath)).status()).toBe(200);
   await page.goto(organizerEventHref!);
   await expect(page.getByText('This organization is suspended', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Make unlisted' })).toBeVisible();

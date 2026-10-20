@@ -22,16 +22,6 @@ describe('configuration', () => {
       migrate: true
     });
     expect(config.workerEnabled).toBe(true);
-    expect(config.campaignsEnabled).toBe(false);
-    expect(config.platform.abuseReportEmail).toBe('');
-    expect(loadConfig({ ...dev, OFFKAI_CAMPAIGNS_ENABLED: 'true' }).campaignsEnabled).toBe(true);
-    expect(
-      loadConfig({ ...dev, OFFKAI_ABUSE_REPORT_EMAIL: 'abuse@example.test' }).platform
-        .abuseReportEmail
-    ).toBe('abuse@example.test');
-    expect(() => loadConfig({ ...dev, OFFKAI_ABUSE_REPORT_EMAIL: 'not-an-email' })).toThrow(
-      /OFFKAI_ABUSE_REPORT_EMAIL/
-    );
   });
 
   it('requires durable production configuration', () => {

@@ -24,12 +24,9 @@ const checkoutSessionSchema = z.object({
     .nullable()
 });
 
-const expiredCheckoutSessionSchema = z.object({ id: z.string().min(1) });
-
 const checkoutEvents = new Set([
   'checkout.session.completed',
-  'checkout.session.async_payment_succeeded',
-  'checkout.session.expired'
+  'checkout.session.async_payment_succeeded'
 ]);
 
 export class StripeWebhookVerifier implements StripeWebhookGateway {
@@ -52,17 +49,6 @@ export class StripeWebhookVerifier implements StripeWebhookGateway {
     const raw = JSON.parse(rawText) as unknown;
     const envelope = envelopeSchema.parse(raw);
     if (!checkoutEvents.has(envelope.type)) return null;
-    if (envelope.type === 'checkout.session.expired') {
-      const session = expiredCheckoutSessionSchema.parse(envelope.data.object);
-      return {
-        kind: 'expiration',
-        stripeEventId: envelope.id,
-        eventType: envelope.type,
-        stripeAccountId: envelope.account ?? '',
-        sessionId: session.id,
-        raw
-      };
-    }
     const session = checkoutSessionSchema.parse(envelope.data.object);
     const paymentIntent = session.payment_intent;
     return {

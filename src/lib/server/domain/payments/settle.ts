@@ -2,15 +2,12 @@ import { and, eq } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
   events,
-  orders,
   paymentRecords,
   paymentRequests,
   registrations,
   stripeWebhookEvents
 } from '$lib/server/db/schema';
 import { appendAudit } from '$lib/server/domain/audit';
-import { parseOrderRow } from '$lib/server/domain/orders/row';
-import type { Order } from '$lib/server/domain/orders/types';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
 import type { PaymentRecord } from './requests';
 import { PaymentError, SettlementError } from './errors';
@@ -31,24 +28,8 @@ export interface CheckoutSettlement {
   alreadyProcessed: boolean;
   ignoredUnpaid: boolean;
   conflict: boolean;
-  kind: 'payment_request' | 'order' | null;
+  kind: 'payment_request' | null;
   record: PaymentRecord | null;
-  order: Order | null;
-}
-
-export interface ExpireCheckoutInput {
-  stripeEventId: string;
-  eventType?: string;
-  sessionId: string;
-  stripeAccountId: string;
-  raw: unknown;
-}
-
-export interface CheckoutExpiration {
-  alreadyProcessed: boolean;
-  expired: boolean;
-  kind: 'payment_request' | 'order' | null;
-  order: Order | null;
 }
 
 export interface MarkRefundedInput {
@@ -96,115 +77,12 @@ export function settleCheckout(
       return settlePaymentRequest(tx, request, input, currency, stripeEventId);
     }
 
-    const orderRows = await tx
-      .select({ order: orders })
-      .from(orders)
-      .where(eq(orders.checkoutSessionId, input.sessionId))
-      .limit(1)
-      .for('update');
-    const order = orderRows[0]?.order;
-    if (order) {
-      if (!webhookInserted) return alreadyProcessed('order', parseOrderRow(order));
-      return settleOrder(tx, order, input, currency, stripeEventId);
-    }
     if (!webhookInserted) return alreadyProcessed();
 
     throw new SettlementError(
       'resolution_miss',
-      `no payment request or order for checkout session ${input.sessionId}`
+      `no payment request for checkout session ${input.sessionId}`
     );
-  });
-}
-
-/** Expires an abandoned campaign Checkout Session without changing event payment requests. */
-export function expireCheckout(
-  client: DatabaseClient,
-  input: ExpireCheckoutInput
-): Promise<CheckoutExpiration> {
-  const stripeEventId = input.stripeEventId.trim();
-  if (!stripeEventId) throw new SettlementError('validation', 'stripe event id is required');
-  if (!input.sessionId) throw new SettlementError('validation', 'checkout session id is required');
-
-  return client.db.transaction(async (tx) => {
-    const webhookInserted = await insertWebhookEvent(tx, {
-      stripeEventId,
-      stripeAccountId: input.stripeAccountId,
-      eventType: input.eventType?.trim() || 'checkout.session.expired',
-      raw: input.raw
-    });
-
-    const requestRows = await tx
-      .select({ id: paymentRequests.id })
-      .from(paymentRequests)
-      .where(eq(paymentRequests.checkoutSessionId, input.sessionId))
-      .limit(1);
-    if (requestRows[0]) {
-      if (!webhookInserted) {
-        return {
-          alreadyProcessed: true,
-          expired: false,
-          kind: 'payment_request',
-          order: null
-        };
-      }
-      await markWebhookProcessed(tx, stripeEventId);
-      return {
-        alreadyProcessed: false,
-        expired: false,
-        kind: 'payment_request',
-        order: null
-      };
-    }
-
-    const orderRows = await tx
-      .select({ order: orders })
-      .from(orders)
-      .where(eq(orders.checkoutSessionId, input.sessionId))
-      .limit(1)
-      .for('update');
-    const current = orderRows[0]?.order;
-    if (!current) {
-      if (!webhookInserted) {
-        return { alreadyProcessed: true, expired: false, kind: null, order: null };
-      }
-      await markWebhookProcessed(tx, stripeEventId);
-      return { alreadyProcessed: false, expired: false, kind: null, order: null };
-    }
-    if (!webhookInserted) {
-      return {
-        alreadyProcessed: true,
-        expired: false,
-        kind: 'order',
-        order: parseOrderRow(current)
-      };
-    }
-    if (!['pending', 'payment_pending'].includes(current.status)) {
-      await markWebhookProcessed(tx, stripeEventId);
-      return {
-        alreadyProcessed: false,
-        expired: false,
-        kind: 'order',
-        order: parseOrderRow(current)
-      };
-    }
-
-    const updatedRows = await tx
-      .update(orders)
-      .set({ status: 'expired', updatedAt: new Date() })
-      .where(eq(orders.id, current.id))
-      .returning();
-    const updated = parseOrderRow(updatedRows[0]);
-    await markWebhookProcessed(tx, stripeEventId);
-    await appendAudit(tx, {
-      actorUserId: null,
-      eventId: null,
-      action: 'campaign.pledge_expire',
-      targetType: 'order',
-      targetId: current.id,
-      before: { status: current.status },
-      after: { status: updated.status }
-    });
-    return { alreadyProcessed: false, expired: true, kind: 'order', order: updated };
   });
 }
 
@@ -225,8 +103,7 @@ async function settlePaymentRequest(
       ignoredUnpaid: true,
       conflict: false,
       kind: 'payment_request',
-      record: null,
-      order: null
+      record: null
     };
   }
   if (request.status === 'paid') {
@@ -287,80 +164,7 @@ async function settlePaymentRequest(
     ignoredUnpaid: false,
     conflict,
     kind: 'payment_request',
-    record,
-    order: null
-  };
-}
-
-async function settleOrder(
-  tx: DatabaseTransaction,
-  current: typeof orders.$inferSelect,
-  input: SettleCheckoutInput,
-  currency: string,
-  stripeEventId: string
-): Promise<CheckoutSettlement> {
-  if (current.stripeAccountId !== input.stripeAccountId) {
-    throw new SettlementError('account_mismatch', 'webhook connected account does not match');
-  }
-  if (input.paymentStatus !== 'paid') {
-    await markWebhookProcessed(tx, stripeEventId);
-    return {
-      alreadyProcessed: false,
-      ignoredUnpaid: true,
-      conflict: false,
-      kind: 'order',
-      record: null,
-      order: parseOrderRow(current)
-    };
-  }
-  if (current.status === 'paid') {
-    await markWebhookProcessed(tx, stripeEventId);
-    return alreadyProcessed('order', parseOrderRow(current));
-  }
-  if (input.amountTotal !== current.amountMinor || currency !== current.currency.toUpperCase()) {
-    throw new SettlementError('amount_mismatch', 'checkout amount or currency does not match');
-  }
-
-  const paidAt = new Date();
-  const conflict = current.status === 'expired' || current.status === 'cancelled';
-  const updatedRows = await tx
-    .update(orders)
-    .set(
-      conflict
-        ? { paidAt, updatedAt: paidAt }
-        : {
-            status: 'paid',
-            paidAt,
-            paymentIntentId: input.paymentIntentId ?? current.paymentIntentId,
-            updatedAt: paidAt
-          }
-    )
-    .where(eq(orders.id, current.id))
-    .returning();
-  const updated = parseOrderRow(updatedRows[0]);
-  await markWebhookProcessed(tx, stripeEventId);
-  await appendAudit(tx, {
-    actorUserId: null,
-    eventId: null,
-    action: conflict ? 'campaign.stripe_settle_conflict' : 'campaign.pledge_settle',
-    targetType: 'order',
-    targetId: current.id,
-    before: { status: current.status, paidAt: current.paidAt?.toISOString() ?? null },
-    after: {
-      status: updated.status,
-      paidAt: updated.paidAt?.toISOString() ?? null,
-      amountMinor: updated.amountMinor.toString(),
-      currency: updated.currency,
-      conflict
-    }
-  });
-  return {
-    alreadyProcessed: false,
-    ignoredUnpaid: false,
-    conflict,
-    kind: 'order',
-    record: null,
-    order: updated
+    record
   };
 }
 
@@ -465,17 +269,13 @@ export function markConflictRefunded(
   });
 }
 
-function alreadyProcessed(
-  kind: CheckoutSettlement['kind'] = null,
-  order: Order | null = null
-): CheckoutSettlement {
+function alreadyProcessed(kind: CheckoutSettlement['kind'] = null): CheckoutSettlement {
   return {
     alreadyProcessed: true,
     ignoredUnpaid: false,
     conflict: false,
     kind,
-    record: null,
-    order
+    record: null
   };
 }
 

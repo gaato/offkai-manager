@@ -241,11 +241,7 @@ export async function undoCheckIn(
 function paymentState(statuses: string[]): CheckInPaymentState {
   const active = statuses.filter((status) => status !== 'cancelled');
   if (active.length === 0) return 'none';
-  if (
-    active.some((status) =>
-      ['pending', 'pending_external_creation', 'payment_pending'].includes(status)
-    )
-  ) {
+  if (active.some((status) => ['pending', 'payment_pending'].includes(status))) {
     return 'unpaid';
   }
   if (active.some((status) => status === 'paid')) return 'paid';

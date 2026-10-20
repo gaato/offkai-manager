@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { getApp } from '$lib/server/app';
 import { getConfig } from '$lib/server/config';
 import { getDatabaseClient } from '$lib/server/db/client';
-import { expireCheckout, settleCheckout } from '$lib/server/domain/payments';
+import { settleCheckout } from '$lib/server/domain/payments';
 import { formatMoney } from '$lib/shared/money';
 
 function devSession(sessionId: string) {
@@ -49,20 +49,8 @@ export const actions: Actions = {
     }
     throw redirect(303, session.successUrl);
   },
-  cancel: async (event) => {
+  cancel: (event) => {
     const session = devSession(event.params.sessionId);
-    try {
-      await expireCheckout(getDatabaseClient(getConfig()), {
-        stripeEventId: `evt_dev_expired_${session.sessionId}`,
-        eventType: 'checkout.session.expired',
-        sessionId: session.sessionId,
-        stripeAccountId: session.stripeAccountId,
-        raw: { dev: true, checkout_session_id: session.sessionId }
-      });
-    } catch (cause) {
-      event.locals.logger.error({ err: cause }, 'development Stripe checkout expiration failed');
-      throw error(400, event.locals.t('dev_stripe.checkout_error'));
-    }
     throw redirect(303, session.cancelUrl);
   }
 };

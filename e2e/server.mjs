@@ -3,7 +3,6 @@ import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { createServer } from 'vite';
 
 const port = process.env.OFFKAI_E2E_PORT ?? '18080';
-const noAbusePort = process.env.OFFKAI_E2E_NO_ABUSE_PORT ?? '18082';
 const container = await new PostgreSqlContainer('postgres:17-alpine').start();
 const databaseUrl = container.getConnectionUri();
 
@@ -21,10 +20,7 @@ try {
     await vite.close();
   }
 
-  const noAbuseApp = spawnApp(noAbusePort, '');
-  apps.push(noAbuseApp);
-  await waitForReady(`http://127.0.0.1:${noAbusePort}/readyz`, noAbuseApp);
-  apps.push(spawnApp(port, 'abuse@example.test'));
+  apps.push(spawnApp(port));
 } catch (cause) {
   for (const app of apps) {
     if (app.exitCode === null) app.kill('SIGTERM');
@@ -33,7 +29,7 @@ try {
   throw cause;
 }
 
-function spawnApp(appPort, abuseReportEmail) {
+function spawnApp(appPort) {
   return spawn(process.execPath, ['scripts/start.mjs'], {
     stdio: 'inherit',
     env: {
@@ -44,8 +40,6 @@ function spawnApp(appPort, abuseReportEmail) {
       OFFKAI_PUBLIC_BASE_URL: `http://127.0.0.1:${appPort}`,
       OFFKAI_DATABASE_URL: databaseUrl,
       OFFKAI_AUTH_DEV_BYPASS: 'true',
-      OFFKAI_CAMPAIGNS_ENABLED: 'true',
-      OFFKAI_ABUSE_REPORT_EMAIL: abuseReportEmail,
       OFFKAI_SESSION_SECRET: 'e2e-development-session-secret',
       OFFKAI_DB_MIGRATE: 'false',
       OFFKAI_CLIENT_IP_HEADER: 'X-Test-Client-IP',
@@ -53,22 +47,6 @@ function spawnApp(appPort, abuseReportEmail) {
       OFFKAI_LOG_LEVEL: 'warn'
     }
   });
-}
-
-async function waitForReady(url, app) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (app.exitCode !== null)
-      throw new Error(`E2E app exited before becoming ready (${app.exitCode})`);
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-    } catch {
-      // The adapter has not bound its port yet.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`E2E app did not become ready: ${url}`);
 }
 
 let shutdownPromise;

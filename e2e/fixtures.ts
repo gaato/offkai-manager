@@ -4,7 +4,6 @@ export const e2eUsers = {
   inviteTarget: '110000000000000003',
   paymentOrganizer: '110000000000000004',
   paymentParticipant: '110000000000000005',
-  paymentConflictParticipant: '110000000000000006',
   suspended: '110000000000000007'
 } as const;
 
@@ -16,14 +15,12 @@ export const suspendedUserFixture = {
 
 export const opsJourney = {
   organizationName: 'Ops Suspension Journey',
-  organizationSlug: 'ops-suspension-journey',
   eventTitle: 'Ops Suspension Event',
   eventSlug: 'ops-suspension'
 } as const;
 
 export const paymentJourney = {
   organizationName: 'Payment Journey',
-  organizationSlug: 'payment-journey',
   eventTitle: 'Checkout Journey',
   eventSlug: 'checkout-journey'
 } as const;
@@ -87,11 +84,6 @@ export const participantFixtures = {
     registrationId: '10000000-0000-4000-8000-000000000014',
     displayName: 'Withdrawn Participant'
   },
-  withdrawal: {
-    discordUserId: '110000000000000015',
-    registrationId: '10000000-0000-4000-8000-000000000015',
-    displayName: 'Withdrawal Participant'
-  },
   paid: {
     discordUserId: '110000000000000016',
     registrationId: '10000000-0000-4000-8000-000000000016',
@@ -106,25 +98,5 @@ export const participantFixtures = {
     discordUserId: '110000000000000018',
     registrationId: '10000000-0000-4000-8000-000000000018',
     displayName: 'Refunded Participant'
-  }
-} as const;
-
-export const campaignFixtures = {
-  organizationSlug: 'campaign-fixtures',
-  openSlug: 'open-support',
-  closedSlug: 'closed-support',
-  notReadyOrganizationSlug: 'campaign-payment-setup',
-  notReadySlug: 'not-ready-support',
-  listedSupporter: 'Published Supporter',
-  privateSupporter: 'Private Supporter',
-  tokens: {
-    pending: '10'.repeat(32),
-    paymentPending: '20'.repeat(32),
-    paid: '30'.repeat(32),
-    expired: '40'.repeat(32),
-    cancelled: '50'.repeat(32),
-    conflict: '60'.repeat(32),
-    privatePaid: '70'.repeat(32),
-    closedPaid: '80'.repeat(32)
   }
 } as const;

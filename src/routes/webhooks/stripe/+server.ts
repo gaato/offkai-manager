@@ -2,7 +2,7 @@ import type { RequestHandler } from './$types';
 import { getApp } from '$lib/server/app';
 import { getConfig } from '$lib/server/config';
 import { getDatabaseClient } from '$lib/server/db/client';
-import { expireCheckout, settleCheckout } from '$lib/server/domain/payments';
+import { settleCheckout } from '$lib/server/domain/payments';
 
 const maxBodyBytes = 1 << 20;
 
@@ -35,21 +35,6 @@ export const POST: RequestHandler = async (event) => {
   if (!checkoutEvent) return textResponse('ok', 200);
 
   try {
-    if (checkoutEvent.kind === 'expiration') {
-      const expiration = await expireCheckout(getDatabaseClient(config), checkoutEvent);
-      event.locals.logger.info(
-        {
-          stripe_event_id: checkoutEvent.stripeEventId,
-          checkout_session_id: checkoutEvent.sessionId,
-          kind: expiration.kind,
-          order_id: expiration.order?.id,
-          expired: expiration.expired,
-          already_processed: expiration.alreadyProcessed
-        },
-        'Stripe checkout expiration processed'
-      );
-      return textResponse('ok', 200);
-    }
     const settlement = await settleCheckout(getDatabaseClient(config), checkoutEvent);
     if (settlement.alreadyProcessed) {
       event.locals.logger.info(
@@ -69,7 +54,6 @@ export const POST: RequestHandler = async (event) => {
         {
           stripe_event_id: checkoutEvent.stripeEventId,
           payment_record_id: settlement.record?.id,
-          order_id: settlement.order?.id,
           kind: settlement.kind,
           conflict: settlement.conflict
         },

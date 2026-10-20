@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1784409905874,
-      "tag": "0000_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1784430000000,
-      "tag": "0001_orders_and_campaigns",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1784466000000,
-      "tag": "0002_campaign_completion_reports",
+      "when": 1792538664039,
+      "tag": "0000_fearless_professor_monster",
       "breakpoints": true
     }
   ]

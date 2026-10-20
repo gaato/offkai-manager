@@ -12,9 +12,6 @@
   const activityHref = $derived(
     resolve('/app/organizations/[orgId]/activity', { orgId: data.organization.id })
   );
-  const campaignsHref = $derived(
-    resolve('/app/organizations/[orgId]/campaigns', { orgId: data.organization.id })
-  );
 </script>
 
 <div class="mx-auto max-w-5xl">
@@ -43,16 +40,7 @@
               href={homeHref}>{t('organization.home_nav')}</a
             >
           </li>
-          {#if data.campaignsEnabled && data.organization.actorRole !== 'viewer'}
-            <li>
-              <a
-                class="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-4 font-semibold"
-                class:bg-accent={page.url.pathname === campaignsHref}
-                aria-current={page.url.pathname === campaignsHref ? 'page' : undefined}
-                href={campaignsHref}>{t('campaign_admin.nav')}</a
-              >
-            </li>
-          {/if}
+
           {#if data.capabilities.canViewAudit}
             <li>
               <a

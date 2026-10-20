@@ -14,7 +14,6 @@ export type PaymentConfirmation = z.infer<typeof paymentConfirmationSchema>;
 
 export const paymentRequestStatuses = [
   'pending',
-  'pending_external_creation',
   'payment_pending',
   'paid',
   'waived',

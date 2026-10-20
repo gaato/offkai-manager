@@ -4,7 +4,6 @@ import { getConfig } from '$lib/server/config';
 import { loginPath } from '$lib/server/auth/login';
 
 export const load: LayoutServerLoad = ({ locals }) => ({
-  campaignsEnabled: getConfig().campaignsEnabled,
   locale: locals.locale,
   loginPath: loginPath(getConfig(), '/app'),
   session: locals.session,

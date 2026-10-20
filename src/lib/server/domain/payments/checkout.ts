@@ -29,7 +29,7 @@ interface CheckoutIntent {
   currency: string;
   eventTitle: string;
   collectionTitle: string;
-  previousStatus: 'pending' | 'pending_external_creation' | 'payment_pending';
+  previousStatus: 'pending' | 'payment_pending';
 }
 
 /** Starts one direct-charge Checkout Session for an owned participant obligation. */
@@ -115,7 +115,7 @@ async function beginCheckout(
   if (row.collection.status !== 'open' || row.collection.amountMinor <= 0n) {
     throw new PaymentError('not_payable', 'collection is not accepting payments');
   }
-  if (!['pending', 'pending_external_creation', 'payment_pending'].includes(row.request.status)) {
+  if (!['pending', 'payment_pending'].includes(row.request.status)) {
     throw new PaymentError('not_payable', 'payment request is already terminal');
   }
   if (!row.connectAccountId || row.connectStatus !== 'ready' || row.chargesEnabled !== true) {
@@ -215,10 +215,7 @@ async function attachCheckout(
       .limit(1)
       .for('update');
     const request = rows[0]?.request;
-    if (
-      !request ||
-      !['pending', 'pending_external_creation', 'payment_pending'].includes(request.status)
-    ) {
+    if (!request || !['pending', 'payment_pending'].includes(request.status)) {
       throw new PaymentError('not_payable', 'payment request is no longer payable');
     }
     if (request.stripeAccountId && request.stripeAccountId !== intent.stripeAccountId) {

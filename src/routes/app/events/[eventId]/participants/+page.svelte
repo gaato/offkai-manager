@@ -18,10 +18,6 @@
     resolve('/app/events/[eventId]/participants.csv', { eventId: data.event.id })
   );
 
-  function registrationHref(registrationId: string): string {
-    return resolve('/app/registrations/[registrationId]', { registrationId });
-  }
-
   function filterHref(status: (typeof data.filters)[number]): string {
     const parameters = new SvelteURLSearchParams();
     if (status !== 'all') parameters.set('status', status);
@@ -120,12 +116,7 @@
             {#each data.rows as row (row.id)}
               <tr class="border-t">
                 <th class="px-5 py-4 font-semibold" scope="row">
-                  <a
-                    class="hover:underline"
-                    href={registrationHref(row.id)}
-                    aria-label={t('participants.view_registration', { name: row.displayName })}
-                    >{row.displayName}</a
-                  >
+                  {row.displayName}
                 </th>
                 <td class="px-5 py-4">{row.username || t('participants.username_missing')}</td>
                 <td class="px-5 py-4">

@@ -81,10 +81,7 @@ export class RealConnectGateway implements ConnectGateway, PaymentGateway {
               product_data: { name: input.productName }
             }
           }
-        ],
-        ...(input.expireAfter
-          ? { expires_at: Math.floor((Date.now() + input.expireAfter) / 1_000) }
-          : {})
+        ]
       },
       { stripeAccount: input.stripeAccountId, idempotencyKey: input.idempotencyKey }
     );

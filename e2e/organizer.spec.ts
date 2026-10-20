@@ -42,7 +42,6 @@ test('event settings and Discord forms save via their named actions', async ({ p
   await expect(page).toHaveURL(/\/app\/events\/[0-9a-f-]+$/);
 
   await page.getByRole('button', { name: 'Publish event' }).click();
-  await expect(page.locator('#event-share-url')).toHaveValue(/\/events\//);
 
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   const mainForm = page.locator('form[action="?/settings"]');

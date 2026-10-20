@@ -1,12 +1,5 @@
 <script lang="ts">
-  import {
-    ArrowRight,
-    CheckCircle2,
-    ClipboardList,
-    CreditCard,
-    HandHeart,
-    ScanLine
-  } from '@lucide/svelte';
+  import { ArrowRight, CheckCircle2, ClipboardList, CreditCard, ScanLine } from '@lucide/svelte';
   import { translator } from '$lib/i18n';
   import { Badge } from '$lib/components/ui/badge';
   import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
@@ -69,30 +62,6 @@
     </Card>
   </div>
 </section>
-
-{#if data.campaignsEnabled}
-  <section class="bg-muted/30 border-t">
-    <div class="mx-auto max-w-6xl px-5 py-20">
-      <Card class="border-primary/20 shadow-none">
-        <div class="grid gap-8 p-6 sm:p-8 lg:grid-cols-[0.7fr_1.3fr] lg:items-center">
-          <div>
-            <HandHeart aria-hidden="true" class="text-primary" size={34} />
-            <p class="text-primary mt-5 text-sm font-semibold">{t('landing.campaign.eyebrow')}</p>
-            <h2 class="mt-2 text-3xl font-bold tracking-tight">
-              {t('landing.campaign.title')}
-            </h2>
-          </div>
-          <div>
-            <p class="text-xl font-semibold">{t('landing.campaign.rhythm')}</p>
-            <p class="text-muted-foreground mt-4 max-w-2xl leading-7">
-              {t('landing.campaign.body')}
-            </p>
-          </div>
-        </div>
-      </Card>
-    </div>
-  </section>
-{/if}
 
 <section id="features" class="mx-auto max-w-6xl scroll-mt-6 px-5 py-20">
   <h2 class="max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">

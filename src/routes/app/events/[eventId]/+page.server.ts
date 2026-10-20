@@ -18,23 +18,12 @@ export const load: PageServerLoad = async (event) => {
   const eventId = z.uuid().safeParse(event.params.eventId);
   if (!eventId.success) throw error(404);
   const config = getConfig();
-  const [parent, discordSettings] = await Promise.all([
-    event.parent(),
-    getEventDiscordSettings(getDatabaseClient(config), session.userId, eventId.data)
-  ]);
-  const hasLiveStorefront =
-    ['public', 'unlisted'].includes(parent.event.visibility) &&
-    !parent.event.cancelledAt &&
-    !parent.event.archivedAt;
-  const publicPath = `/events/${encodeURIComponent(parent.organizationSlug)}/${encodeURIComponent(parent.event.slug)}`;
   return {
-    discordSettings,
-    publicPage: hasLiveStorefront
-      ? {
-          path: publicPath,
-          url: new URL(publicPath, config.auth.publicBaseUrl).toString()
-        }
-      : null
+    discordSettings: await getEventDiscordSettings(
+      getDatabaseClient(config),
+      session.userId,
+      eventId.data
+    )
   };
 };
 

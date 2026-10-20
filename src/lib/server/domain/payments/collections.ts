@@ -243,7 +243,7 @@ export async function updateCollection(
         .where(
           and(
             eq(paymentRequests.collectionId, current.id),
-            inArray(paymentRequests.status, ['pending', 'pending_external_creation'])
+            inArray(paymentRequests.status, ['pending'])
           )
         );
     } else if (current.dueAt?.getTime() !== updated.dueAt?.getTime()) {
@@ -253,7 +253,7 @@ export async function updateCollection(
         .where(
           and(
             eq(paymentRequests.collectionId, current.id),
-            inArray(paymentRequests.status, ['pending', 'pending_external_creation'])
+            inArray(paymentRequests.status, ['pending'])
           )
         );
     }

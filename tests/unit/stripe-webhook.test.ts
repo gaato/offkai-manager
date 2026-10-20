@@ -40,29 +40,6 @@ describe('Stripe webhook stable-field parser', () => {
     });
   });
 
-  it('accepts an expired session before requiring paid settlement fields', () => {
-    const payload = JSON.stringify({
-      id: 'evt_expired',
-      object: 'event',
-      type: 'checkout.session.expired',
-      account: 'acct_connected',
-      data: { object: { id: 'cs_expired' } }
-    });
-    const signature = Stripe.webhooks.generateTestHeaderString({ payload, secret });
-    expect(
-      new StripeWebhookVerifier(secret).parseCheckoutEvent(
-        new TextEncoder().encode(payload),
-        signature
-      )
-    ).toMatchObject({
-      kind: 'expiration',
-      stripeEventId: 'evt_expired',
-      eventType: 'checkout.session.expired',
-      stripeAccountId: 'acct_connected',
-      sessionId: 'cs_expired'
-    });
-  });
-
   it('rejects a bad signature and ignores unrelated signed events', () => {
     const payload = JSON.stringify({
       id: 'evt_other',

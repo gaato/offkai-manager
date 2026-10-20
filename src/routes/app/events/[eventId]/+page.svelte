@@ -5,7 +5,6 @@
   import { Alert } from '$lib/components/ui/alert';
   import { Button } from '$lib/components/ui/button';
   import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-  import CopyField from '$lib/components/copy-field.svelte';
 
   type ActionResult = { actionError?: string; actionMessage?: string } | null;
 
@@ -63,31 +62,6 @@
       </CardContent>
     </Card>
   </div>
-
-  {#if data.publicPage}
-    <Card class="mt-6 shadow-none">
-      <CardHeader>
-        <CardTitle>{t('event.share.title')}</CardTitle>
-        <p class="text-muted-foreground mt-2 text-sm">{t('event.share.intro')}</p>
-      </CardHeader>
-      <CardContent>
-        <CopyField
-          id="event-share-url"
-          label={t('event.share.label')}
-          value={data.publicPage.url}
-          copyLabel={t('event.share.copy')}
-          copiedLabel={t('event.share.copied')}
-          rows={2}
-        />
-        <a
-          class="text-primary mt-4 inline-flex min-h-11 items-center font-semibold underline underline-offset-4"
-          href={data.publicPage.path}
-          target="_blank"
-          rel="noreferrer">{t('event.share.open')}</a
-        >
-      </CardContent>
-    </Card>
-  {/if}
 
   <Card class="mt-6 shadow-none">
     <CardHeader><CardTitle>{t('discord_settings.summary_title')}</CardTitle></CardHeader>

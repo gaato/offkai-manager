@@ -341,7 +341,6 @@ export async function getParticipantPaymentDetail(
         eq(registrations.userId, userId),
         inArray(paymentRequests.status, [
           'pending',
-          'pending_external_creation',
           'payment_pending',
           'paid',
           'waived',
@@ -387,7 +386,7 @@ export async function getParticipantPaymentDetail(
       !row.organizationSuspendedAt &&
       row.connectStatus === 'ready' &&
       row.chargesEnabled === true &&
-      ['pending', 'pending_external_creation', 'payment_pending'].includes(row.request.status),
+      ['pending', 'payment_pending'].includes(row.request.status),
     paidAt: settledRows[0]?.confirmedAt ?? null
   };
 }
@@ -802,11 +801,7 @@ function collectionMetrics(rows: readonly PaymentRequestRow[]): CollectionMetric
     } else if (request.status === 'waived') {
       metrics.waivedCount += 1;
       metrics.waivedAmountMinor += request.amountMinor;
-    } else if (
-      request.status === 'pending' ||
-      request.status === 'pending_external_creation' ||
-      request.status === 'payment_pending'
-    ) {
+    } else if (request.status === 'pending' || request.status === 'payment_pending') {
       metrics.unpaidCount += 1;
       metrics.unpaidAmountMinor += request.amountMinor;
     }

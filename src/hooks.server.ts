@@ -15,9 +15,7 @@ applyAdapterAddress(process.env);
 
 const WINDOW_MS = 60_000;
 const REQUESTS_PER_WINDOW = 60;
-const PLEDGES_PER_WINDOW = 5;
 const buckets = new Map<string, { count: number; startedAt: number }>();
-const pledgeBuckets = new Map<string, { count: number; startedAt: number }>();
 let roleSyncWorker: RoleSyncWorker | undefined;
 let workerShutdownInstalled = false;
 
@@ -119,22 +117,6 @@ const rejectCrossSite: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
-const campaignFeatureGate: Handle = async ({ event, resolve }) => {
-  if (!getConfig().campaignsEnabled && isCampaignRoute(event.url.pathname)) {
-    throw error(404);
-  }
-  return resolve(event);
-};
-
-function isCampaignRoute(pathname: string): boolean {
-  return (
-    pathname.startsWith('/campaigns/') ||
-    pathname.startsWith('/pledges/') ||
-    pathname.startsWith('/app/campaigns/') ||
-    /^\/app\/organizations\/[^/]+\/campaigns(?:\/|$)/.test(pathname)
-  );
-}
-
 function clientIpKey(event: Parameters<Handle>[0]['event']): string {
   const config = getConfig();
   const configuredHeader = config.http.clientIpHeader;
@@ -185,18 +167,10 @@ function takeRateLimit(
 const rateLimit: Handle = async ({ event, resolve }) => {
   const limited =
     event.request.method === 'POST' &&
-    ['/events/', '/registrations/', '/auth/', '/campaigns/', '/pledges/'].some((prefix) =>
-      event.url.pathname.startsWith(prefix)
-    );
+    ['/auth/'].some((prefix) => event.url.pathname.startsWith(prefix));
   if (!limited) return resolve(event);
 
   const now = Date.now();
-  if (event.url.pathname.startsWith('/campaigns/')) {
-    const pledgeLimit = takeRateLimit(pledgeBuckets, clientIpKey(event), PLEDGES_PER_WINDOW, now);
-    if (!pledgeLimit.allowed) {
-      return limitedResponse(event.locals.t('campaign.rate_limited'), pledgeLimit.bucket, now);
-    }
-  }
   const generalLimit = takeRateLimit(buckets, rateLimitKey(event), REQUESTS_PER_WINDOW, now);
   if (!generalLimit.allowed) {
     return limitedResponse('too many requests', generalLimit.bucket, now);
@@ -239,7 +213,6 @@ export const handle = sequence(
   requestLog,
   securityHeaders,
   locale,
-  campaignFeatureGate,
   rejectCrossSite,
   rateLimit,
   session
