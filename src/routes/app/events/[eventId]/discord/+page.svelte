@@ -5,14 +5,20 @@
   import { translator } from '$lib/i18n';
   let { data, form: actionResult } = $props();
   const t = $derived(translator(data.locale));
-  const discordSettings = superForm(untrack(() => data.discordForm));
+  const discordSettings = superForm(
+    untrack(() => data.discordForm),
+    { resetForm: false }
+  );
   const {
     form: discordForm,
     errors: discordErrors,
     message: discordMessage,
     enhance: enhanceDiscord
   } = discordSettings;
-  const templates = superForm(untrack(() => data.templateForm));
+  const templates = superForm(
+    untrack(() => data.templateForm),
+    { resetForm: false }
+  );
   const {
     form: templateForm,
     errors: templateErrors,

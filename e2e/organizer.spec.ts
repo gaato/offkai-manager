@@ -37,6 +37,19 @@ for (const javaScriptEnabled of [true, false]) {
       await page.getByLabel('Group name').fill('Settings Regression');
       await page.getByRole('button', { name: 'Create group' }).click();
       await expect(page).toHaveURL(/\/app\/organizations\/[0-9a-f-]+$/);
+      const organizationUrl = page.url();
+      await page.goto(`${organizationUrl}/disclosure`);
+      const sellerName = page.getByLabel('Seller name', { exact: true });
+      await sellerName.fill('Settings Regression Seller');
+      await page.getByLabel('Email', { exact: true }).fill('seller@example.test');
+      await page
+        .getByLabel('Disclose address and phone without delay on request', { exact: true })
+        .check();
+      await page.getByLabel('Default cancellation and refund policy').fill('No refunds.');
+      await page.getByRole('button', { name: 'Save disclosure' }).click();
+      await expect(page.getByRole('status').filter({ hasText: 'Disclosure saved.' })).toBeVisible();
+      await expect(sellerName).toHaveValue('Settings Regression Seller');
+      await page.goto(organizationUrl);
       await page.getByRole('link', { name: 'Create event' }).first().click();
       await page.getByLabel('Event title', { exact: true }).fill('Settings Regression Event');
       await page.getByLabel('Start date and time').fill('2026-12-01T18:00');
@@ -56,6 +69,7 @@ for (const javaScriptEnabled of [true, false]) {
       await capacity.fill('40');
       await save.click();
       await expect(saved).toBeVisible();
+      await expect(capacity).toHaveValue('40');
       await page.reload();
       await expect(capacity).toHaveValue('40');
       await capacity.fill('');

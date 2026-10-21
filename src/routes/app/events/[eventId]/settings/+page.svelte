@@ -12,7 +12,10 @@
   } from '$lib/shared/event';
   let { data } = $props();
   const t = $derived(translator(data.locale));
-  const settings = superForm(untrack(() => data.form));
+  const settings = superForm(
+    untrack(() => data.form),
+    { resetForm: false }
+  );
   const { form, errors, message, enhance } = settings;
   const editable = $derived(data.capabilities.canManageEvent && !data.event.archivedAt);
 </script>

@@ -29,7 +29,10 @@
   let { data, form: rawActionResult } = $props();
   const actionResult = $derived(rawActionResult as ActionResult);
   const t = $derived(translator(data.locale));
-  const collectionSuperForm = superForm(untrack(() => data.collectionForm));
+  const collectionSuperForm = superForm(
+    untrack(() => data.collectionForm),
+    { resetForm: false }
+  );
   const {
     form: collectionForm,
     errors: collectionErrors,

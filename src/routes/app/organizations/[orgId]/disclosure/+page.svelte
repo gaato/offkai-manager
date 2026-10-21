@@ -5,7 +5,10 @@
   import { superForm } from 'sveltekit-superforms';
   let { data } = $props();
   const t = $derived(translator(data.locale));
-  const { form, errors, message, enhance } = superForm(untrack(() => data.form));
+  const { form, errors, message, enhance } = superForm(
+    untrack(() => data.form),
+    { resetForm: false }
+  );
 </script>
 
 <svelte:head><title>{t('legal.title')} · {t('brand.name')}</title></svelte:head>

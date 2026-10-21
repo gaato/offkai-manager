@@ -37,6 +37,8 @@ for (const javaScriptEnabled of [true, false]) {
       await expect(
         page.getByRole('status').filter({ hasText: 'The Discord settings were saved.' })
       ).toBeVisible();
+      await expect(page.getByLabel('Server ID', { exact: true })).toHaveValue(fixture.guildId);
+      await expect(page.getByLabel('Panel / announcement channel')).toHaveValue(fixture.channelId);
       await expect(page.getByText('Setup Test Server', { exact: true })).toBeVisible();
       const adminMessage = page.getByLabel('Message for your server admin (select and copy)');
       await expect(adminMessage).toHaveValue(/Server Settings → Integrations/);
@@ -56,6 +58,9 @@ for (const javaScriptEnabled of [true, false]) {
       await page.getByLabel('English panel body', { exact: true }).fill('Copied panel {title}');
       await page.getByRole('button', { name: 'Save and mark templates reviewed' }).click();
       await expect(page.getByText('Panel templates saved.', { exact: true })).toBeVisible();
+      await expect(page.getByLabel('English panel body', { exact: true })).toHaveValue(
+        'Copied panel {title}'
+      );
 
       // The source belongs to a dedicated seeded group; no shared sweep events are mutated.
       await page.goto('/app');
