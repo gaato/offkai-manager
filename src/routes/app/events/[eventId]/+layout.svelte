@@ -7,6 +7,9 @@
   let { data, children } = $props();
   const t = $derived(translator(data.locale));
   const overviewHref = $derived(resolve('/app/events/[eventId]', { eventId: data.event.id }));
+  const discordHref = $derived(
+    resolve('/app/events/[eventId]/discord', { eventId: data.event.id })
+  );
   const settingsHref = $derived(
     resolve('/app/events/[eventId]/settings', { eventId: data.event.id })
   );
@@ -65,13 +68,21 @@
       </div>
       <nav aria-label={t('event.navigation')}>
         <ul class="menu menu-horizontal flex-wrap">
-          {#if data.capabilities.canRecordPayments}
+          <li>
+            <a
+              aria-current={page.url.pathname === overviewHref ? 'page' : undefined}
+              href={overviewHref}
+              class={page.url.pathname === overviewHref ? 'menu-active' : ''}
+              >{t('event.overview_nav')}</a
+            >
+          </li>
+          {#if data.capabilities.canCheckIn}
             <li>
               <a
-                aria-current={page.url.pathname === paymentsHref ? 'page' : undefined}
-                href={paymentsHref}
-                class={page.url.pathname === paymentsHref ? 'menu-active' : ''}
-                >{t('payments.nav')}</a
+                aria-current={page.url.pathname === participantsHref ? 'page' : undefined}
+                href={participantsHref}
+                class={page.url.pathname === participantsHref ? 'menu-active' : ''}
+                >{t('participants.nav')}</a
               >
             </li>
           {/if}
@@ -83,16 +94,41 @@
                 class={page.url.pathname === checkInHref ? 'menu-active' : ''}>{t('checkin.nav')}</a
               >
             </li>
-
+          {/if}
+          {#if data.capabilities.canRecordPayments}
             <li>
               <a
-                aria-current={page.url.pathname === participantsHref ? 'page' : undefined}
-                href={participantsHref}
-                class={page.url.pathname === participantsHref ? 'menu-active' : ''}
-                >{t('participants.nav')}</a
+                aria-current={page.url.pathname === paymentsHref ? 'page' : undefined}
+                href={paymentsHref}
+                class={page.url.pathname === paymentsHref ? 'menu-active' : ''}
+                >{t('payments.nav')}</a
               >
             </li>
           {/if}
+          <li>
+            <a
+              aria-current={page.url.pathname === registrationFormHref ? 'page' : undefined}
+              href={registrationFormHref}
+              class={page.url.pathname === registrationFormHref ? 'menu-active' : ''}
+              >{t('registration_form.nav')}</a
+            >
+          </li>
+          <li>
+            <a
+              aria-current={page.url.pathname === discordHref ? 'page' : undefined}
+              href={discordHref}
+              class={page.url.pathname === discordHref ? 'menu-active' : ''}
+              >{t('event.discord_nav')}</a
+            >
+          </li>
+          <li>
+            <a
+              aria-current={page.url.pathname === settingsHref ? 'page' : undefined}
+              href={settingsHref}
+              class={page.url.pathname === settingsHref ? 'menu-active' : ''}
+              >{t('event.settings_nav')}</a
+            >
+          </li>
           {#if data.capabilities.canViewAudit}
             <li>
               <a
@@ -103,33 +139,6 @@
               >
             </li>
           {/if}
-
-          <li>
-            <a
-              aria-current={page.url.pathname === registrationFormHref ? 'page' : undefined}
-              href={registrationFormHref}
-              class={page.url.pathname === registrationFormHref ? 'menu-active' : ''}
-              >{t('registration_form.nav')}</a
-            >
-          </li>
-
-          <li>
-            <a
-              aria-current={page.url.pathname === overviewHref ? 'page' : undefined}
-              href={overviewHref}
-              class={page.url.pathname === overviewHref ? 'menu-active' : ''}
-              >{t('event.overview_nav')}</a
-            >
-          </li>
-
-          <li>
-            <a
-              aria-current={page.url.pathname === settingsHref ? 'page' : undefined}
-              href={settingsHref}
-              class={page.url.pathname === settingsHref ? 'menu-active' : ''}
-              >{t('event.settings_nav')}</a
-            >
-          </li>
         </ul>
       </nav>
     </div>

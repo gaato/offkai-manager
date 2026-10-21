@@ -583,7 +583,7 @@ export async function seedE2E(databasePath: string): Promise<void> {
         guildId: discordSetupFixture.guildId,
         roleId: discordSetupFixture.highRoleId,
         announcementChannelId: discordSetupFixture.channelId,
-        guildNameSnapshot: 'Setup Test Server'
+        guildNameSnapshot: ''
       })
       .run();
     await upsertField(client, {

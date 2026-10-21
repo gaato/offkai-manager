@@ -4,7 +4,7 @@ import { renderRegistrationModal, submittedAnswers } from '$lib/server/interacti
 import type { EventSummary, RegistrationFormField } from '$lib/server/domain/events';
 import type { OwnedRegistrationDetail } from '$lib/server/domain/registrations/participant';
 import { translator } from '$lib/i18n';
-import { panelVariables, unknownPanelVariables } from '$lib/shared/panel-template';
+import { unknownPanelVariables } from '$lib/shared/panel-template';
 import { formFieldTypes } from '$lib/shared/registration-form';
 import { makeModalSubmit } from '../support/interactions';
 
@@ -121,17 +121,12 @@ describe('Discord pure renderers', () => {
       const template = t('panel_template.default');
       const headings =
         locale === 'ja'
-          ? ['重要なルール', '開催概要', '参加方法', 'キャンセル', 'マナー・注意事項']
-          : [
-              'Important rules',
-              'Event details',
-              'How to join',
-              'Cancellation',
-              'Conduct and practical notes'
-            ];
+          ? ['重要なルール', '参加方法', 'キャンセル', 'マナー・注意事項']
+          : ['Important rules', 'How to join', 'Cancellation', 'Conduct and practical notes'];
       expect(template.match(/^### (.+)$/gm)).toEqual(headings.map((heading) => `### ${heading}`));
       expect(unknownPanelVariables(template)).toEqual([]);
-      for (const variable of panelVariables) expect(template).toContain(`{${variable}}`);
+      expect(template).not.toMatch(/\{(?:title|date|start|end|venue|fee|capacity|deadline)\}/);
+      expect(template).not.toMatch(/^## /m);
       for (const key of ['panel.join', 'panel.status', 'panel.cancel'] as const)
         expect(template).toContain(t(key));
       expect(template).toContain('20');
@@ -156,6 +151,8 @@ describe('Discord pure renderers', () => {
         locale === 'ja' ? '当事者同士で責任を持って' : 'responsibility of those involved'
       );
       expect(text).not.toMatch(/\{(?:title|date|start|end|venue|fee|capacity|deadline)\}/);
+      expect(text.split(event.title)).toHaveLength(2);
+      expect(text).toContain(`<t:${Math.floor(event.startsAt.getTime() / 1000)}:F>`);
     }
   );
   it.each(['ja', 'en'] as const)(
@@ -176,7 +173,7 @@ describe('Discord pure renderers', () => {
       expect(inspected.components).toBeLessThanOrEqual(40);
       expect(inspected.text).toBeLessThanOrEqual(4_000);
       expect(panel.allowed_mentions).toEqual({ parse: [] });
-      expect(JSON.stringify(panel)).toContain(translator(locale)('panel_template.truncated'));
+      expect(JSON.stringify(panel)).not.toContain(translator(locale)('panel_template.truncated'));
     }
   );
   it.each(['ja', 'en'] as const)(

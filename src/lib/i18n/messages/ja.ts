@@ -1,13 +1,20 @@
 import { en, type MessageKey } from './en';
 
 export const ja = {
+  'event.discord_nav': 'Discord',
+  'discord_settings.validation_guild_required':
+    'Discordのチャンネルやロールを設定するにはサーバーIDが必要です。',
+  'discord_setup.invalid_saved_role':
+    '保存済みの「{role}」は付与できないロールです。別のロールを選ぶか、未設定にしてください。',
+  'activity.action.discord.guild_name_refresh': 'Discordサーバー名を更新',
+
   'panel_template.default':
-    '## {title}\n### 重要なルール\n- 申込みによりサーバーとイベントのルールを受け入れます。参加対象は、開催当日に20歳以上の方です。\n- 参加確定後の返金はできません。不明点や特別な事情は主催者に相談してください。\n\n### 開催概要\n日時: {date} {start}〜{end}\n会場: {venue}\n定員: {capacity}\n参加費: {fee}\n申込締切: {deadline}\n\n### 参加方法\n- 「参加する」から必要事項を送信してください。\n- 「参加状況」で参加確定やキャンセル待ちなどの状態を確認し、必要に応じて回答を編集してください。送信だけで参加確定になるとは限りません。\n\n### キャンセル\n- 「参加を取り消す」を選び、次の確認画面で確定してください。操作できない場合は主催者に連絡してください。\n\n### マナー・注意事項\n- 周囲の人を尊重し、スタッフの案内や会場の喫煙ルールを守ってください。\n- 食事の制約やアレルギーへの対応は、申込み前に主催者へ確認してください。\n- 撮影時は周囲の同意とプライバシーに配慮し、動画撮影・配信には事前にスタッフの許可を得てください。\n- 荷物はコンパクトにまとめ、持ち物とゴミは各自で管理してください。忘れ物はスタッフにお問い合わせください。\n- 言語の違いに配慮してください。個人間の取引は主催者の案内に従い、当事者同士で責任を持って行ってください。',
+    '### 重要なルール\n- 申込みによりサーバーとイベントのルールを受け入れます。参加対象は、開催当日に20歳以上の方です。\n- 参加確定後の返金はできません。不明点や特別な事情は主催者に相談してください。\n\n### 参加方法\n- 「参加する」から必要事項を送信してください。\n- 「参加状況」で参加確定やキャンセル待ちなどの状態を確認し、必要に応じて回答を編集してください。送信だけで参加確定になるとは限りません。\n\n### キャンセル\n- 「参加を取り消す」を選び、次の確認画面で確定してください。操作できない場合は主催者に連絡してください。\n\n### マナー・注意事項\n- 周囲の人を尊重し、スタッフの案内や会場の喫煙ルールを守ってください。\n- 食事の制約やアレルギーへの対応は、申込み前に主催者へ確認してください。\n- 撮影時は周囲の同意とプライバシーに配慮し、動画撮影・配信には事前にスタッフの許可を得てください。\n- 荷物はコンパクトにまとめ、持ち物とゴミは各自で管理してください。忘れ物はスタッフにお問い合わせください。\n- 言語の違いに配慮してください。個人間の取引は主催者の案内に従い、当事者同士で責任を持って行ってください。',
   'panel_template.title': 'パネル本文テンプレート',
   'panel_template.ja': '日本語のパネル本文',
   'panel_template.en': '英語のパネル本文',
   'panel_template.help':
-    'Markdownで編集できます。使用可能な変数: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}。料金は現在空欄です。非公開の会場情報は表示されません。保存すると両言語を確認済みにします。',
+    'Markdownで編集できます。使用可能な変数: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}。その行の変数がすべて空欄の場合、行全体を省略します。非公開の会場情報は表示されません。保存すると両言語を確認済みにします。',
   'panel_template.unknown':
     '不明なテンプレート変数です。使用可能: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}。',
   'panel_template.save': 'テンプレートを保存して確認済みにする',
@@ -601,8 +608,7 @@ export const ja = {
   'event.discord_policy_help': '申込時にDiscordログインやサーバー参加を必須にするか選択します。',
   'event.settings_success': 'イベント設定を保存しました。',
   'discord_settings.title': 'Discord設定',
-  'discord_settings.intro':
-    '参加確認とロール更新のため、このイベントをDiscordサーバーに接続します。',
+  'discord_settings.intro': '参加パネルと参加者ロールを利用するDiscordサーバーを設定します。',
   'discord_settings.summary_title': 'Discord',
   'discord_settings.summary_not_configured': 'サーバー未接続',
   'discord_settings.manage': 'Discord設定を管理',
@@ -612,7 +618,7 @@ export const ja = {
   'discord_settings.guild_name': '確認済みサーバー名',
   'discord_settings.guild_name_unverified': '未確認',
   'discord_settings.invite_url': '招待URL',
-  'discord_settings.role_id': '参加者ロールID',
+  'discord_settings.role_id': '参加者ロール',
   'discord_settings.role_id_help': '設定すると、参加確定者にこのロールを付与します。',
   'discord_settings.save': 'Discord設定を保存',
   'discord_settings.success': 'Discord設定を保存しました。',

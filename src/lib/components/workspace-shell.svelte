@@ -51,7 +51,7 @@
   </ul>
 {/snippet}
 
-<div class="min-h-screen">
+<div class="flex min-h-dvh flex-col">
   <header class="navbar bg-base-200 flex-wrap gap-3 px-4">
     <details class="dropdown lg:hidden">
       <summary class="btn">{navigationLabel}</summary>
@@ -73,7 +73,7 @@
       </ul>
     </nav>
   </header>
-  <div class="flex">
+  <div class="flex flex-1">
     <nav class="bg-base-200 hidden w-64 shrink-0 p-4 lg:block" aria-label={navigationLabel}>
       <p class="mb-4">{t('session.signed_in_as', { name: displayName })}</p>
       {@render menu()}

@@ -125,3 +125,8 @@ export function botAuthorizationUrl(
   });
   return `https://discord.com/oauth2/authorize?${query}`;
 }
+
+/** Selectable roles exclude roles Discord never permits a bot to assign, regardless of hierarchy. */
+export function selectableRoles(guildId: string, roles: readonly GuildRole[]): GuildRole[] {
+  return roles.filter((role) => role.id !== guildId && !role.managed);
+}

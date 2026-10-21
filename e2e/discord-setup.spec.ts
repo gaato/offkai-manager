@@ -8,7 +8,7 @@ for (const javaScriptEnabled of [true, false]) {
     test('Discord pickers, hierarchy warning, safe layout preview, template validation, copy, and preparation checklist', async ({
       page
     }) => {
-      await signInAs(page, e2eUsers.sweepOwner, `/app/events/${fixture.eventId}/settings`);
+      await signInAs(page, e2eUsers.sweepOwner, `/app/events/${fixture.eventId}/discord`);
       await expect(page.getByLabel('Panel / announcement channel')).toHaveValue(fixture.channelId);
       await expect(page.getByLabel('Participant role', { exact: true })).toHaveValue(
         fixture.highRoleId
@@ -16,6 +16,28 @@ for (const javaScriptEnabled of [true, false]) {
       await expect(
         page.getByRole('alert').filter({ hasText: /The bot cannot assign Above the bot/ })
       ).toBeVisible();
+      for (const label of ['Participant role', 'Staff role']) {
+        const picker = page.getByLabel(label, { exact: true });
+        await expect(
+          picker.locator('option').filter({ hasText: /@everyone|Event Bot/ })
+        ).toHaveCount(0);
+        await expect(picker.locator(`option[value="${fixture.guildId}"]`)).toHaveCount(0);
+      }
+      await expect(page.getByText('Setup Test Server', { exact: true })).toBeVisible();
+      await expect(page.getByLabel('Discord policy', { exact: true })).toHaveCount(0);
+      await page.getByLabel('Server ID', { exact: true }).fill('');
+      await page.getByRole('button', { name: 'Save Discord settings', exact: true }).click();
+      await expect(
+        page
+          .getByRole('alert')
+          .filter({ hasText: 'Enter a server ID to configure Discord channels or roles.' })
+      ).toBeVisible();
+      await page.getByLabel('Server ID', { exact: true }).fill(fixture.guildId);
+      await page.getByRole('button', { name: 'Save Discord settings', exact: true }).click();
+      await expect(
+        page.getByRole('status').filter({ hasText: 'The Discord settings were saved.' })
+      ).toBeVisible();
+      await expect(page.getByText('Setup Test Server', { exact: true })).toBeVisible();
       const adminMessage = page.getByLabel('Message for your server admin (select and copy)');
       await expect(adminMessage).toHaveValue(/Server Settings → Integrations/);
       await page.getByRole('button', { name: 'Preview recommended layout' }).click();
@@ -60,11 +82,52 @@ for (const javaScriptEnabled of [true, false]) {
       await expect(page.getByLabel('English panel body', { exact: true })).toHaveValue(
         'Copied panel {title}'
       );
+      await expect(page.getByLabel('Panel / announcement channel')).toHaveValue(fixture.channelId);
+      await page.getByRole('link', { name: 'Settings', exact: true }).click();
       await expect(page.getByLabel('Venue name', { exact: true })).toHaveValue('Copied Hall');
       await expect(page.getByLabel('Capacity', { exact: true })).toHaveValue('25');
-      await expect(page.getByLabel('Panel / announcement channel')).toHaveValue(fixture.channelId);
       await page.getByRole('link', { name: 'Registration form', exact: true }).click();
       await expect(page.getByText('Copied question', { exact: true })).toBeVisible();
     });
   });
 }
+
+for (const locale of ['en', 'ja'] as const) {
+  test(`event navigation follows organizer workflow in ${locale}`, async ({ page }) => {
+    await signInAs(
+      page,
+      e2eUsers.sweepOwner,
+      `/app/events/${fixture.eventId}/discord?lang=${locale}`
+    );
+    await expect(
+      page
+        .getByRole('navigation', {
+          name: locale === 'ja' ? 'イベントナビゲーション' : 'Event navigation'
+        })
+        .getByRole('link')
+    ).toHaveText(
+      locale === 'ja'
+        ? ['概要', '参加者', '受付', '支払い', '申込フォーム', 'Discord', '設定', '操作履歴']
+        : [
+            'Overview',
+            'Participants',
+            'Check-in',
+            'Payments',
+            'Registration form',
+            'Discord',
+            'Settings',
+            'Activity'
+          ]
+    );
+  });
+}
+
+test('the workspace sidebar fills the viewport on a short dashboard', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  // A dedicated identity keeps this geometry check independent of team membership fixtures.
+  await signInAs(page, '110000000000000099', '/app', 'Sidebar Test User');
+  const sidebar = page.locator('nav.lg\\:block');
+  const bounds = await sidebar.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y + bounds!.height).toBeGreaterThanOrEqual(1000);
+});

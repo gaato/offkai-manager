@@ -1,11 +1,18 @@
 export const en = {
+  'event.discord_nav': 'Discord',
+  'discord_settings.validation_guild_required':
+    'Enter a server ID to configure Discord channels or roles.',
+  'discord_setup.invalid_saved_role':
+    'The saved role {role} cannot be assigned. Choose another role or leave it unconfigured.',
+  'activity.action.discord.guild_name_refresh': 'Refreshed Discord server name',
+
   'panel_template.default':
-    "## {title}\n### Important rules\n- Registering means accepting the server and event rules. You must be at least 20 on the event day.\n- Fees are non-refundable after confirmation. Ask the organizer about questions or exceptional circumstances.\n\n### Event details\nWhen: {date} {start}–{end}\nVenue: {venue}\nCapacity: {capacity}\nFee: {fee}\nRegistration deadline: {deadline}\n\n### How to join\n- Select Join and submit the required answers.\n- Use My status to check confirmation or waitlist status and edit answers. Submitting does not always confirm a place.\n\n### Cancellation\n- Select Cancel registration, then confirm on the next screen. Contact the organizer if you cannot complete the cancellation.\n\n### Conduct and practical notes\n- Respect people around you and follow staff instructions and venue policies, including smoking rules.\n- Check dietary and allergy accommodations with the organizer before registering.\n- Respect others' consent and privacy when taking photos. Get staff approval before filming or streaming.\n- Keep bags compact, look after your belongings, and clear up your rubbish. Ask staff about lost property.\n- Be considerate across language differences. Follow organizer guidance for private trades; arrangements remain the responsibility of those involved.",
+    "### Important rules\n- Registering means accepting the server and event rules. You must be at least 20 on the event day.\n- Fees are non-refundable after confirmation. Ask the organizer about questions or exceptional circumstances.\n\n### How to join\n- Select Join and submit the required answers.\n- Use My status to check confirmation or waitlist status and edit answers. Submitting does not always confirm a place.\n\n### Cancellation\n- Select Cancel registration, then confirm on the next screen. Contact the organizer if you cannot complete the cancellation.\n\n### Conduct and practical notes\n- Respect people around you and follow staff instructions and venue policies, including smoking rules.\n- Check dietary and allergy accommodations with the organizer before registering.\n- Respect others' consent and privacy when taking photos. Get staff approval before filming or streaming.\n- Keep bags compact, look after your belongings, and clear up your rubbish. Ask staff about lost property.\n- Be considerate across language differences. Follow organizer guidance for private trades; arrangements remain the responsibility of those involved.",
   'panel_template.title': 'Panel text templates',
   'panel_template.ja': 'Japanese panel body',
   'panel_template.en': 'English panel body',
   'panel_template.help':
-    'Editable Markdown. Allowed variables: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}. Fee is currently empty. Private venue details stay hidden. Saving marks both templates reviewed.',
+    'Editable Markdown. Allowed variables: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}. Lines are omitted when all variables on the line are empty. Private venue details stay hidden. Saving marks both templates reviewed.',
   'panel_template.unknown':
     'Unknown template variable. Allowed: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}.',
   'panel_template.save': 'Save and mark templates reviewed',
@@ -610,7 +617,7 @@ export const en = {
   'event.settings_success': 'The event settings were saved.',
   'discord_settings.title': 'Discord settings',
   'discord_settings.intro':
-    'Connect this event to a server for membership checks and participant role updates.',
+    'Choose the Discord server for participation panels and participant roles.',
   'discord_settings.summary_title': 'Discord',
   'discord_settings.summary_not_configured': 'No server connected',
   'discord_settings.manage': 'Manage Discord settings',

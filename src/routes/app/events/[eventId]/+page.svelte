@@ -2,7 +2,6 @@
   import DashboardPage from '$lib/components/page/dashboard-page.svelte';
   import { resolve } from '$app/paths';
   import { translator } from '$lib/i18n';
-  import { discordPolicyLabelKey } from '$lib/shared/event';
 
   type ActionResult = { actionError?: string; actionMessage?: string } | null;
 
@@ -13,8 +12,8 @@
   const archiveHref = $derived(
     resolve('/app/events/[eventId]/archive', { eventId: data.event.id })
   );
-  const settingsHref = $derived(
-    resolve('/app/events/[eventId]/settings', { eventId: data.event.id })
+  const discordHref = $derived(
+    resolve('/app/events/[eventId]/discord', { eventId: data.event.id })
   );
   const venue = $derived(
     [data.event.venueName, data.event.venueAddress].filter(Boolean).join(' · ') ||
@@ -45,7 +44,7 @@
   {#snippet steps()}
     {#each data.dashboard.steps as step (step.key)}
       <li class:step-primary={step.done} class="step" data-content={step.done ? '✓' : '○'}>
-        <a class="link" href={`${settingsHref}#${step.anchor}`}>{t(step.key)}</a>
+        <a class="link" href={`${discordHref}#${step.anchor}`}>{t(step.key)}</a>
       </li>
     {/each}
   {/snippet}
@@ -94,13 +93,13 @@
         </div>
         <div class="card-body grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
           <div>
-            <p>{t(discordPolicyLabelKey(data.discordSettings.policy))}</p>
             <p class="mt-1">
               {data.discordSettings.integration?.guildNameSnapshot ||
+                data.discordSettings.integration?.guildId ||
                 t('discord_settings.summary_not_configured')}
             </p>
           </div>
-          <a href={settingsHref} class="btn btn-ghost inline-flex min-h-11 items-center px-4"
+          <a href={discordHref} class="btn btn-ghost inline-flex min-h-11 items-center px-4"
             >{t('discord_settings.manage')}</a
           >
         </div>

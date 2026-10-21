@@ -133,11 +133,40 @@ export async function getDiscordSetup(
   client: DatabaseClient,
   gateway: DiscordSetupGateway,
   actorUserId: string,
-  eventId: string
+  eventId: string,
+  clock: Clock = systemClock
 ) {
   const { settings } = read(client, (tx) => authorize(tx, actorUserId, eventId, false));
   const resources = settings?.guildId ? await gateway.getGuildResources(settings.guildId) : null;
+  const guildNameSnapshot = resources
+    ? await gateway.getGuildName(resources.guildId)
+    : (settings?.guildNameSnapshot ?? '');
+  if (resources && settings && guildNameSnapshot !== settings.guildNameSnapshot) {
+    write(client, (tx) => {
+      const current = authorize(tx, actorUserId, eventId, false).settings;
+      if (current?.guildId !== resources.guildId || current.guildNameSnapshot === guildNameSnapshot)
+        return;
+      tx.update(eventDiscordIntegrations)
+        .set({ guildNameSnapshot, updatedAt: clock.now() })
+        .where(eq(eventDiscordIntegrations.id, current.id))
+        .run();
+      appendAudit(
+        tx,
+        {
+          actorUserId,
+          eventId,
+          action: 'discord.guild_name_refresh',
+          targetType: 'event_discord_integration',
+          targetId: current.id,
+          before: { guildNameSnapshot: current.guildNameSnapshot },
+          after: { guildNameSnapshot }
+        },
+        clock
+      );
+    });
+  }
   return {
+    guildNameSnapshot,
     resources,
     missing: resources ? featurePermissions(resources, settings ?? {}) : null,
     layout: resources ? read(client, (tx) => preview(tx, eventId, resources)) : null

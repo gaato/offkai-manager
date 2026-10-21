@@ -7,6 +7,7 @@ import {
   channelPermissions,
   hasPermissions,
   roleAssignable,
+  selectableRoles,
   featurePermissions,
   botAuthorizationUrl
 } from '$lib/server/domain/discord/permissions';
@@ -16,7 +17,7 @@ import {
   layoutChannelInput
 } from '$lib/server/domain/discord/layout';
 import { renderPanelTemplate, truncatePanelBody } from '$lib/server/interactions/panel-template';
-import { unknownPanelVariables } from '$lib/shared/panel-template';
+import { panelVariables, unknownPanelVariables } from '$lib/shared/panel-template';
 import { commandDefinitions } from '$lib/server/interactions/commands';
 import { preparationChecklist } from '$lib/server/domain/events/dashboard';
 import { DiscordRestGateway } from '$lib/server/gateways/discord/rest';
@@ -104,6 +105,43 @@ describe('Discord preparation pure functions', () => {
     expect(assignable({ ...role, managed: true })).toBe(false);
     expect(assignable({ ...role, id: resources.guildId })).toBe(false);
     expect(roleAssignable(resources.guildId, role, [], resources.roles)).toBe(false);
+  });
+  it('excludes everyone and managed roles from pickers while keeping hierarchy warnings available', () => {
+    const resources = setupResources();
+    const lowerRole = {
+      ...resources.roles[2],
+      id: '400000000000000010',
+      name: 'Participant',
+      position: 1
+    };
+    resources.roles.push(lowerRole);
+    expect(selectableRoles(resources.guildId, resources.roles)).toEqual([
+      resources.roles[2],
+      lowerRole
+    ]);
+    expect(
+      roleAssignable(resources.guildId, resources.roles[2], resources.botRoleIds, resources.roles)
+    ).toBe(false);
+  });
+  it.each(panelVariables)(
+    'omits a line when its only variable %s is empty, including whitespace',
+    (variable) => {
+      for (const empty of ['', '  \t']) {
+        const actual = { ...values, [variable]: empty };
+        expect(renderPanelTemplate(`Literal rule\nLabel: {${variable}}\nNext rule`, actual)).toBe(
+          'Literal rule\nNext rule'
+        );
+      }
+    }
+  );
+  it('omits lines with several empty variables and preserves mixed nonempty lines and literal text', () => {
+    expect(
+      renderPanelTemplate('Fee: {fee} {venue}\nRules\nTitle: {title} {fee}', {
+        ...values,
+        venue: '',
+        title: 'Event'
+      })
+    ).toBe('Rules\nTitle: Event ');
   });
   it('reports channel restrictions and missing high-bit thread permissions per enabled feature', () => {
     const resources = setupResources();

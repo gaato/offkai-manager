@@ -95,7 +95,8 @@ for (const locale of ['ja', 'en'] as const) {
     'team',
     'participants',
     'check-in',
-    'payments'
+    'payments',
+    'discord'
   ] as const) {
     test(`${destination} has no automated accessibility violations in ${locale}`, async ({
       page
@@ -105,7 +106,8 @@ for (const locale of ['ja', 'en'] as const) {
       if (
         destination === 'participants' ||
         destination === 'check-in' ||
-        destination === 'payments'
+        destination === 'payments' ||
+        destination === 'discord'
       ) {
         const organizationHref = await page
           .locator('a[href^="/app/organizations/"]')

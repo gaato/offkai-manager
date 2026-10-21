@@ -33,6 +33,7 @@ export interface CreateChannel {
   permission_overwrites: PermissionOverwrite[];
 }
 export interface DiscordSetupGateway {
+  getGuildName(guildId: string): Promise<string>;
   canManageGuild(guildId: string, discordUserId: string): Promise<boolean>;
   /** null means the bot cannot access the guild; other failures must remain distinguishable. */
   getGuildResources(guildId: string): Promise<GuildResources | null>;

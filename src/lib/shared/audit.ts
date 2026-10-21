@@ -1,5 +1,6 @@
 export type AuditActionLabelKey =
   | 'activity.action.unknown'
+  | 'activity.action.discord.guild_name_refresh'
   | 'activity.action.event.panel_templates_update'
   | 'activity.action.discord.layout_begin'
   | 'activity.action.discord.layout_step'
@@ -57,6 +58,7 @@ export type AuditActionLabelKey =
   | 'activity.action.platform.user_unsuspend';
 
 const actionLabels: Readonly<Record<string, AuditActionLabelKey>> = {
+  'discord.guild_name_refresh': 'activity.action.discord.guild_name_refresh',
   'event.panel_templates_update': 'activity.action.event.panel_templates_update',
   'discord.layout_begin': 'activity.action.discord.layout_begin',
   'discord.layout_step': 'activity.action.discord.layout_step',

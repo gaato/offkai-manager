@@ -63,6 +63,8 @@ for (const javaScriptEnabled of [true, false]) {
       await expect(saved).toBeVisible();
       await page.reload();
       await expect(capacity).toHaveValue('');
+      await expect(page.getByLabel('English panel body', { exact: true })).toHaveCount(0);
+      await page.getByRole('link', { name: 'Discord', exact: true }).click();
       const discordForm = page.locator('form[action="?/discord"]');
       await discordForm.getByRole('button', { name: 'Save Discord settings' }).click();
       await expect(

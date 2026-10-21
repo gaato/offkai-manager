@@ -3,6 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { testDatabase, fixedClock } from '../database';
 import type { DatabaseClient } from '$lib/server/db/client';
 import {
+  auditLogs,
   discordLayoutResources,
   discordPanels,
   eventDiscordIntegrations,
@@ -42,7 +43,95 @@ async function fixture() {
   return { ...data, fake, gateway, args };
 }
 describe('Discord organizer setup persistence', () => {
-  it('previews without writes; resumes a partial failure without touching pre-existing resources', async () => {
+  it('refreshes and stores the REST guild name on load with an atomic audit, only when changed', async () => {
+    const { args, event, fake } = await fixture();
+    const stored = () =>
+      client.db
+        .select()
+        .from(eventDiscordIntegrations)
+        .where(eq(eventDiscordIntegrations.eventId, event.id))
+        .get()!;
+    const audits = () =>
+      client.db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.action, 'discord.guild_name_refresh'))
+        .all();
+    client.db
+      .update(eventDiscordIntegrations)
+      .set({ guildNameSnapshot: '' })
+      .where(eq(eventDiscordIntegrations.eventId, event.id))
+      .run();
+    expect((await getDiscordSetup(...args, fixedClock)).guildNameSnapshot).toBe(
+      'Setup Test Server'
+    );
+    expect(stored().guildNameSnapshot).toBe('Setup Test Server');
+    expect(stored().updatedAt).toEqual(fixedClock.now());
+    expect(audits()).toHaveLength(1);
+    expect(audits()[0]).toMatchObject({
+      eventId: event.id,
+      createdAt: fixedClock.now(),
+      afterJson: { guildNameSnapshot: 'Setup Test Server' }
+    });
+    await getDiscordSetup(...args, fixedClock);
+    expect(audits()).toHaveLength(1);
+    fake.control.guildName = 'Renamed Server';
+    await getDiscordSetup(...args, fixedClock);
+    expect(stored().guildNameSnapshot).toBe('Renamed Server');
+    expect(audits()).toHaveLength(2);
+    fake.control.unavailable = true;
+    await getDiscordSetup(...args, fixedClock);
+    expect(stored().guildNameSnapshot).toBe('Renamed Server');
+    expect(audits()).toHaveLength(2);
+  });
+  it('stores the verified guild name when saving guild-only Discord settings without legacy policy requirements', async () => {
+    const { event, owner, gateway, fake } = await fixture();
+    fake.control.guildName = 'Saved Server Name';
+    const saved = await updateEventDiscordSettings(
+      client,
+      gateway,
+      {
+        actorUserId: owner.userId,
+        eventId: event.id,
+        policy: 'not_used',
+        guildId: setupGuildId,
+        roleId: '',
+        inviteUrl: ''
+      },
+      fixedClock
+    );
+    expect(saved.integration?.guildNameSnapshot).toBe('Saved Server Name');
+    expect(
+      client.db
+        .select()
+        .from(eventDiscordIntegrations)
+        .where(eq(eventDiscordIntegrations.eventId, event.id))
+        .get()!.guildNameSnapshot
+    ).toBe('Saved Server Name');
+    expect(fake.calls.some((call) => call.method !== 'GET')).toBe(false);
+  });
+  it('does not cache a REST name into a different guild linked during the request', async () => {
+    const { args, event, gateway } = await fixture();
+    const original = gateway.getGuildName.bind(gateway);
+    gateway.getGuildName = async (guildId) => {
+      const name = await original(guildId);
+      client.db
+        .update(eventDiscordIntegrations)
+        .set({ guildId: '400000000000000099', guildNameSnapshot: 'Other server' })
+        .where(eq(eventDiscordIntegrations.eventId, event.id))
+        .run();
+      return name;
+    };
+    await getDiscordSetup(...args, fixedClock);
+    expect(
+      client.db
+        .select()
+        .from(eventDiscordIntegrations)
+        .where(eq(eventDiscordIntegrations.eventId, event.id))
+        .get()!.guildNameSnapshot
+    ).toBe('Other server');
+  });
+  it('previews without REST writes; resumes a partial failure without touching pre-existing resources', async () => {
     const { args, fake, event } = await fixture();
     const existing = structuredClone(fake.control.resources);
     const first = await getDiscordSetup(...args);

@@ -39,6 +39,7 @@ export function fakeDiscordFetch(resources = setupResources()) {
     failAt: 0,
     loseResponseAt: 0,
     unavailable: false,
+    guildName: 'Setup Test Server',
     ownerId: '200000000000000001',
     resources,
     calls,
@@ -70,7 +71,7 @@ export function fakeDiscordFetch(resources = setupResources()) {
     if (path === `/guilds/${resources.guildId}`)
       return Response.json({
         id: resources.guildId,
-        name: 'Setup Test Server',
+        name: control.guildName,
         owner_id: control.ownerId
       });
     return Response.json({}, { status: 404 });

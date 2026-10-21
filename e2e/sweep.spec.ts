@@ -65,7 +65,7 @@ for (const locale of ['ja', 'en'] as const) {
       .filter({ hasText: 'Summer Gathering' })
       .first()
       .getAttribute('href');
-    await page.goto(`${eventHref}/settings?lang=${locale}`);
+    await page.goto(`${eventHref}/discord?lang=${locale}`);
     await expect(
       page.getByRole('heading', { name: locale === 'ja' ? 'Discord設定' : 'Discord settings' })
     ).toBeVisible();
