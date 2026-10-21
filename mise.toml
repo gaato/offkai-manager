@@ -30,6 +30,10 @@ run = "pnpm test"
 description = "Run SQLite integration tests"
 run = "pnpm test:integration"
 
+[tasks.test-scenario]
+description = "Run signed interaction and webhook scenarios"
+run = "pnpm test:scenario"
+
 [tasks.test-e2e]
 description = "Run Chromium browser tests"
 run = "pnpm test:e2e"

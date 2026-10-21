@@ -1,10 +1,10 @@
 name: Publish
 
-# Builds the container image and pushes it to GHCR. The deployment target
-# (OCI A1, aarch64) pulls from here, hence the multi-arch manifest.
+# Builds the container image and pushes it to GHCR. The image is multi-arch so
+# that self-hosters on arm64 boards can pull the same tag as amd64 hosts.
 on:
   push:
-    branches: [main, ts-rewrite]
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
