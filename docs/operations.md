@@ -126,8 +126,12 @@ Configure two HTTPS event destinations with **separate signing secrets**:
 
 | Endpoint | Payload / scope | Signing secret |
 | --- | --- | --- |
-| `https://offkai.example/webhooks/stripe` | Snapshot events on connected accounts, not only the platform account. | `OFFKAI_STRIPE_WEBHOOK_SECRET` |
-| `https://offkai.example/webhooks/stripe/v2` | Thin Accounts v2 notifications for the platform's connected accounts; related objects are retrieved with the platform key. | `OFFKAI_STRIPE_V2_WEBHOOK_SECRET` |
+| `https://offkai.example/webhooks/stripe` | Snapshot events from **connected accounts** (`events_from: @accounts`), because Checkout runs as direct charges on the organizer's account. | `OFFKAI_STRIPE_WEBHOOK_SECRET` |
+| `https://offkai.example/webhooks/stripe/v2` | Thin Accounts v2 notifications from **your account** (`events_from: @self`); related objects are retrieved with the platform key. | `OFFKAI_STRIPE_V2_WEBHOOK_SECRET` |
+
+The scopes differ on purpose. Stripe emits `v2.core.account.*` events for v2 connected accounts on
+the platform account itself, so a thin destination listening to connected accounts receives
+nothing and onboarding status only changes when an organizer presses "sync".
 
 Subscribe the snapshot destination to:
 
