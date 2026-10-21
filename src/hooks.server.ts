@@ -99,10 +99,14 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
   return response;
 };
 
+// Discord authenticates the raw body with Ed25519 rather than browser cookies.
+const isInteraction = (path: string): boolean => path === '/interactions';
+
 const rejectCrossSite: Handle = async ({ event, resolve }) => {
   if (
     !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) &&
-    !event.url.pathname.startsWith('/webhooks/stripe')
+    !event.url.pathname.startsWith('/webhooks/stripe') &&
+    !isInteraction(event.url.pathname)
   ) {
     if (event.request.headers.get('sec-fetch-site') === 'cross-site') {
       throw error(403, 'cross-site request rejected');
@@ -171,6 +175,7 @@ function takeRateLimit(
 }
 
 const rateLimit: Handle = async ({ event, resolve }) => {
+  if (isInteraction(event.url.pathname)) return resolve(event);
   const limited =
     event.request.method === 'POST' &&
     ['/auth/'].some((prefix) => event.url.pathname.startsWith(prefix));
@@ -190,6 +195,7 @@ const rateLimit: Handle = async ({ event, resolve }) => {
 };
 
 const locale: Handle = async ({ event, resolve }) => {
+  if (isInteraction(event.url.pathname)) return resolve(event);
   const queryLocale = normalizeLocale(event.url.searchParams.get('lang'));
   const selected = resolveLocale(
     event.url.searchParams.get('lang'),
@@ -215,6 +221,7 @@ const locale: Handle = async ({ event, resolve }) => {
 };
 
 const session: Handle = async ({ event, resolve }) => {
+  if (isInteraction(event.url.pathname)) return resolve(event);
   const config = getConfig();
   await populateRequestSession(event, config);
   return resolve(event);

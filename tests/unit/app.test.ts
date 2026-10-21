@@ -15,6 +15,9 @@ describe('application gateway composition', () => {
   it('disables Stripe when production configuration has no key', () => {
     const app = createApp(
       loadConfig({
+        OFFKAI_DISCORD_APPLICATION_ID: '100000000000000001',
+        OFFKAI_DISCORD_PUBLIC_KEY: 'ab'.repeat(32),
+        OFFKAI_DISCORD_BOT_TOKEN: 'fake-unit-token',
         OFFKAI_DATABASE_PATH: '/tmp/offkai.sqlite',
         OFFKAI_SESSION_SECRET: 'production-session-secret',
         OFFKAI_DISCORD_CLIENT_ID: 'discord-client',

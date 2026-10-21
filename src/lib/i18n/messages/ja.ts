@@ -1,6 +1,26 @@
 import { en, type MessageKey } from './en';
 
 export const ja = {
+  'command.offkai.name': 'オフ会',
+  'command.offkai.description': 'オフ会を管理します',
+  'command.web.name': '管理画面',
+  'command.web.description': '主催者の管理画面を開きます',
+  'command.panel.name': 'パネル',
+  'command.panel.description': 'オフ会パネルを管理します',
+  'command.status.name': '状況',
+  'command.status.description': 'オフ会の状況を表示します',
+  'command.remind.name': 'リマインド',
+  'command.remind.description': 'オフ会のリマインダーを送ります',
+  'command.checkin.name': '受付',
+  'command.checkin.description': '参加者を受付します',
+  'command.who.name': '参加者',
+  'command.who.description': '受付する参加者',
+  'interaction.unknown':
+    'この操作は不明、または有効期限が切れています。コマンドをもう一度実行してください。',
+  'interaction.soon': '近日公開予定です。',
+  'interaction.web': '主催者の管理画面を開きます。',
+  'interaction.web_button': '管理画面を開く',
+  'interaction.unavailable': 'このアカウントではこの操作を利用できません。',
   'brand.name': en['brand.name'],
   'meta.description': 'オフ会の申込・集金・当日受付をまとめて管理します。',
   'nav.primary': 'メインナビゲーション',

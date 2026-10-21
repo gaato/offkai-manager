@@ -2,6 +2,14 @@
 module.exports = {
   forbidden: [
     {
+      name: 'domain-has-no-discord-transport',
+      severity: 'error',
+      from: { path: '^src/lib/server/domain/' },
+      to: {
+        path: '(^src/lib/server/interactions/|^\\$lib/server/interactions/|(^|node_modules/)@discordjs/|(^|node_modules/)discord-api-types(/|$))'
+      }
+    },
+    {
       name: 'domain-is-framework-free',
       from: { path: '^src/lib/server/domain/' },
       to: {
@@ -27,12 +35,16 @@ module.exports = {
       name: 'no-circular-dependencies',
       severity: 'error',
       from: {},
-      to: { circular: true }
+      // Preserve the existing runtime-cycle policy while inspecting type imports for boundaries.
+      to: { circular: true, viaOnly: { dependencyTypesNot: ['pre-compilation-only'] } }
     }
   ],
   options: {
+    // Type-only imports must obey the domain transport boundary too.
+    tsPreCompilationDeps: 'specify',
     doNotFollow: { path: 'node_modules' },
-    exclude: ['node_modules', '\\.svelte-kit'],
+    // Keep external dependency edges visible to boundary rules; doNotFollow stops traversal.
+    exclude: ['\\.svelte-kit'],
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: {
       extensions: ['.js', '.ts', '.svelte']

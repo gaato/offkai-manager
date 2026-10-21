@@ -509,6 +509,9 @@ describe('organization domain', () => {
       OFFKAI_DATABASE_PATH: ':memory:',
       OFFKAI_SESSION_SECRET: 'organization-integration-secret',
       OFFKAI_AUTH_DEV_BYPASS: 'false',
+      OFFKAI_DISCORD_APPLICATION_ID: '100000000000000001',
+      OFFKAI_DISCORD_PUBLIC_KEY: 'ab'.repeat(32),
+      OFFKAI_DISCORD_BOT_TOKEN: 'fake-integration-token',
       OFFKAI_DISCORD_CLIENT_ID: 'integration-client',
       OFFKAI_DISCORD_CLIENT_SECRET: 'integration-secret',
       OFFKAI_DISCORD_REDIRECT_URL: 'http://127.0.0.1/auth/discord/callback'

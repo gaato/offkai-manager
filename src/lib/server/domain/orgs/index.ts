@@ -31,3 +31,5 @@ export {
   type OrganizationCapabilities,
   type OrganizationRole
 } from '$lib/shared/organization';
+
+export { ensurePersonalOrganization } from './personal';

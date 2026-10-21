@@ -1,0 +1,39 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import type { APIInteraction } from 'discord-api-types/v10';
+import { getConfig } from '$lib/server/config';
+import { getDatabaseClient } from '$lib/server/db/client';
+import { verifyInteraction } from '$lib/server/interactions/verify';
+import { dispatchInteraction } from '$lib/server/interactions/router';
+
+export const POST: RequestHandler = async ({ request }) => {
+  const config = getConfig();
+  if (!config.discord.publicKey) return new Response(null, { status: 503 });
+  const rawBody = await request.text();
+  if (
+    !(await verifyInteraction(
+      config.discord.publicKey,
+      request.headers.get('X-Signature-Ed25519'),
+      request.headers.get('X-Signature-Timestamp'),
+      rawBody
+    ))
+  )
+    return new Response(null, { status: 401 });
+
+  let interaction: APIInteraction;
+  try {
+    // Discord owns the envelope schema. Only our options and custom_id arguments use zod.
+    interaction = JSON.parse(rawBody) as APIInteraction;
+    if (!interaction || typeof interaction !== 'object') return new Response(null, { status: 400 });
+  } catch {
+    return new Response(null, { status: 400 });
+  }
+  if (interaction.application_id !== config.discord.applicationId)
+    return new Response(null, { status: 401 });
+  return json(
+    await dispatchInteraction(interaction, {
+      database: () => getDatabaseClient(config),
+      publicBaseUrl: config.auth.publicBaseUrl
+    })
+  );
+};

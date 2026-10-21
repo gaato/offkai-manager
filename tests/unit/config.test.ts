@@ -82,6 +82,41 @@ describe('configuration', () => {
     expect(() => loadConfig({ ...dev, OFFKAI_TIMEZONE: 'not-a-zone' })).toThrow(/IANA/);
     expect(() => parseHttpAddress('localhost')).toThrow(/host:port/);
   });
+  it.each([
+    ['OFFKAI_DISCORD_PUBLIC_KEY', 'ab'.repeat(31)],
+    ['OFFKAI_DISCORD_PUBLIC_KEY', 'gg'.repeat(32)],
+    ['OFFKAI_DISCORD_APPLICATION_ID', 'not-a-snowflake'],
+    ['OFFKAI_DISCORD_COMMAND_GUILD_ID', 'not-a-snowflake']
+  ])('rejects invalid interaction configuration %s', (key, value) => {
+    expect(() => loadConfig({ ...dev, [key]: value })).toThrow(/invalid OFFKAI configuration/);
+  });
+  it('requires Discord receiving credentials in production and accepts valid hex', () => {
+    const production = {
+      OFFKAI_DATABASE_PATH: ':memory:',
+      OFFKAI_SESSION_SECRET: 'production-session-secret',
+      OFFKAI_DISCORD_CLIENT_ID: 'oauth-client',
+      OFFKAI_DISCORD_CLIENT_SECRET: 'oauth-secret',
+      OFFKAI_DISCORD_REDIRECT_URL: 'https://example.test/auth/discord/callback'
+    };
+    const receiving = {
+      OFFKAI_DISCORD_APPLICATION_ID: '100000000000000001',
+      OFFKAI_DISCORD_PUBLIC_KEY: 'AB'.repeat(32),
+      OFFKAI_DISCORD_BOT_TOKEN: 'fake-unit-token',
+      OFFKAI_DISCORD_COMMAND_GUILD_ID: '400000000000000001'
+    };
+    for (const key of Object.keys(receiving).filter(
+      (key) => key !== 'OFFKAI_DISCORD_COMMAND_GUILD_ID'
+    )) {
+      expect(() => loadConfig({ ...production, ...receiving, [key]: '' })).toThrow(
+        /required in production/
+      );
+    }
+    expect(loadConfig({ ...production, ...receiving }).discord).toMatchObject({
+      applicationId: receiving.OFFKAI_DISCORD_APPLICATION_ID,
+      publicKey: receiving.OFFKAI_DISCORD_PUBLIC_KEY,
+      commandGuildId: receiving.OFFKAI_DISCORD_COMMAND_GUILD_ID
+    });
+  });
   it('maps the namespaced listen address over generic host defaults', () => {
     const env = { HOST: 'container-hostname', PORT: '3000' };
     applyAdapterAddress(env);

@@ -86,6 +86,21 @@ const rawSchema = z.object({
   OFFKAI_DISCORD_CLIENT_SECRET: z.string().default(''),
   OFFKAI_DISCORD_REDIRECT_URL: z.string().default(''),
   OFFKAI_DISCORD_BOT_TOKEN: z.string().default(''),
+  OFFKAI_DISCORD_APPLICATION_ID: z
+    .string()
+    .regex(/^\d{17,20}$/)
+    .or(z.literal(''))
+    .default(''),
+  OFFKAI_DISCORD_PUBLIC_KEY: z
+    .string()
+    .regex(/^[a-fA-F0-9]{64}$/)
+    .or(z.literal(''))
+    .default(''),
+  OFFKAI_DISCORD_COMMAND_GUILD_ID: z
+    .string()
+    .regex(/^\d{17,20}$/)
+    .or(z.literal(''))
+    .default(''),
   OFFKAI_STRIPE_SECRET_KEY: z.string().default(''),
   OFFKAI_STRIPE_WEBHOOK_SECRET: z.string().default(''),
   OFFKAI_PLATFORM_ADMIN_DISCORD_IDS: z.string().default(''),
@@ -117,6 +132,9 @@ export interface Config {
     clientSecret: string;
     redirectUrl: string;
     botToken: string;
+    applicationId: string;
+    publicKey: string;
+    commandGuildId: string;
   };
   stripe: { secretKey: string; webhookSecret: string };
   platform: { adminDiscordIds: string[] };
@@ -241,6 +259,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('OFFKAI_SESSION_SECRET must be at least 16 bytes');
   }
 
+  if (
+    !raw.OFFKAI_AUTH_DEV_BYPASS &&
+    (!raw.OFFKAI_DISCORD_APPLICATION_ID ||
+      !raw.OFFKAI_DISCORD_PUBLIC_KEY ||
+      !raw.OFFKAI_DISCORD_BOT_TOKEN)
+  ) {
+    throw new Error('Discord application ID, public key, and bot token are required in production');
+  }
+
   return {
     tuning: tuningSchema.parse(raw),
     http: {
@@ -269,7 +296,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       clientId: raw.OFFKAI_DISCORD_CLIENT_ID,
       clientSecret: raw.OFFKAI_DISCORD_CLIENT_SECRET,
       redirectUrl: raw.OFFKAI_DISCORD_REDIRECT_URL,
-      botToken: raw.OFFKAI_DISCORD_BOT_TOKEN
+      botToken: raw.OFFKAI_DISCORD_BOT_TOKEN,
+      applicationId: raw.OFFKAI_DISCORD_APPLICATION_ID,
+      publicKey: raw.OFFKAI_DISCORD_PUBLIC_KEY,
+      commandGuildId: raw.OFFKAI_DISCORD_COMMAND_GUILD_ID
     },
     stripe: {
       secretKey: raw.OFFKAI_STRIPE_SECRET_KEY,

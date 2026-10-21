@@ -73,6 +73,7 @@ export const organizations = sqliteTable(
   'organizations',
   {
     id: id(),
+    personalOwnerUserId: text('personal_owner_user_id').references(() => users.id),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     createdAt: createdAt(),
@@ -81,6 +82,9 @@ export const organizations = sqliteTable(
   },
   (table) => [
     unique('organizations_slug_key').on(table.slug),
+    uniqueIndex('organizations_personal_owner_key')
+      .on(table.personalOwnerUserId)
+      .where(sql`${table.personalOwnerUserId} is not null`),
     check('organizations_name_check', sql`length(${table.name}) > 0`),
     check('organizations_slug_check', sql`length(${table.slug}) > 0`),
     index('organizations_suspended_at_idx')

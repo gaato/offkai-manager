@@ -55,7 +55,10 @@ Durations accept Go-style units such as `500ms`, `10s`, `30m`, or `1h30m`.
 | `OFFKAI_DISCORD_CLIENT_ID`          | empty                   | Discord OAuth application client ID. Required with the next two OAuth values outside the development bypass.                              |
 | `OFFKAI_DISCORD_CLIENT_SECRET`      | empty                   | Discord OAuth application secret. Keep secret.                                                                                            |
 | `OFFKAI_DISCORD_REDIRECT_URL`       | empty                   | Absolute OAuth callback URL, normally `https://HOST/auth/discord/callback`.                                                               |
-| `OFFKAI_DISCORD_BOT_TOKEN`          | empty                   | Shared Discord bot token for guild checks and participant role sync. Without it those controls are inactive.                              |
+| `OFFKAI_DISCORD_BOT_TOKEN`          | empty                   | Shared Discord bot token for guild checks and participant role sync. Required outside the development bypass.                             |
+| `OFFKAI_DISCORD_APPLICATION_ID`     | empty                   | Discord application ID (17–20 digit snowflake); required in production.                                                                   |
+| `OFFKAI_DISCORD_PUBLIC_KEY`         | empty                   | Ed25519 public key, exactly 64 hexadecimal characters; required in production.                                                            |
+| `OFFKAI_DISCORD_COMMAND_GUILD_ID`   | empty                   | Register commands in this guild; leave empty for global commands.                                                                         |
 | `OFFKAI_STRIPE_SECRET_KEY`          | empty                   | Stripe platform secret key. Outside the development bypass it must be configured together with the webhook secret.                        |
 | `OFFKAI_STRIPE_WEBHOOK_SECRET`      | empty                   | Signing secret for the connected-account Stripe webhook endpoint.                                                                         |
 | `OFFKAI_PLATFORM_ADMIN_DISCORD_IDS` | empty                   | Comma-separated Discord user IDs allowed to access `/ops`.                                                                                |
@@ -72,6 +75,7 @@ pnpm check              # Svelte and TypeScript checks
 pnpm lint               # ESLint and Prettier
 pnpm depcruise          # architecture boundaries
 pnpm test               # Vitest unit suite
+pnpm test:scenario      # Signed Discord HTTP interactions
 pnpm test:integration   # Vitest with isolated in-memory SQLite
 pnpm test:e2e           # Chromium acceptance suite against a built app
 pnpm test:e2e:all       # all configured Playwright browser projects
@@ -80,6 +84,40 @@ pnpm build              # adapter-node production build
 
 Integration and E2E tests use SQLite and do not need Docker. The acceptance ports can be overridden
 with `OFFKAI_E2E_PRIMARY_PORT` and `OFFKAI_E2E_PRODUCTION_PORT`.
+
+## Discord interactions
+
+Configure Discord's Interactions Endpoint URL as `https://HOST/interactions`. The endpoint
+verifies Ed25519 signatures on the unchanged request text before parsing JSON, and accepts
+signed timestamps within five minutes in either direction to bound replay and clock skew.
+The interaction locale controls replies independently of browser language cookies.
+
+`/offkai web` opens `/app` and creates the actor's personal organization with owner membership
+on first use. The personal organization is separate from existing team organizations; its
+initial name is the Discord display name. Suspended accounts cannot create organizations,
+and using the command does not restore suspended organizations or disabled memberships.
+`/offkai panel`, `/offkai status`, `/offkai remind`, and `/checkin` currently reply “coming soon”.
+Check-in autocomplete returns no candidates until the event lookup is implemented. Both
+commands are guild-only; `/offkai` defaults to Manage Guild permission.
+
+Register commands after reviewing the dry-run output:
+
+```fish
+pnpm commands:register --dry-run
+pnpm commands:register
+```
+
+Registration fetches existing commands with localization maps, prints normalized before/after
+JSON, then creates or edits only this project's chat-input commands by name. Other commands,
+including different command types with the same name, remain untouched. `--prune` explicitly
+also deletes other commands in the selected scope; `--dry-run --prune` previews that deletion.
+No registration runs during builds or application startup.
+
+The custom ID wire contract starts with `om1`: `om1:web` and
+`om1:soon:<panel|status|remind|checkin>`. These versioned decoders must remain available for
+buttons already posted to Discord. IDs select behavior; identity comes from the signed actor.
+Deferred replies set the ephemeral flag; Components V2 is applied on the eventual message,
+as Discord only permits the ephemeral flag on a deferred acknowledgement.
 
 ## Deployment
 

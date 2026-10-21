@@ -52,6 +52,7 @@ const expectedUniqueConstraints = [
 ] as const;
 
 const expectedPartialUniqueIndexes = [
+  ['organizations', ['personal_owner_user_id'], 'personal_owner_user_id is not null'],
   ['registrations', ['event_id', 'user_id'], "status <> 'cancelled'"],
   ['payment_records', ['idempotency_key'], "idempotency_key <> ''"],
   ['payment_requests', ['checkout_session_id'], "checkout_session_id <> ''"],

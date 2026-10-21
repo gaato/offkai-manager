@@ -8,6 +8,13 @@
       "when": 1792539897673,
       "tag": "0000_shiny_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792545094840,
+      "tag": "0001_personal_organizations",
+      "breakpoints": true
     }
   ]
 }

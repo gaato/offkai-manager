@@ -32,6 +32,16 @@ export default defineConfig({
       {
         resolve: { alias: aliases },
         test: {
+          name: 'scenario',
+          setupFiles: ['tests/clock.ts', 'tests/support/scenario-setup.ts'],
+          include: ['tests/scenario/**/*.test.ts'],
+          environment: 'node',
+          fileParallelism: false
+        }
+      },
+      {
+        resolve: { alias: aliases },
+        test: {
           name: 'integration',
           isolate: false,
           setupFiles: ['tests/clock.ts'],
