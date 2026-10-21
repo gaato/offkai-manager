@@ -64,11 +64,7 @@ function panelCommand(eventId: string, language = 'en') {
   ];
   return command;
 }
-async function call(interaction: Parameters<typeof callInteraction>[0]) {
-  const response = await callInteraction(interaction, signingKey.privateKey);
-  expect(response.status).toBe(200);
-  return response.json();
-}
+
 function button(action: string, eventId: string, id?: string) {
   return participant(makeComponent(`om1:${action}:${eventId}`), id);
 }
@@ -83,6 +79,33 @@ function submit(eventId: string, answers: Record<string, string>, kind = 'join',
 describe('signed FREE event Discord journeys', () => {
   let client: DatabaseClient;
   let transport: ReturnType<typeof recordingRest>;
+  async function call(interaction: Parameters<typeof callInteraction>[0]) {
+    const offset = transport.calls.length;
+    const response = await callInteraction(interaction, signingKey.privateKey);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    if (
+      data.type === 5 &&
+      typeof interaction !== 'string' &&
+      (interaction.type === 3 || interaction.type === 5)
+    ) {
+      await vi.waitFor(() =>
+        expect(
+          transport.calls
+            .slice(offset)
+            .some((c) => c.method === 'PATCH' && c.url.includes('/webhooks/'))
+        ).toBe(true)
+      );
+      const final = transport.calls
+        .slice(offset)
+        .find((c) => c.method === 'PATCH' && c.url.includes('/webhooks/'))!.body as {
+        flags: number;
+      };
+      return { type: 4, data: { ...final, flags: 64 | 32768 } };
+    }
+    return data;
+  }
+
   beforeEach(() => {
     vi.stubEnv('OFFKAI_DISCORD_BOT_TOKEN', 'fake-test-token');
     resetConfigForTests();
@@ -238,7 +261,10 @@ describe('signed FREE event Discord journeys', () => {
     ).toEqual(['discord.role_sync_requested', 'panel.refresh']);
     expect(JSON.stringify(await call(button('join', event.id)))).toContain('# 001');
     expect(client.db.select().from(registrations).all()).toHaveLength(1);
-    expect(transport.calls).toHaveLength(0);
+    expect(transport.calls).toHaveLength(2);
+    expect(transport.calls.every((c) => c.method === 'PATCH' && c.url.includes('/webhooks/'))).toBe(
+      true
+    );
   });
   it('joins through a modal, validates every field, and stores answers', async () => {
     const { event, fields } = await discordEvent(client, { fields: [{ label: 'Name' }] });

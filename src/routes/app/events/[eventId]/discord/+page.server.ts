@@ -1,3 +1,8 @@
+import { setScheduledEvent, scheduledPermissions } from '$lib/server/domain/discord/scheduled';
+import { guildPermissions, hasPermissions } from '$lib/server/domain/discord/permissions';
+import { read } from '$lib/server/db/client';
+import { eventDiscordIntegrations } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 import { error, fail } from '@sveltejs/kit';
 import { message, superValidate } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
@@ -141,6 +146,31 @@ export const load: PageServerLoad = async (event) => {
   const initialRole = (id: string) => (excludedSavedRoles.some((role) => role.id === id) ? '' : id);
   const clientId = config.discord.applicationId || config.discord.clientId;
   return {
+    scheduledEnabled: read(
+      client,
+      (tx) =>
+        tx
+          .select()
+          .from(eventDiscordIntegrations)
+          .where(eq(eventDiscordIntegrations.eventId, item.id))
+          .get()?.scheduledEnabled ?? false
+    ),
+    scheduledPermissionsOk: Boolean(
+      setup.resources &&
+      hasPermissions(
+        guildPermissions(
+          setup.resources.guildId,
+          setup.resources.botRoleIds,
+          setup.resources.roles
+        ),
+        scheduledPermissions
+      )
+    ),
+    scheduledPermissionsUrl: botAuthorizationUrl(
+      clientId,
+      guildId,
+      basePermissions | scheduledPermissions
+    ),
     setup,
     roleOptions,
     excludedSavedRoles,
@@ -187,6 +217,32 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
+  scheduled: async (event) => {
+    const user = requireSession(event);
+    const data = await event.request.formData();
+    const enabled = data.get('enabled') === 'true';
+    if (!enabled && data.get('confirmed') !== 'true') return { nativePending: true };
+    const config = getConfig();
+    try {
+      await setScheduledEvent(
+        getDatabaseClient(config),
+        createDiscordGateway(config.discord.botToken, {
+          tuning: config.tuning,
+          baseUrl: config.discord.setupApiUrl
+        }),
+        z.uuid().parse(event.params.eventId),
+        user.userId,
+        enabled
+      );
+      return { nativeMessage: event.locals.t('discord_settings.success') };
+    } catch (cause) {
+      event.locals.logger.warn({ err: cause }, 'scheduled event setting failed');
+      return fail(
+        cause instanceof OrganizationError || cause instanceof DiscordSettingsError ? 403 : 500,
+        { nativeMessage: event.locals.t('native.permission') }
+      );
+    }
+  },
   templates: async (event) => {
     const session = requireSession(event);
     const form = await superValidate(event, zod4(templateSchema(event.locals.t)));

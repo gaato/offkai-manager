@@ -66,7 +66,7 @@
           {/if}
         </div>
       </div>
-      <nav aria-label={t('event.navigation')}>
+      <nav class="print:hidden" aria-label={t('event.navigation')}>
         <ul class="menu menu-horizontal flex-wrap">
           <li>
             <a

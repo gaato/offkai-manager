@@ -5,10 +5,11 @@ import { getDatabaseClient } from '$lib/server/db/client';
 import { getPublicOrganization } from '$lib/server/domain/orgs/public';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ params }) => {
+export const load: PageServerLoad = ({ params, setHeaders }) => {
   const id = z.uuid().safeParse(params.orgId);
   if (!id.success) throw error(404);
   const organization = getPublicOrganization(getDatabaseClient(getConfig()), id.data);
   if (!organization) throw error(404);
+  setHeaders({ 'X-Robots-Tag': 'noindex' });
   return { organization };
 };

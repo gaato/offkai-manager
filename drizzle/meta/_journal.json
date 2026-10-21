@@ -43,6 +43,13 @@
       "when": 1792545094844,
       "tag": "0005_registration_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792545094845,
+      "tag": "0006_reception",
+      "breakpoints": true
     }
   ]
 }

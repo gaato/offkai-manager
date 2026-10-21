@@ -61,7 +61,14 @@ export function enqueueExistingPanelRefresh(
   eventId: string,
   clock: Clock = systemClock
 ): void {
+  const integration = tx
+    .select()
+    .from(eventDiscordIntegrations)
+    .where(eq(eventDiscordIntegrations.eventId, eventId))
+    .get();
   if (
+    integration?.scheduledEnabled ||
+    integration?.scheduledStateJson ||
     tx
       .select({ id: discordPanels.id })
       .from(discordPanels)

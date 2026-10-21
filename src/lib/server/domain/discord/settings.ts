@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { and, eq, ne, isNull } from 'drizzle-orm';
@@ -148,6 +149,18 @@ export async function updateEventDiscordSettings(
       throw new DiscordSettingsError('forbidden', 'archived events cannot be changed');
     }
     const beforeIntegration = loadIntegration(tx, input.eventId);
+    if (
+      beforeIntegration &&
+      beforeIntegration.guildId !== input.guildId &&
+      (beforeIntegration.scheduledEnabled ||
+        (beforeIntegration.scheduledStateJson &&
+          !z.object({ terminal: z.literal(true) }).safeParse(beforeIntegration.scheduledStateJson)
+            .success))
+    )
+      throw new DiscordSettingsError(
+        'validation',
+        'disable and reconcile scheduled event before rebinding'
+      );
     if (input.guildId) {
       const fields = loadActiveFormFields(tx, input.eventId);
       if (
@@ -166,6 +179,7 @@ export async function updateEventDiscordSettings(
       .run();
     const sameGuild = beforeIntegration?.guildId === input.guildId;
     const values = {
+      ...(!sameGuild ? { scheduledEnabled: false, scheduledStateJson: null } : {}),
       guildId: input.guildId,
       guildNameSnapshot,
       inviteUrl: input.inviteUrl,

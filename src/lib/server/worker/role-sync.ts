@@ -1,3 +1,4 @@
+import { syncScheduledEvent } from './scheduled-events';
 import { tickOnce } from '$lib/server/domain/payments/holds';
 import {
   deliverNotification,
@@ -116,7 +117,8 @@ export async function processRoleSyncBatch(
   clock: Clock = systemClock,
   tuning: Tuning = defaultTuning,
   rest?: REST,
-  timeZone = 'Asia/Tokyo'
+  timeZone = 'Asia/Tokyo',
+  publicBaseUrl?: string
 ): Promise<number> {
   const claimed = claimRoleSyncEvents(client, tuning.OFFKAI_OUTBOX_BATCH_SIZE, clock);
   for (const event of claimed) {
@@ -126,7 +128,14 @@ export async function processRoleSyncBatch(
         await deliverNotification(client, rest, event.payloadJson, clock, tuning);
       } else if (event.type === 'panel.refresh') {
         if (!rest) throw new Error('Discord message transport is unavailable');
-        await refreshPanels(client, rest, event.payloadJson, clock, timeZone);
+        await refreshPanels(client, rest, event.payloadJson, clock, timeZone, publicBaseUrl);
+        await syncScheduledEvent(
+          client,
+          rest,
+          gateway,
+          z.object({ event_id: z.uuid() }).parse(event.payloadJson).event_id,
+          clock
+        );
       } else {
         const task = resolveRoleSyncTask(client, event.payloadJson);
         if (task?.guildId && task.roleId && task.discordUserId) {
@@ -273,7 +282,8 @@ export class RoleSyncWorker {
     private readonly tuning: Tuning = defaultTuning,
     private readonly clock: Clock = systemClock,
     private readonly rest?: REST,
-    private readonly timeZone = 'Asia/Tokyo'
+    private readonly timeZone = 'Asia/Tokyo',
+    private readonly publicBaseUrl?: string
   ) {}
 
   start(): void {
@@ -306,7 +316,8 @@ export class RoleSyncWorker {
       this.clock,
       this.tuning,
       this.rest,
-      this.timeZone
+      this.timeZone,
+      this.publicBaseUrl
     )
       .then(async () => {
         if (this.rest)
@@ -333,7 +344,8 @@ async function refreshPanels(
   rest: REST,
   raw: unknown,
   clock: Clock,
-  timeZone: string
+  timeZone: string,
+  publicBaseUrl?: string
 ): Promise<void> {
   const payload = z.object({ event_id: z.uuid() }).parse(raw);
   const panels = read(client, (tx) =>
@@ -358,7 +370,11 @@ async function refreshPanels(
     }
     try {
       await rest.patch(`/channels/${panel.channelId}/messages/${panel.messageId}`, {
-        body: renderPanel(data.event, { ...data.counts, now: clock.now(), timeZone }, panel.locale)
+        body: renderPanel(
+          data.event,
+          { ...data.counts, now: clock.now(), timeZone, publicBaseUrl },
+          panel.locale
+        )
       });
     } catch (cause) {
       if (cause instanceof DiscordAPIError && (cause.status === 404 || cause.code === 10008)) {

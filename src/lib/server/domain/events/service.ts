@@ -1,3 +1,4 @@
+import { organizationDisclosure } from '../orgs/disclosure';
 import { configureEventPayment } from '../payments/event-payment';
 import { defaultTuning, type Tuning } from '$lib/server/config';
 import { systemClock, type Clock } from '$lib/server/clock';
@@ -281,6 +282,14 @@ export async function updateSettings(
         throw new EventError('validation', 'capacity cannot be smaller than reserved seats');
     }
     const full = tx.select().from(events).where(eq(events.id, current.id)).get()!;
+    if (
+      current.visibility !== 'draft' &&
+      current.paymentRequirement === 'none' &&
+      input.paymentRequirement &&
+      input.paymentRequirement !== 'none' &&
+      !organizationDisclosure(tx, current.organizationId)
+    )
+      throw new EventError('disclosure_required', 'organizer disclosure required');
     configureEventPayment(tx, full, input, clock, tuning, roundingUnits);
     const updatedRows = tx
       .update(events)
@@ -408,6 +417,12 @@ async function mutateLifecycle(
         `event cannot apply lifecycle transition ${transition}`
       );
     }
+    if (
+      transition === 'publish' &&
+      current.paymentRequirement !== 'none' &&
+      !organizationDisclosure(tx, current.organizationId)
+    )
+      throw new EventError('disclosure_required', 'organizer disclosure required');
     const updatedRows = tx
       .update(events)
       .set(changes(current))

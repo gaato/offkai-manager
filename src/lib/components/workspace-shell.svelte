@@ -56,7 +56,7 @@
   class="flex min-h-dvh flex-col"
   data-sveltekit-reload={page.route.id === '/app/organizations/[orgId]/payouts'}
 >
-  <header class="navbar bg-base-200 flex-wrap gap-3 px-4">
+  <header class="navbar bg-base-200 flex-wrap gap-3 px-4 print:hidden">
     <details class="dropdown lg:hidden">
       <summary class="btn">{navigationLabel}</summary>
       <nav class="dropdown-content bg-base-200 w-64 p-4" aria-label={navigationLabel}>
@@ -78,7 +78,10 @@
     </nav>
   </header>
   <div class="flex flex-1">
-    <nav class="bg-base-200 hidden w-64 shrink-0 p-4 lg:block" aria-label={navigationLabel}>
+    <nav
+      class="bg-base-200 hidden w-64 shrink-0 p-4 lg:block print:hidden"
+      aria-label={navigationLabel}
+    >
       <p class="mb-4">{t('session.signed_in_as', { name: displayName })}</p>
       {@render menu()}
     </nav>

@@ -47,9 +47,11 @@
         <a
           class="link"
           data-sveltekit-reload={step.anchor === 'payouts'}
-          href={step.anchor === 'payouts'
-            ? `/app/organizations/${data.event.organizationId}/payouts`
-            : `${discordHref}#${step.anchor}`}>{t(step.key)}</a
+          href={step.anchor === 'disclosure'
+            ? `/app/organizations/${data.event.organizationId}/disclosure`
+            : step.anchor === 'payouts'
+              ? `/app/organizations/${data.event.organizationId}/payouts`
+              : `${discordHref}#${step.anchor}`}>{t(step.key)}</a
         >
       </li>
     {/each}

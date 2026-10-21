@@ -1,3 +1,7 @@
+import { read } from '$lib/server/db/client';
+import { eventFormFields, eventDiscordIntegrations } from '$lib/server/db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
+import { receptionCommand, receptionAutocomplete } from './reception';
 import type { PaymentGateway } from '$lib/server/domain/payments/gateway';
 import { z } from 'zod';
 import { escapeMarkdown } from '@discordjs/formatters';
@@ -12,7 +16,7 @@ import type { Tuning } from '$lib/server/config';
 import { autocompletePanelEvents } from '$lib/server/domain/discord/panels';
 import { postPanel } from './panel-command';
 import { participantAction } from './participants';
-import { ephemeralReply } from './respond';
+import { deferEphemeral, ephemeralReply } from './respond';
 
 type Context = ReturnType<typeof interactionContext>;
 export interface RouterDependencies {
@@ -39,8 +43,10 @@ const offkaiOptions = z.tuple([
   })
 ]);
 const checkinOptions = z
-  .array(z.object({ type: z.literal(3), name: z.literal('who'), value: z.string().max(100) }))
-  .max(1);
+  .array(
+    z.object({ type: z.literal(3), name: z.enum(['who', 'event']), value: z.string().max(100) })
+  )
+  .max(2);
 
 export async function dispatchInteraction(
   interaction: APIInteraction,
@@ -58,7 +64,7 @@ export async function dispatchInteraction(
           const options = offkaiOptions.safeParse(interaction.data.options);
           if (!options.success) return unknown();
           const action = options.data[0].name;
-          if (action !== 'panel' && options.data[0].options?.length) return unknown();
+          if (action === 'web' && options.data[0].options?.length) return unknown();
           switch (action) {
             case 'web':
               return openWeb(context, dependencies);
@@ -86,15 +92,27 @@ export async function dispatchInteraction(
             }
             case 'status':
             case 'remind':
-              return ephemeralReply(context.t('interaction.soon'));
+              return receptionCommand(context, dependencies, action, {
+                event: options.data[0].options?.find((o) => o.name === 'event')?.value
+              });
             default:
               return action satisfies never;
           }
         }
-        case 'checkin':
-          return checkinOptions.safeParse(interaction.data.options ?? []).success
-            ? ephemeralReply(context.t('interaction.soon'))
-            : unknown();
+        case 'checkin': {
+          const options = checkinOptions.safeParse(interaction.data.options ?? []);
+          if (
+            !options.success ||
+            new Set(options.data.map((o) => o.name)).size !== options.data.length
+          )
+            return unknown();
+          return receptionCommand(
+            context,
+            dependencies,
+            'checkin',
+            Object.fromEntries(options.data.map((o) => [o.name, o.value]))
+          );
+        }
         default:
           return unknown();
       }
@@ -103,6 +121,61 @@ export async function dispatchInteraction(
     case 5: {
       const decoded = decodeCustomId(interaction.data.custom_id);
       if (!decoded.ok) return unknown();
+      switch (decoded.value.action) {
+        case 'door_check':
+        case 'door_undo':
+        case 'door_cash':
+        case 'door_paypay':
+        case 'remind_confirm':
+          if (interaction.type !== 3) return unknown();
+          return receptionCommand(context, dependencies, decoded.value.action, {
+            who: decoded.value.args[0]
+          });
+      }
+      if (
+        dependencies.defer &&
+        dependencies.rest &&
+        read(
+          dependencies.database(),
+          (tx) =>
+            tx
+              .select({ guildId: eventDiscordIntegrations.guildId })
+              .from(eventDiscordIntegrations)
+              .where(eq(eventDiscordIntegrations.eventId, decoded.value.args[0]!))
+              .get()?.guildId === context.guildId
+        ) &&
+        (decoded.value.action === 'join_submit' ||
+          (decoded.value.action === 'join' &&
+            !read(dependencies.database(), (tx) =>
+              tx
+                .select({ id: eventFormFields.id })
+                .from(eventFormFields)
+                .where(
+                  and(
+                    eq(eventFormFields.eventId, decoded.value.args[0]!),
+                    isNull(eventFormFields.archivedAt)
+                  )
+                )
+                .get()
+            )))
+      ) {
+        const action = decoded.value;
+        const rest = dependencies.rest;
+        dependencies.defer(async () => {
+          const response = await participantAction(
+            action,
+            context,
+            { ...dependencies, defer: undefined, editReply: undefined },
+            interaction.type === 5 ? interaction : undefined
+          );
+          if (response.type === 4)
+            await rest.patch(
+              `/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`,
+              { auth: false, body: { ...response.data, flags: 32768 } }
+            );
+        });
+        return deferEphemeral();
+      }
       if (decoded.value.action !== 'web' && decoded.value.action !== 'soon')
         return participantAction(
           decoded.value,
@@ -128,10 +201,13 @@ export async function dispatchInteraction(
       if (interaction.data.name === 'offkai' && context.actor && context.guildId) {
         const options = interaction.data.options;
         const panel = options?.[0];
-        if (panel?.type !== 1 || panel.name !== 'panel') return { type: 8, data: { choices: [] } };
+        if (panel?.type !== 1 || !['panel', 'status', 'remind'].includes(panel.name))
+          return { type: 8, data: { choices: [] } };
         const focused = panel.options?.find((option) => 'focused' in option && option.focused);
         if (focused?.type !== 3 || focused.name !== 'event')
           return { type: 8, data: { choices: [] } };
+        if (panel.name !== 'panel')
+          return receptionAutocomplete(context, dependencies, focused, undefined, true);
         const client = dependencies.database();
         const user = await resolveInteractionUser(client, context.actor);
         return {
@@ -145,8 +221,18 @@ export async function dispatchInteraction(
       }
       switch (interaction.data.name) {
         // Event lookup will be added with check-in; never expose unrelated identities here.
-        case 'checkin':
-          return { type: 8, data: { choices: [] } };
+        case 'checkin': {
+          const focused = interaction.data.options?.find((o) => 'focused' in o && o.focused);
+          const selected = interaction.data.options?.find((o) => o.name === 'event');
+          return focused?.type === 3
+            ? receptionAutocomplete(
+                context,
+                dependencies,
+                focused,
+                selected?.type === 3 ? selected.value : undefined
+              )
+            : { type: 8, data: { choices: [] } };
+        }
         default:
           return { type: 8, data: { choices: [] } };
       }

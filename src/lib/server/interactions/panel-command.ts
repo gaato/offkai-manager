@@ -49,7 +49,12 @@ export async function postPanel(
         const message = await rest.post(`/channels/${channelId}/messages`, {
           body: renderPanel(
             data.event,
-            { ...data.counts, now: clock.now(), timeZone: dependencies.timeZone },
+            {
+              ...data.counts,
+              now: clock.now(),
+              timeZone: dependencies.timeZone,
+              publicBaseUrl: dependencies.publicBaseUrl
+            },
             locale
           )
         });

@@ -1,5 +1,10 @@
 export type AuditActionLabelKey =
   | 'activity.action.unknown'
+  | 'activity.action.notification.reminder_preview'
+  | 'activity.action.notification.reminder_confirm'
+  | 'activity.action.organization.disclosure'
+  | 'activity.action.discord.scheduled_setting'
+  | 'activity.action.discord.scheduled_synced'
   | 'activity.action.registration.hold_expired'
   | 'activity.action.registration.hold_expiring'
   | 'activity.action.payment.checkout_expired'
@@ -67,6 +72,12 @@ export type AuditActionLabelKey =
   | 'activity.action.platform.user_unsuspend';
 
 const actionLabels: Readonly<Record<string, AuditActionLabelKey>> = {
+  'notification.reminder_preview': 'activity.action.notification.reminder_preview',
+  'notification.reminder_confirm': 'activity.action.notification.reminder_confirm',
+  'organization.disclosure': 'activity.action.organization.disclosure',
+  'discord.scheduled_setting': 'activity.action.discord.scheduled_setting',
+  'discord.scheduled_synced': 'activity.action.discord.scheduled_synced',
+
   'registration.hold_expired': 'activity.action.registration.hold_expired',
   'registration.hold_expiring': 'activity.action.registration.hold_expiring',
   'payment.checkout_expired': 'activity.action.payment.checkout_expired',

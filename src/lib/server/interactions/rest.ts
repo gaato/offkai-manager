@@ -4,7 +4,11 @@ export function createInteractionRest(
   token: string,
   options: Pick<Partial<RESTOptions>, 'makeRequest' | 'timeout'> = {}
 ): REST {
-  return new REST({ ...options, version: '10', rejectOnRateLimit: () => true }).setToken(token);
+  return new REST({
+    ...options,
+    version: '10',
+    rejectOnRateLimit: (data) => !data.route.startsWith('/webhooks/')
+  }).setToken(token);
 }
 
 let runtimeRest: { token: string; timeout: number | undefined; rest: REST } | undefined;

@@ -22,6 +22,10 @@
 
 <ListPage>
   {#snippet title()}{t('checkin.title')}{/snippet}
+  {#snippet actions()}<a class="btn" href={`/app/events/${data.event.id}/check-in/roster`}
+      >{t('roster.title')}</a
+    ><a class="btn" href={`/app/events/${data.event.id}/check-in/roster.csv`}>{t('roster.csv')}</a
+    >{/snippet}
   {#snippet filters()}<search>
       <form
         method="GET"

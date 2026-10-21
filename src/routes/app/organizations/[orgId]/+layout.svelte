@@ -49,6 +49,11 @@
             </li>
           {/if}
 
+          {#if data.capabilities.canManageEvent}<li>
+              <a href={`/app/organizations/${data.organization.id}/disclosure`}
+                >{t('legal.title')}</a
+              >
+            </li>{/if}
           {#if data.capabilities.canManageStripe}
             <li>
               <a data-sveltekit-reload href={`/app/organizations/${data.organization.id}/payouts`}

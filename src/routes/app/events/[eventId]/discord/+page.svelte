@@ -30,6 +30,41 @@
   {#snippet title()}{t('event.discord_nav')}{/snippet}
   {#snippet body()}
     <div class="grid gap-6">
+      <section class="card card-border bg-base-100" aria-labelledby="scheduled-title">
+        <div class="card-body">
+          <h2 id="scheduled-title" class="card-title">{t('native.title')}</h2>
+          <p>{t('native.help')}</p>
+          {#if actionResult?.nativeMessage}<p role="status">{actionResult.nativeMessage}</p>{/if}
+          {#if !data.scheduledPermissionsOk}<p>{t('native.permission')}</p>
+            {#if data.scheduledPermissionsUrl}<a class="link" href={data.scheduledPermissionsUrl}
+                >{t('discord_setup.add_permissions')}</a
+              >{/if}{/if}
+          {#if actionResult?.nativePending}<div class="alert">
+              <p>{t('native.confirm_cancel')}</p>
+              <form method="POST" action="?/scheduled">
+                <input type="hidden" name="confirmed" value="true" /><button
+                  type="submit"
+                  class="btn btn-error">{t('participant.confirm_cancel')}</button
+                >
+              </form>
+              <a class="btn" href={`/app/events/${data.event.id}/discord`}>{t('form.cancel')}</a>
+            </div>{/if}
+          <form method="POST" action="?/scheduled" class="grid gap-4">
+            <label class="label"
+              ><input
+                class="toggle"
+                type="checkbox"
+                name="enabled"
+                value="true"
+                checked={data.scheduledEnabled}
+                disabled={!editable}
+              />{t('native.title')}</label
+            ><button class="btn btn-primary" type="submit" disabled={!editable}
+              >{t('native.save')}</button
+            >
+          </form>
+        </div>
+      </section>
       <div class="card card-border bg-base-100">
         <div class="card-body gap-2 pb-0">
           <h2 id="discord-settings" class="card-title">{t('discord_settings.title')}</h2>

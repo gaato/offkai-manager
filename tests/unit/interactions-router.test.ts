@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Locale } from 'discord-api-types/v10';
 import { translate } from '$lib/i18n';
 import { interactionContext } from '$lib/server/interactions/context';
@@ -14,6 +14,7 @@ const dependencies = {
   publicBaseUrl: 'https://example.test'
 };
 describe('interaction router and responses', () => {
+  beforeEach(() => vi.clearAllMocks());
   it.each(['en', 'ja'] as const)(
     'unknown component and modal actions are ephemeral in %s',
     async (locale) => {
@@ -25,14 +26,13 @@ describe('interaction router and responses', () => {
       }
     }
   );
-  it.each(['status', 'remind'])('routes offkai %s to coming soon', async (subcommand) => {
+  it.each(['status', 'remind'])('rejects unavailable organizer %s commands', async (subcommand) => {
     expect(await dispatchInteraction(makeChatInput('offkai', subcommand), dependencies)).toEqual(
-      ephemeralReply(translate('en', 'interaction.soon'))
+      ephemeralReply(translate('en', 'door.unavailable'))
     );
   });
   it('routes checkin and known component/modal actions', async () => {
     for (const interaction of [
-      makeChatInput('checkin'),
       makeComponent('om1:soon:checkin'),
       makeModalSubmit('om1:soon:panel')
     ])
@@ -87,7 +87,6 @@ describe('interaction router and responses', () => {
       type: 1,
       contexts: [0],
       integration_types: [0],
-      default_member_permissions: '32',
       name_localizations: { ja: 'オフ会' }
     });
     expect(offkai.options?.map((option) => option.name)).toEqual([
@@ -96,11 +95,16 @@ describe('interaction router and responses', () => {
       'status',
       'remind'
     ]);
+    expect(checkin.default_member_permissions).toBeUndefined();
+    expect(offkai.default_member_permissions).toBeNull();
     expect(checkin).toMatchObject({
       name: 'checkin',
       contexts: [0],
       integration_types: [0],
-      options: [{ type: 3, name: 'who', autocomplete: true }]
+      options: [
+        { type: 3, name: 'who', autocomplete: true, required: true },
+        { type: 3, name: 'event', autocomplete: true }
+      ]
     });
   });
 });

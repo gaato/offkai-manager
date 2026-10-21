@@ -7,6 +7,12 @@ import {
 } from '$lib/server/interactions/custom-id';
 
 const arbitraries = {
+  door_check: fc.uuid().map((id): CustomAction => ({ action: 'door_check', args: [id] })),
+  door_undo: fc.uuid().map((id): CustomAction => ({ action: 'door_undo', args: [id] })),
+  door_cash: fc.uuid().map((id): CustomAction => ({ action: 'door_cash', args: [id] })),
+  door_paypay: fc.uuid().map((id): CustomAction => ({ action: 'door_paypay', args: [id] })),
+  remind_confirm: fc.uuid().map((id): CustomAction => ({ action: 'remind_confirm', args: [id] })),
+
   pay: fc.uuid().map((id): CustomAction => ({ action: 'pay', args: [id] })),
   join: fc.uuid().map((id): CustomAction => ({ action: 'join', args: [id] })),
   status: fc.uuid().map((id): CustomAction => ({ action: 'status', args: [id] })),

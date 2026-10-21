@@ -149,7 +149,10 @@ describe('non-destructive command registration', () => {
         application_id: applicationId,
         version: '8',
         nsfw: false,
-        options: command.options?.map((option) => ({ ...option, required: false }))
+        options: command.options?.map((option) => ({
+          ...option,
+          required: option.required ?? false
+        }))
       }))
     );
     expect(await registerCommands(rest, { applicationId, print: vi.fn() })).toEqual([]);

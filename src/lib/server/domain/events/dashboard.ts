@@ -1,3 +1,4 @@
+import { organizationDisclosure } from '../orgs/disclosure';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { read, type DatabaseClient } from '$lib/server/db/client';
 import {
@@ -15,8 +16,18 @@ export function preparationChecklist(input: {
   reviewed: boolean;
   panelPosted: boolean;
   payoutsReady?: boolean;
+  disclosureReady?: boolean;
 }) {
   return [
+    ...(input.disclosureReady === undefined
+      ? []
+      : [
+          {
+            key: 'event.setup_disclosure' as const,
+            done: input.disclosureReady,
+            anchor: 'disclosure'
+          }
+        ]),
     ...(input.payoutsReady === undefined
       ? []
       : [{ key: 'event.setup_payouts' as const, done: input.payoutsReady, anchor: 'payouts' }]),
@@ -64,6 +75,10 @@ export function getEventDashboard(client: DatabaseClient, actorUserId: string, e
         cancelled: value('cancelled')
       },
       steps: preparationChecklist({
+        disclosureReady:
+          event.paymentRequirement === 'none'
+            ? undefined
+            : Boolean(organizationDisclosure(tx, event.organizationId)),
         payoutsReady:
           event.paymentRequirement === 'none' ||
           tx

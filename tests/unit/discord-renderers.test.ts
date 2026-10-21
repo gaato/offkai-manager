@@ -347,3 +347,13 @@ it.each(['ja', 'en'] as const)(
     }
   }
 );
+
+it.each(['ja', 'en'] as const)('links paid panels to the organizer disclosure in %s', (locale) => {
+  const panel = renderPanel(
+    { ...event, paymentRequirement: 'pay_later', priceMinor: 5000n },
+    { confirmed: 1, now, publicBaseUrl: 'https://example.test' },
+    locale
+  );
+  expect(JSON.stringify(panel)).toContain(`https://example.test/legal/${event.organizationId}`);
+  expect(JSON.stringify(panel)).toContain(translator(locale)('legal.title'));
+});

@@ -3,6 +3,12 @@ import { z } from 'zod';
 // Released om1 strings are a wire contract; retain this decoder when adding versions.
 export const actionSchemas = {
   web: z.tuple([]),
+  door_check: z.tuple([z.uuid()]),
+  door_undo: z.tuple([z.uuid()]),
+  door_cash: z.tuple([z.uuid()]),
+  door_paypay: z.tuple([z.uuid()]),
+  remind_confirm: z.tuple([z.uuid()]),
+
   join: z.tuple([z.uuid()]),
   pay: z.tuple([z.uuid()]),
   status: z.tuple([z.uuid()]),
@@ -35,6 +41,11 @@ export function decodeCustomId(value: string): DecodeResult {
       const parsed = actionSchemas.soon.safeParse(args);
       return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
     }
+    case 'door_check':
+    case 'door_undo':
+    case 'door_cash':
+    case 'door_paypay':
+    case 'remind_confirm':
     case 'pay':
     case 'join':
     case 'status':

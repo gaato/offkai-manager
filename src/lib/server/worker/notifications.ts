@@ -8,7 +8,8 @@ import {
   externalAccounts,
   notificationDeliveries,
   notificationThreads,
-  registrations
+  registrations,
+  paymentRequests
 } from '$lib/server/db/schema';
 import type { Clock } from '$lib/server/clock';
 import type { Tuning } from '$lib/server/config';
@@ -31,7 +32,11 @@ export async function deliverNotification(
   tuning: Tuning
 ) {
   const payload = z
-    .object({ registration_id: z.uuid(), kind: z.enum(notificationKinds) })
+    .object({
+      registration_id: z.uuid(),
+      kind: z.enum(notificationKinds),
+      campaign_id: z.uuid().optional()
+    })
     .parse(raw);
   const row = read(client, (tx) =>
     tx
@@ -55,6 +60,26 @@ export async function deliverNotification(
       .get()
   );
   if (!row) return;
+  const deliveryKind = payload.kind;
+  const campaignId = payload.kind === 'payment_reminder' ? (payload.campaign_id ?? '') : '';
+  if (payload.kind === 'payment_reminder') {
+    if (
+      !payload.campaign_id ||
+      !['held', 'confirmed'].includes(row.registration.status) ||
+      row.event.cancelledAt ||
+      row.event.archivedAt
+    )
+      return;
+    const unpaid = read(client, (tx) =>
+      tx
+        .select()
+        .from(paymentRequests)
+        .where(eq(paymentRequests.registrationId, payload.registration_id))
+        .all()
+        .some((r) => ['pending', 'payment_pending'].includes(r.status))
+    );
+    if (!unpaid) return;
+  }
   // Old warning jobs are obsolete after payment, cancellation, or deadline passage.
   if (
     payload.kind === 'hold_expiring' &&
@@ -68,7 +93,8 @@ export async function deliverNotification(
       tx.insert(notificationDeliveries)
         .values({
           registrationId: payload.registration_id,
-          kind: payload.kind,
+          kind: deliveryKind,
+          campaignId,
           channel,
           messageId,
           result,
@@ -83,7 +109,7 @@ export async function deliverNotification(
           action: 'notification.attempt',
           targetType: 'registration',
           targetId: payload.registration_id,
-          after: { kind: payload.kind, channel, result }
+          after: { kind: deliveryKind, channel, result }
         },
         clock
       );
@@ -99,7 +125,8 @@ export async function deliverNotification(
       .where(
         and(
           eq(notificationDeliveries.registrationId, payload.registration_id),
-          eq(notificationDeliveries.kind, payload.kind),
+          eq(notificationDeliveries.kind, deliveryKind),
+          eq(notificationDeliveries.campaignId, campaignId),
           eq(notificationDeliveries.result, 'sent')
         )
       )

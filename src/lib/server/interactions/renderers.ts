@@ -54,7 +54,7 @@ export function ephemeralCard(
 /** now is data supplied by the shell; rendering never reads the wall clock. */
 export function renderPanel(
   event: PanelEvent,
-  counts: { confirmed: number; now: Date; timeZone?: string },
+  counts: { confirmed: number; now: Date; timeZone?: string; publicBaseUrl?: string },
   locale: Locale
 ): RESTPostAPIChannelMessageJSONBody {
   const t = translator(locale);
@@ -117,7 +117,15 @@ export function renderPanel(
   return card(text, [
     actionButton({ action: 'join', args: [event.id] }, t('panel.join'), 1),
     actionButton({ action: 'status', args: [event.id] }, t('panel.status')),
-    actionButton({ action: 'cancel', args: [event.id] }, t('panel.cancel'), 4)
+    actionButton({ action: 'cancel', args: [event.id] }, t('panel.cancel'), 4),
+    ...(event.paymentRequirement !== 'none' && counts.publicBaseUrl
+      ? [
+          new ButtonBuilder()
+            .setStyle(5)
+            .setLabel(t('legal.title'))
+            .setURL(new URL(`/legal/${event.organizationId}`, counts.publicBaseUrl).href)
+        ]
+      : [])
   ]);
 }
 

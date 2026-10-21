@@ -1,5 +1,10 @@
 export type EventErrorCode =
-  'forbidden' | 'illegal_transition' | 'not_found' | 'slug_collision' | 'validation';
+  | 'disclosure_required'
+  | 'forbidden'
+  | 'illegal_transition'
+  | 'not_found'
+  | 'slug_collision'
+  | 'validation';
 
 export class EventError extends Error {
   constructor(

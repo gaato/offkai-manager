@@ -30,7 +30,7 @@ export function commandDefinitions() {
     .setDescriptionLocalizations(offkaiLabels.descriptions)
     .setContexts(0)
     .setIntegrationTypes(0)
-    .setDefaultMemberPermissions(32n);
+    .setDefaultMemberPermissions(null);
   for (const part of ['web', 'panel', 'status', 'remind'] as const) {
     const l = labels(part);
     offkai.addSubcommand((sub) => {
@@ -39,36 +39,37 @@ export function commandDefinitions() {
         .setNameLocalizations(l.names)
         .setDescription(l.description)
         .setDescriptionLocalizations(l.descriptions);
-      if (part === 'panel') {
+      if (part !== 'web') {
         sub.addStringOption((option) =>
           option
             .setName(translate('en', 'command.event.name'))
             .setNameLocalizations({ ja: translate('ja', 'command.event.name') })
             .setDescription(translate('en', 'panel.event_option'))
             .setDescriptionLocalizations({ ja: translate('ja', 'panel.event_option') })
-            .setRequired(true)
+            .setRequired(part === 'panel')
             .setAutocomplete(true)
         );
-        sub.addStringOption((option) =>
-          option
-            .setName(translate('en', 'command.language.name'))
-            .setNameLocalizations({ ja: translate('ja', 'command.language.name') })
-            .setDescription(translate('en', 'panel.language_option'))
-            .setDescriptionLocalizations({ ja: translate('ja', 'panel.language_option') })
-            .setRequired(true)
-            .addChoices(
-              {
-                name: translate('en', 'panel.language_ja'),
-                name_localizations: { ja: translate('ja', 'panel.language_ja') },
-                value: 'ja'
-              },
-              {
-                name: translate('en', 'panel.language_en'),
-                name_localizations: { ja: translate('ja', 'panel.language_en') },
-                value: 'en'
-              }
-            )
-        );
+        if (part === 'panel')
+          sub.addStringOption((option) =>
+            option
+              .setName(translate('en', 'command.language.name'))
+              .setNameLocalizations({ ja: translate('ja', 'command.language.name') })
+              .setDescription(translate('en', 'panel.language_option'))
+              .setDescriptionLocalizations({ ja: translate('ja', 'panel.language_option') })
+              .setRequired(true)
+              .addChoices(
+                {
+                  name: translate('en', 'panel.language_ja'),
+                  name_localizations: { ja: translate('ja', 'panel.language_ja') },
+                  value: 'ja'
+                },
+                {
+                  name: translate('en', 'panel.language_en'),
+                  name_localizations: { ja: translate('ja', 'panel.language_en') },
+                  value: 'en'
+                }
+              )
+          );
       }
       return sub;
     });
@@ -88,6 +89,15 @@ export function commandDefinitions() {
         .setNameLocalizations(who.names)
         .setDescription(who.description)
         .setDescriptionLocalizations(who.descriptions)
+        .setRequired(true)
+        .setAutocomplete(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName(translate('en', 'command.event.name'))
+        .setNameLocalizations({ ja: translate('ja', 'command.event.name') })
+        .setDescription(translate('en', 'panel.event_option'))
+        .setDescriptionLocalizations({ ja: translate('ja', 'panel.event_option') })
         .setAutocomplete(true)
     );
   return [offkai.toJSON(), checkin.toJSON()];

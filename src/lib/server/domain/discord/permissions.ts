@@ -1,6 +1,8 @@
 import type { GuildResources, GuildRole, PermissionOverwrite } from './resources';
 
 export const permissions = {
+  createEvents: 1n << 44n,
+  manageEvents: 1n << 33n,
   administrator: 1n << 3n,
   manageChannels: 1n << 4n,
   viewChannel: 1n << 10n,

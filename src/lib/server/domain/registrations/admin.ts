@@ -39,6 +39,8 @@ export interface ParticipantListRow {
   status: RegistrationStatus;
   registeredAt: Date;
   unreachable: boolean;
+  failureCodes: string;
+  fallbackThreadUrl: string;
 }
 
 export interface ParticipantList {
@@ -97,6 +99,8 @@ export async function listParticipants(
         username: externalAccounts.username,
         status: registrations.status,
         unreachable: sql<number>`exists(select 1 from notification_deliveries d where d.registration_id = ${registrations.id} and d.result like 'failed:%' and not exists(select 1 from notification_deliveries success where success.registration_id = d.registration_id and success.kind = d.kind and success.result = 'sent'))`,
+        failureCodes: sql<string>`coalesce((select group_concat(distinct substr(d.result,8)) from notification_deliveries d where d.registration_id = ${registrations.id} and d.result like 'failed:%' and not exists(select 1 from notification_deliveries s where s.registration_id = d.registration_id and s.kind = d.kind and s.result = 'sent')), '')`,
+        fallbackThreadUrl: sql<string>`coalesce((select 'https://discord.com/channels/' || i.guild_id || '/' || n.thread_id from notification_threads n join event_discord_integrations i on i.event_id = ${registrations.eventId} where n.registration_id = ${registrations.id}), '')`,
         registeredAt: registrations.createdAt
       })
       .from(registrations)

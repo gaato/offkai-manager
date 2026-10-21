@@ -130,6 +130,10 @@ it('archives a saved private thread after the configured number of days', async 
       fixedClock.now().getTime()
   );
   const { rest, calls } = recordingRest();
+  fixedClock.advance(-1);
+  await archiveNotificationThreads(client, rest, fixedClock, defaultTuning);
+  expect(calls).toHaveLength(0);
+  fixedClock.advance(1);
   await archiveNotificationThreads(client, rest, fixedClock, defaultTuning);
   expect(calls[0]).toMatchObject({ method: 'PATCH', body: { archived: true } });
   expect(client.db.select().from(notificationThreads).get()?.archivedAt).toEqual(fixedClock.now());

@@ -3,6 +3,7 @@ import type { DatabaseTransaction } from '$lib/server/db/client';
 import type { Clock } from '$lib/server/clock';
 import { outboxEvents, registrations } from '$lib/server/db/schema';
 export const notificationKinds = [
+  'payment_reminder',
   'payment_confirmed',
   'hold_expiring',
   'hold_expired',

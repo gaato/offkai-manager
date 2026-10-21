@@ -391,7 +391,8 @@ function statusError(operation: string, status: number): DiscordGatewayError {
 }
 
 async function retryAfterMs(response: Response, fallbackMs: number): Promise<number> {
-  const headerSeconds = Number(response.headers.get('Retry-After'));
+  const header = response.headers.get('Retry-After');
+  const headerSeconds = header === null ? NaN : Number(header);
   if (Number.isFinite(headerSeconds) && headerSeconds >= 0) return headerSeconds * 1_000;
   try {
     const parsed = rateLimitSchema.safeParse(await response.json());

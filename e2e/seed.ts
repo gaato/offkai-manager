@@ -1,3 +1,4 @@
+import { saveDisclosure } from '$lib/server/domain/orgs/disclosure';
 import { and, eq } from 'drizzle-orm';
 import { loadConfig } from '$lib/server/config';
 import { systemClock } from '$lib/server/clock';
@@ -6,6 +7,8 @@ import { appendAudit } from '$lib/server/domain/audit';
 import { closeDatabase, createDatabaseClient, write } from '$lib/server/db/client';
 import {
   organizations,
+  notificationDeliveries,
+  notificationThreads,
   events,
   eventDiscordIntegrations,
   externalAccounts,
@@ -460,6 +463,29 @@ export async function seedE2E(databasePath: string): Promise<void> {
           .run();
       }
     }
+    client.db
+      .insert(notificationDeliveries)
+      .values({
+        registrationId: participantFixtures.confirmed.registrationId,
+        at: systemClock.now(),
+        kind: 'payment_reminder',
+        campaignId: 'fixture',
+        channel: 'dm',
+        messageId: '',
+        result: 'failed:50007'
+      })
+      .run();
+    client.db
+      .insert(notificationThreads)
+      .values({
+        registrationId: participantFixtures.confirmed.registrationId,
+        threadId: '800000000000000009'
+      })
+      .run();
+    client.db
+      .insert(eventDiscordIntegrations)
+      .values({ eventId: publicFormEventId, guildId: '400000000000000001' })
+      .run();
     const participantCollection = await createCollection(client, {
       actorUserId: sweepOwner.userId,
       eventId: publicFormEventId,
@@ -604,6 +630,36 @@ export async function seedE2E(databasePath: string): Promise<void> {
       actorUserId: sweepOwner.userId,
       name: paidJourney.payoutOrganizationName
     });
+    for (const kind of ['JS', 'NoJS']) {
+      const legalOrg = await createOrganization(client, {
+        actorUserId: sweepOwner.userId,
+        name: `Legal Disclosure Fixtures ${kind}`
+      });
+      client.db
+        .insert(stripeConnectAccounts)
+        .values({
+          organizationId: legalOrg.id,
+          stripeAccountId: `acct_e2e_legal_${kind}`,
+          dashboardType: 'none',
+          chargesEnabled: true,
+          detailsSubmitted: true,
+          payoutsEnabled: true,
+          onboardingStatus: 'ready'
+        })
+        .run();
+      await createEvent(client, {
+        actorUserId: sweepOwner.userId,
+        organizationId: legalOrg.id,
+        title: 'Disclosure Required Event',
+        startsAt: '2099-12-01T18:00',
+        timeZone: 'Asia/Tokyo',
+        paymentRequirement: 'pay_later',
+        amountToCollect: '5000',
+        roundingUnit: 100,
+        manualCash: true,
+        manualPayPay: true
+      });
+    }
     const paidOrg = await createOrganization(client, {
       actorUserId: sweepOwner.userId,
       name: paidJourney.organizationName
@@ -620,6 +676,15 @@ export async function seedE2E(databasePath: string): Promise<void> {
         onboardingStatus: 'ready'
       })
       .run();
+    saveDisclosure(client, paidOrg.id, sweepOwner.userId, {
+      sellerName: 'Test organizer',
+      address: '',
+      phone: '',
+      discloseOnRequest: true,
+      email: 'organizer@example.test',
+      additionalFees: 'none',
+      refundPolicy: 'Contact organizer for refunds.'
+    });
     const paidDraft = await createEvent(client, {
       actorUserId: sweepOwner.userId,
       organizationId: paidOrg.id,

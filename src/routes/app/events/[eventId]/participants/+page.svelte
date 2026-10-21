@@ -113,6 +113,11 @@
                       {row.displayName}
                       {#if row.unreachable}<span class="badge badge-warning"
                           >{t('participant.unreachable')}</span
+                        ><span class="block text-sm"
+                          >{t('participants.failure', { codes: row.failureCodes })}</span
+                        >{/if}
+                      {#if row.fallbackThreadUrl}<a class="link block" href={row.fallbackThreadUrl}
+                          >{t('participants.thread')}</a
                         >{/if}
                     </th>
                     <td class="px-5 py-4">{row.username || t('participants.username_missing')}</td>

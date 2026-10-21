@@ -63,6 +63,7 @@ function eventStatus(cause: unknown): 400 | 403 | 404 | 409 | 500 {
     if (cause.code === 'not_found') return 404;
     if (cause.code === 'forbidden') return 403;
     if (cause.code === 'illegal_transition') return 409;
+    if (cause.code === 'disclosure_required') return 409;
     if (cause.code === 'validation') return 400;
   }
   if (cause instanceof OrganizationError) {
@@ -74,6 +75,8 @@ function eventStatus(cause: unknown): 400 | 403 | 404 | 409 | 500 {
 }
 
 function eventMessage(event: RequestEvent, cause: unknown) {
+  if (cause instanceof EventError && cause.code === 'disclosure_required')
+    return event.locals.t('event.error_disclosure');
   if (cause instanceof EventError && cause.code === 'illegal_transition') {
     return event.locals.t('event.error_illegal_transition');
   }

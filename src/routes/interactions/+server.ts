@@ -9,6 +9,26 @@ import { getLogger } from '$lib/server/logger';
 import { getInteractionRest } from '$lib/server/interactions/rest';
 import { dispatchInteraction } from '$lib/server/interactions/router';
 
+// Start at most one deferred task per event-loop turn, so a burst of signed
+// interactions can be acknowledged while admission work continues between polls.
+const deferredWork: (() => Promise<void>)[] = [];
+let deferredScheduled = false;
+function enqueueDeferred(work: () => Promise<void>) {
+  deferredWork.push(work);
+  if (deferredScheduled) return;
+  deferredScheduled = true;
+  const next = () => {
+    const task = deferredWork.shift();
+    if (!task) {
+      deferredScheduled = false;
+      return;
+    }
+    void task();
+    setImmediate(next);
+  };
+  setImmediate(next);
+}
+
 export const POST: RequestHandler = async ({ request, locals }) => {
   const config = getConfig();
   if (!config.discord.publicKey) return new Response(null, { status: 503 });
@@ -49,8 +69,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
           : undefined;
       },
       defer: (work) => {
-        setImmediate(() => {
-          void work().catch((err: unknown) =>
+        enqueueDeferred(async () => {
+          await work().catch((err: unknown) =>
             (locals?.logger ?? getLogger(config)).error(
               { error_name: err instanceof Error ? err.name : 'UnknownError' },
               'Deferred Discord interaction failed'

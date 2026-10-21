@@ -47,7 +47,10 @@ import { actionButton, ephemeralCard, renderCancelConfirm, renderStatus } from '
 import { ephemeralReply } from './respond';
 import type { RouterDependencies } from './router';
 
-type ParticipantAction = Exclude<CustomAction, { action: 'web' | 'soon' }>;
+type ParticipantAction = Exclude<
+  CustomAction,
+  { action: 'web' | 'soon' | import('./reception').ReceptionAction }
+>;
 export async function participantAction(
   action: ParticipantAction,
   context: ReturnType<typeof interactionContext>,

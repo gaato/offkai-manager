@@ -73,6 +73,7 @@ export const organizations = sqliteTable(
   'organizations',
   {
     id: id(),
+    disclosureJson: text('disclosure_json', { mode: 'json' }).$type<unknown>(),
     personalOwnerUserId: text('personal_owner_user_id').references(() => users.id),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
@@ -214,6 +215,8 @@ export const eventDiscordIntegrations = sqliteTable(
     roleId: text('role_id').notNull().default(''),
     paidRoleId: text('paid_role_id').notNull().default(''),
     questionsChannelId: text('questions_channel_id').notNull().default(''),
+    scheduledEnabled: integer('scheduled_enabled', { mode: 'boolean' }).notNull().default(false),
+    scheduledStateJson: text('scheduled_state_json', { mode: 'json' }).$type<unknown>(),
     layoutClaim: text('layout_claim').notNull().default(''),
     layoutClaimedAt: integer('layout_claimed_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
@@ -869,6 +872,7 @@ export const notificationDeliveries = sqliteTable('notification_deliveries', {
     .notNull()
     .references(() => registrations.id),
   kind: text('kind').notNull(),
+  campaignId: text('campaign_id').notNull().default(''),
   channel: text('channel').notNull(),
   messageId: text('message_id').notNull().default(''),
   result: text('result').notNull(),

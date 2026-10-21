@@ -1,3 +1,4 @@
+import { authorizeDoorStaff, type DoorActor } from '../checkin/access';
 import { completeAttendancePayment } from './completion';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
@@ -536,76 +537,90 @@ export async function confirmManualPayment(
   input: ConfirmManualPaymentInput,
   clock: Clock = systemClock
 ): Promise<PaymentRecord> {
+  return write(client, (tx) => confirmManualPaymentInTransaction(tx, input, clock));
+}
+
+export function confirmManualPaymentInTransaction(
+  tx: DatabaseTransaction,
+  input: ConfirmManualPaymentInput,
+  clock: Clock,
+  doorActor?: DoorActor
+): PaymentRecord {
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
-  return write(client, (tx) => {
-    const context = loadRequestContext(tx, input.paymentRequestId, input.actorUserId, 'staff');
-    const existing = findRecordByIdempotencyKey(tx, idempotencyKey);
-    if (existing) {
-      if (
-        existing.paymentRequestId === context.request.id &&
-        existing.collectionPaymentMethodId === input.paymentMethodId &&
-        existing.status === 'settled'
-      ) {
-        return existing;
-      }
-      throw new PaymentError('conflict', 'idempotency key belongs to another payment operation');
+
+  const context = loadRequestContext(
+    tx,
+    input.paymentRequestId,
+    input.actorUserId,
+    'staff',
+    doorActor
+  );
+  const existing = findRecordByIdempotencyKey(tx, idempotencyKey);
+  if (existing) {
+    if (
+      existing.paymentRequestId === context.request.id &&
+      existing.collectionPaymentMethodId === input.paymentMethodId &&
+      existing.status === 'settled'
+    ) {
+      return existing;
     }
-    ensurePayable(context.request);
-    const methodRows = tx
-      .select()
-      .from(collectionPaymentMethods)
-      .where(
-        and(
-          eq(collectionPaymentMethods.id, input.paymentMethodId),
-          eq(collectionPaymentMethods.collectionId, context.request.collectionId)
-        )
+    throw new PaymentError('conflict', 'idempotency key belongs to another payment operation');
+  }
+  ensurePayable(context.request);
+  const methodRows = tx
+    .select()
+    .from(collectionPaymentMethods)
+    .where(
+      and(
+        eq(collectionPaymentMethods.id, input.paymentMethodId),
+        eq(collectionPaymentMethods.collectionId, context.request.collectionId)
       )
-      .limit(1)
-      .all();
-    const method = methodRows[0];
-    if (!method || !method.enabled || method.confirmation !== 'manual') {
-      throw new PaymentError('invalid_method', 'payment method cannot confirm manual payments');
-    }
-    const record = insertSettledRecord(
-      tx,
-      {
-        request: context.request,
-        paymentMethodId: method.id,
-        amountMinor: context.request.amountMinor,
-        actorUserId: input.actorUserId,
-        externalReference: input.externalReference.trim(),
-        note: input.note.trim(),
-        idempotencyKey
-      },
-      clock
-    );
-    tx.update(paymentRequests)
-      .set({ status: 'paid', updatedAt: clock.now() })
-      .where(eq(paymentRequests.id, context.request.id))
-      .run();
-    completeAttendancePayment(tx, context.request, clock, record.id, 'paid');
-    appendAudit(
-      tx,
-      {
-        actorUserId: input.actorUserId,
-        eventId: context.request.eventId,
-        action: 'payment.confirm_manual',
-        targetType: 'payment_request',
-        targetId: context.request.id,
-        before: { status: context.request.status },
-        after: {
-          status: 'paid',
-          paymentRecordId: record.id,
-          amountMinor: record.amountMinor.toString(),
-          currency: record.currency,
-          paymentMethodId: record.collectionPaymentMethodId,
-          hasExternalReference: record.externalReference.length > 0
-        }
-      },
-      clock
-    );
-    return record;
-  });
+    )
+    .limit(1)
+    .all();
+  const method = methodRows[0];
+  if (!method || !method.enabled || method.confirmation !== 'manual') {
+    throw new PaymentError('invalid_method', 'payment method cannot confirm manual payments');
+  }
+  const record = insertSettledRecord(
+    tx,
+    {
+      request: context.request,
+      paymentMethodId: method.id,
+      amountMinor: context.request.amountMinor,
+      actorUserId: input.actorUserId,
+      externalReference: input.externalReference.trim(),
+      note: input.note.trim(),
+      idempotencyKey
+    },
+    clock
+  );
+  tx.update(paymentRequests)
+    .set({ status: 'paid', updatedAt: clock.now() })
+    .where(eq(paymentRequests.id, context.request.id))
+    .run();
+  completeAttendancePayment(tx, context.request, clock, record.id, 'paid');
+  appendAudit(
+    tx,
+    {
+      actorUserId: input.actorUserId,
+      eventId: context.request.eventId,
+      action: 'payment.confirm_manual',
+      targetType: 'payment_request',
+      targetId: context.request.id,
+      before: { status: context.request.status },
+      after: {
+        status: 'paid',
+        paymentRecordId: record.id,
+        amountMinor: record.amountMinor.toString(),
+        currency: record.currency,
+        paymentMethodId: record.collectionPaymentMethodId,
+        hasExternalReference: record.externalReference.length > 0
+      }
+    },
+    clock
+  );
+  return record;
 }
 
 /** Records a zero-value settlement under the collection's enabled waiver method. */
@@ -715,7 +730,8 @@ function loadRequestContext(
   tx: DatabaseTransaction,
   requestId: string,
   actorUserId: string,
-  role: 'staff' | 'organizer'
+  role: 'staff' | 'organizer',
+  doorActor?: DoorActor
 ) {
   const rows = tx
     .select({ request: paymentRequests, collection: collections, event: events })
@@ -727,7 +743,11 @@ function loadRequestContext(
     .all();
   const row = rows[0];
   if (!row) throw new PaymentError('not_found', 'payment request not found');
-  authorizeOrganizationRole(tx, row.event.organizationId, actorUserId, role);
+  if (doorActor) {
+    if (doorActor.actorUserId !== actorUserId)
+      throw new PaymentError('not_payable', 'actor mismatch');
+    authorizeDoorStaff(tx, row.event.id, doorActor);
+  } else authorizeOrganizationRole(tx, row.event.organizationId, actorUserId, role);
   if (row.event.archivedAt || row.collection.status === 'archived') {
     throw new PaymentError('not_payable', 'payment request belongs to an archived scope');
   }
