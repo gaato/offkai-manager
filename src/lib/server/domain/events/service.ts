@@ -3,7 +3,12 @@ import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
-import { events } from '$lib/server/db/schema';
+import {
+  events,
+  eventDiscordIntegrations,
+  eventFormFields,
+  eventFormFieldOptions
+} from '$lib/server/db/schema';
 import { enqueueExistingPanelRefresh } from '$lib/server/domain/discord/outbox';
 import { appendAudit } from '$lib/server/domain/audit';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
@@ -14,6 +19,7 @@ import {
   registrationModeSchema,
   venueRevealSchema
 } from '$lib/shared/event';
+import { translate } from '$lib/i18n';
 import { EventError } from './errors';
 import { generateEventSlug } from './slug';
 import { canTransitionEvent, toggledVisibility, type EventTransition } from './transitions';
@@ -46,28 +52,134 @@ export async function createEvent(
     try {
       return write(client, (tx) => {
         authorizeOrganizationRole(tx, input.organizationId, input.actorUserId, 'organizer');
-        const endsAt = new Date(startsAt.getTime() + tuning.OFFKAI_EVENT_DEFAULT_DURATION_MS);
+        const source = input.copyFromEventId
+          ? tx
+              .select()
+              .from(events)
+              .where(
+                and(
+                  eq(events.id, input.copyFromEventId),
+                  eq(events.organizationId, input.organizationId)
+                )
+              )
+              .get()
+          : undefined;
+        if (input.copyFromEventId && !source)
+          throw new EventError('validation', 'copy source must belong to this organization');
+        const delta = source ? startsAt.getTime() - source.startsAt.getTime() : 0;
+        const endsAt = new Date(
+          startsAt.getTime() +
+            (source
+              ? source.endsAt.getTime() - source.startsAt.getTime()
+              : tuning.OFFKAI_EVENT_DEFAULT_DURATION_MS)
+        );
         const created = tx
           .insert(events)
           .values({
             createdAt: clock.now(),
             updatedAt: clock.now(),
+            ...(source
+              ? {
+                  description: source.description,
+                  venueName: source.venueName,
+                  venueAddress: source.venueAddress,
+                  venueReveal: source.venueReveal,
+                  contact: source.contact,
+                  cancellationPolicy: source.cancellationPolicy
+                }
+              : {}),
+            panelTemplateJa: source?.panelTemplateJa || translate('ja', 'panel_template.default'),
+            panelTemplateEn: source?.panelTemplateEn || translate('en', 'panel_template.default'),
             organizationId: input.organizationId,
             title,
             slug,
             startsAt,
             endsAt,
-            capacity,
+            capacity: input.capacity === undefined ? (source?.capacity ?? capacity) : capacity,
             visibility: 'draft',
-            discordPolicy: 'not_used',
-            registrationOpensAt: clock.now(),
-            registrationClosesAt: startsAt,
-            venueReveal: 'public',
-            registrationMode
+            discordPolicy: source?.discordPolicy ?? 'not_used',
+            registrationOpensAt: source
+              ? new Date(source.registrationOpensAt.getTime() + delta)
+              : clock.now(),
+            registrationClosesAt: source
+              ? new Date(source.registrationClosesAt.getTime() + delta)
+              : startsAt,
+            venueReveal: source?.venueReveal ?? 'public',
+            registrationMode: input.registrationMode ?? source?.registrationMode ?? registrationMode
           })
           .returning()
           .all();
         const event = parseEvent(created[0]);
+        if (source) {
+          const integration = tx
+            .select()
+            .from(eventDiscordIntegrations)
+            .where(eq(eventDiscordIntegrations.eventId, source.id))
+            .get();
+          if (integration) {
+            tx.insert(eventDiscordIntegrations)
+              .values({
+                guildId: integration.guildId,
+                guildNameSnapshot: integration.guildNameSnapshot,
+                inviteUrl: integration.inviteUrl,
+                announcementChannelId: integration.announcementChannelId,
+                staffChannelId: integration.staffChannelId,
+                staffRoleId: integration.staffRoleId,
+                notificationChannelId: integration.notificationChannelId,
+                roleId: integration.roleId,
+                paidRoleId: integration.paidRoleId,
+                questionsChannelId: integration.questionsChannelId,
+                eventId: event.id,
+                createdAt: clock.now(),
+                updatedAt: clock.now()
+              })
+              .run();
+          }
+          const fields = tx
+            .select()
+            .from(eventFormFields)
+            .where(and(eq(eventFormFields.eventId, source.id), isNull(eventFormFields.archivedAt)))
+            .all();
+          for (const field of fields) {
+            const copied = tx
+              .insert(eventFormFields)
+              .values({
+                fieldKey: field.fieldKey,
+                label: field.label,
+                fieldType: field.fieldType,
+                required: field.required,
+                position: field.position,
+                helpText: field.helpText,
+                eventId: event.id,
+                createdAt: clock.now(),
+                updatedAt: clock.now()
+              })
+              .returning()
+              .get()!;
+            const options = tx
+              .select()
+              .from(eventFormFieldOptions)
+              .where(
+                and(
+                  eq(eventFormFieldOptions.fieldId, field.id),
+                  isNull(eventFormFieldOptions.archivedAt)
+                )
+              )
+              .all();
+            for (const option of options) {
+              tx.insert(eventFormFieldOptions)
+                .values({
+                  fieldId: copied.id,
+                  optionKey: option.optionKey,
+                  label: option.label,
+                  position: option.position,
+                  createdAt: clock.now(),
+                  updatedAt: clock.now()
+                })
+                .run();
+            }
+          }
+        }
         appendAudit(
           tx,
           {
@@ -76,7 +188,12 @@ export async function createEvent(
             action: 'event.create',
             targetType: 'event',
             targetId: event.id,
-            after: { title: event.title, slug: event.slug, visibility: event.visibility }
+            after: {
+              title: event.title,
+              slug: event.slug,
+              visibility: event.visibility,
+              copyFromEventId: input.copyFromEventId ?? null
+            }
           },
           clock
         );
@@ -432,4 +549,20 @@ function isEventSlugCollision(cause: unknown): boolean {
       error.message?.includes('events.organization_id, events.slug') === true) ||
     isEventSlugCollision(error.cause)
   );
+}
+
+export function listCopySources(
+  client: DatabaseClient,
+  actorUserId: string,
+  organizationId: string
+) {
+  return read(client, (tx) => {
+    authorizeOrganizationRole(tx, organizationId, actorUserId, 'organizer');
+    return tx
+      .select({ id: events.id, title: events.title })
+      .from(events)
+      .where(eq(events.organizationId, organizationId))
+      .orderBy(asc(events.title), asc(events.id))
+      .all();
+  });
 }

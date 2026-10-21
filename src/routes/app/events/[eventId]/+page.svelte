@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DetailPage from '$lib/components/page/detail-page.svelte';
+  import DashboardPage from '$lib/components/page/dashboard-page.svelte';
   import { resolve } from '$app/paths';
   import { translator } from '$lib/i18n';
   import { discordPolicyLabelKey } from '$lib/shared/event';
@@ -24,8 +24,31 @@
 
 <svelte:head><title>{data.event.title} · {t('brand.name')}</title></svelte:head>
 
-<DetailPage titleId="event-overview-title">
+<DashboardPage titleId="event-overview-title">
   {#snippet title()}{t('event.overview_title')}{/snippet}
+  {#snippet stats()}
+    <div class="stat">
+      <div class="stat-title">{t('event.stats_confirmed')}</div>
+      <div class="stat-value">
+        {data.dashboard.stats.confirmed} / {data.event.capacity ?? t('event.capacity_unlimited')}
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">{t('event.stats_waitlisted')}</div>
+      <div class="stat-value">{data.dashboard.stats.waitlisted}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">{t('event.stats_cancelled')}</div>
+      <div class="stat-value">{data.dashboard.stats.cancelled}</div>
+    </div>
+  {/snippet}
+  {#snippet steps()}
+    {#each data.dashboard.steps as step (step.key)}
+      <li class:step-primary={step.done} class="step" data-content={step.done ? '✓' : '○'}>
+        <a class="link" href={`${settingsHref}#${step.anchor}`}>{t(step.key)}</a>
+      </li>
+    {/each}
+  {/snippet}
   {#snippet body()}
     <section aria-labelledby="event-overview-title">
       <p class="mt-2">{t('event.overview_intro')}</p>
@@ -116,4 +139,4 @@
       {/if}
     </section>
   {/snippet}
-</DetailPage>
+</DashboardPage>

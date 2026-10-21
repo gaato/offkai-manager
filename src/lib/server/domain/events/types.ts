@@ -25,6 +25,9 @@ export interface EventSummary {
   contact: string;
   cancellationPolicy: string;
   registrationMode: RegistrationMode;
+  panelTemplateJa: string;
+  panelTemplateEn: string;
+  panelTemplateReviewedAt: Date | null;
   cancelledAt: Date | null;
   archivedAt: Date | null;
   createdAt: Date;
@@ -45,6 +48,7 @@ export interface CreateEventInput {
   startsAt: string;
   capacity?: number | null;
   registrationMode?: RegistrationMode;
+  copyFromEventId?: string;
   timeZone: string;
 }
 

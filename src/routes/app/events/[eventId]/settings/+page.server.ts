@@ -11,7 +11,24 @@ import {
   getEventDiscordSettings,
   updateEventDiscordSettings
 } from '$lib/server/domain/discord';
-import { EventError, updateSettings } from '$lib/server/domain/events';
+import {
+  getDiscordSetup,
+  applyDiscordLayout,
+  DiscordLayoutError
+} from '$lib/server/domain/discord/setup';
+import {
+  basePermissions,
+  botAuthorizationUrl,
+  layoutPermissions,
+  roleAssignable
+} from '$lib/server/domain/discord/permissions';
+import { unknownPanelVariables } from '$lib/shared/panel-template';
+import {
+  EventError,
+  updateSettings,
+  getPanelTemplates,
+  updatePanelTemplates
+} from '$lib/server/domain/events';
 import { createDiscordGateway } from '$lib/server/gateways/discord/rest';
 import { OrganizationError } from '$lib/server/domain/orgs';
 import { formatWallClockInput } from '$lib/server/time';
@@ -31,7 +48,7 @@ function settingsSchema(t: App.Locals['t']) {
     startsAt: datetime,
     endsAt: datetime,
     capacity: z.preprocess(
-      (value) => (value === '' || value === undefined ? null : Number(value)),
+      (value) => (value === '' || value === undefined || value === null ? null : Number(value)),
       z.number().int().positive(t('event.validation_capacity')).nullable()
     ),
     registrationOpensAt: datetime,
@@ -59,6 +76,10 @@ function discordSettingsSchema(t: App.Locals['t']) {
         .refine((value) => !value || /^https?:\/\//.test(value), {
           message: t('discord_settings.validation_invite_url')
         }),
+      announcementChannelId: z
+        .string()
+        .trim()
+        .regex(/^(?:|\d{17,20})$/, t('discord_settings.validation_id')),
       staffRoleId: z
         .string()
         .trim()
@@ -87,6 +108,14 @@ function discordSettingsSchema(t: App.Locals['t']) {
     });
 }
 
+function templateSchema(t: App.Locals['t']) {
+  const body = z
+    .string()
+    .max(10_000, t('form.validation_too_long', { max: 10_000 }))
+    .refine((value) => unknownPanelVariables(value).length === 0, t('panel_template.unknown'));
+  return z.object({ panelTemplateJa: body, panelTemplateEn: body });
+}
+
 export const load: PageServerLoad = async (event) => {
   const data = await event.parent();
   const { locals } = event;
@@ -98,7 +127,54 @@ export const load: PageServerLoad = async (event) => {
     session.userId,
     item.id
   );
+  const client = getDatabaseClient(config);
+  let setupError = false;
+  const setup = await getDiscordSetup(
+    client,
+    createDiscordGateway(config.discord.botToken, {
+      tuning: config.tuning,
+      baseUrl: config.discord.setupApiUrl
+    }),
+    session.userId,
+    item.id
+  ).catch((cause: unknown) => {
+    if (cause instanceof OrganizationError || cause instanceof DiscordSettingsError) throw cause;
+    setupError = true;
+    locals.logger.warn(
+      { error_name: cause instanceof Error ? cause.name : 'UnknownError' },
+      'Discord setup lookup failed'
+    );
+    return { resources: null, missing: null, layout: null };
+  });
+  const guildId = discordSettings.integration?.guildId ?? '';
+  const clientId = config.discord.applicationId || config.discord.clientId;
   return {
+    setup,
+    setupError,
+    unassignableRoleIds: setup.resources
+      ? setup.resources.roles
+          .filter(
+            (role) =>
+              !roleAssignable(
+                setup.resources!.guildId,
+                role,
+                setup.resources!.botRoleIds,
+                setup.resources!.roles
+              )
+          )
+          .map((role) => role.id)
+      : [],
+    inviteBotUrl: botAuthorizationUrl(clientId, guildId),
+    addPermissionsUrl: botAuthorizationUrl(clientId, guildId, basePermissions),
+    layoutPermissionsUrl: botAuthorizationUrl(
+      clientId,
+      guildId,
+      basePermissions | layoutPermissions
+    ),
+    templateForm: await superValidate(
+      getPanelTemplates(client, session.userId, item.id),
+      zod4(templateSchema(locals.t))
+    ),
     timeZone: config.time.zone,
     form: await superValidate(
       {
@@ -124,6 +200,7 @@ export const load: PageServerLoad = async (event) => {
         guildId: discordSettings.integration?.guildId ?? '',
         inviteUrl: discordSettings.integration?.inviteUrl ?? '',
         roleId: discordSettings.integration?.roleId ?? '',
+        announcementChannelId: discordSettings.integration?.announcementChannelId ?? '',
         staffRoleId: discordSettings.integration?.staffRoleId ?? '',
         logChannelId: discordSettings.integration?.logChannelId ?? '',
         notificationChannelId: discordSettings.integration?.notificationChannelId ?? ''
@@ -136,6 +213,87 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
+  templates: async (event) => {
+    const session = requireSession(event);
+    const form = await superValidate(event, zod4(templateSchema(event.locals.t)));
+    if (!form.valid) return fail(400, { form });
+    try {
+      updatePanelTemplates(getDatabaseClient(getConfig()), {
+        actorUserId: session.userId,
+        eventId: event.params.eventId,
+        ...form.data
+      });
+      return message(form, event.locals.t('panel_template.saved'));
+    } catch (cause) {
+      event.locals.logger[
+        cause instanceof EventError || cause instanceof OrganizationError ? 'warn' : 'error'
+      ]({ err: cause }, 'panel template save failed');
+      if (cause instanceof OrganizationError)
+        return message(form, event.locals.t('event.error_forbidden'), { status: 403 });
+      if (cause instanceof EventError && cause.code === 'validation')
+        return message(form, event.locals.t('event.error_validation'), { status: 400 });
+      if (cause instanceof EventError && cause.code === 'illegal_transition')
+        return message(form, event.locals.t('event.error_illegal_transition'), { status: 409 });
+      return message(form, event.locals.t('event.error_generic'), { status: 500 });
+    }
+  },
+  previewLayout: async (event) => {
+    const session = requireSession(event);
+    const config = getConfig();
+    try {
+      // Preview is read-only; the apply service authorizes again immediately before claiming work.
+      const setup = await getDiscordSetup(
+        getDatabaseClient(config),
+        createDiscordGateway(config.discord.botToken, {
+          tuning: config.tuning,
+          baseUrl: config.discord.setupApiUrl
+        }),
+        session.userId,
+        event.params.eventId
+      );
+      if (!setup.layout) return fail(400, { layoutError: event.locals.t('discord_setup.error') });
+      return { layoutPreview: setup.layout };
+    } catch (cause) {
+      event.locals.logger.warn({ err: cause }, 'Discord layout preview failed');
+      return fail(400, { layoutError: event.locals.t('discord_setup.error') });
+    }
+  },
+  applyLayout: async (event) => {
+    const session = requireSession(event);
+    const fingerprint = z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .safeParse((await event.request.formData()).get('fingerprint'));
+    if (!fingerprint.success)
+      return fail(400, { layoutError: event.locals.t('discord_setup.changed') });
+    const config = getConfig();
+    try {
+      await applyDiscordLayout(
+        getDatabaseClient(config),
+        createDiscordGateway(config.discord.botToken, {
+          tuning: config.tuning,
+          baseUrl: config.discord.setupApiUrl
+        }),
+        session.userId,
+        event.params.eventId,
+        fingerprint.data
+      );
+      return { layoutMessage: event.locals.t('discord_setup.complete') };
+    } catch (cause) {
+      event.locals.logger.warn({ err: cause }, 'Discord layout apply failed');
+      if (cause instanceof DiscordSettingsError && cause.code === 'guild_not_managed')
+        return fail(403, {
+          layoutError: event.locals.t('discord_settings.error_guild_not_managed')
+        });
+      return fail(400, {
+        layoutError: event.locals.t(
+          cause instanceof DiscordLayoutError && ['busy', 'preview_changed'].includes(cause.code)
+            ? 'discord_setup.changed'
+            : 'discord_setup.error'
+        )
+      });
+    }
+  },
   settings: async (event) => {
     const session = requireSession(event);
     const eventId = z.uuid().safeParse(event.params.eventId);
@@ -184,7 +342,10 @@ export const actions: Actions = {
     try {
       await updateEventDiscordSettings(
         getDatabaseClient(config),
-        createDiscordGateway(config.discord.botToken, { tuning: config.tuning }),
+        createDiscordGateway(config.discord.botToken, {
+          tuning: config.tuning,
+          baseUrl: config.discord.setupApiUrl
+        }),
         {
           actorUserId: session.userId,
           eventId: eventId.data,

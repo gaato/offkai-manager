@@ -87,6 +87,7 @@ const rawSchema = z.object({
   OFFKAI_DISCORD_CLIENT_SECRET: z.string().default(''),
   OFFKAI_DISCORD_REDIRECT_URL: z.string().default(''),
   OFFKAI_DISCORD_BOT_TOKEN: z.string().default(''),
+  OFFKAI_DISCORD_SETUP_API_URL: z.url().default('https://discord.com/api/v10'),
   OFFKAI_DISCORD_APPLICATION_ID: z
     .string()
     .regex(/^\d{17,20}$/)
@@ -133,6 +134,7 @@ export interface Config {
     clientSecret: string;
     redirectUrl: string;
     botToken: string;
+    setupApiUrl: string;
     applicationId: string;
     publicKey: string;
     commandGuildId: string;
@@ -254,6 +256,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       throw new Error('OFFKAI_DISCORD_REDIRECT_URL must be an absolute HTTP(S) URL');
     }
   }
+  if (raw.OFFKAI_DISCORD_SETUP_API_URL !== 'https://discord.com/api/v10') {
+    const url = new URL(raw.OFFKAI_DISCORD_SETUP_API_URL);
+    if (
+      !raw.OFFKAI_AUTH_DEV_BYPASS ||
+      url.protocol !== 'http:' ||
+      url.hostname !== '127.0.0.1' ||
+      url.username ||
+      url.password
+    )
+      throw new Error(
+        'OFFKAI_DISCORD_SETUP_API_URL overrides require dev bypass and a loopback HTTP URL'
+      );
+  }
   const sessionSecret =
     raw.OFFKAI_SESSION_SECRET || (raw.OFFKAI_AUTH_DEV_BYPASS ? 'development-session-secret' : '');
   if (Buffer.byteLength(sessionSecret) < 16) {
@@ -298,6 +313,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       clientSecret: raw.OFFKAI_DISCORD_CLIENT_SECRET,
       redirectUrl: raw.OFFKAI_DISCORD_REDIRECT_URL,
       botToken: raw.OFFKAI_DISCORD_BOT_TOKEN,
+      setupApiUrl: raw.OFFKAI_DISCORD_SETUP_API_URL,
       applicationId: raw.OFFKAI_DISCORD_APPLICATION_ID,
       publicKey: raw.OFFKAI_DISCORD_PUBLIC_KEY,
       commandGuildId: raw.OFFKAI_DISCORD_COMMAND_GUILD_ID

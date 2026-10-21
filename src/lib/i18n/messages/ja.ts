@@ -1,6 +1,80 @@
 import { en, type MessageKey } from './en';
 
 export const ja = {
+  'panel_template.default':
+    '## {title}\n### 重要なルール\n- 申込みによりサーバーとイベントのルールを受け入れます。参加対象は、開催当日に20歳以上の方です。\n- 参加確定後の返金はできません。不明点や特別な事情は主催者に相談してください。\n\n### 開催概要\n日時: {date} {start}〜{end}\n会場: {venue}\n定員: {capacity}\n参加費: {fee}\n申込締切: {deadline}\n\n### 参加方法\n- 「参加する」から必要事項を送信してください。\n- 「参加状況」で参加確定やキャンセル待ちなどの状態を確認し、必要に応じて回答を編集してください。送信だけで参加確定になるとは限りません。\n\n### キャンセル\n- 「参加を取り消す」を選び、次の確認画面で確定してください。操作できない場合は主催者に連絡してください。\n\n### マナー・注意事項\n- 周囲の人を尊重し、スタッフの案内や会場の喫煙ルールを守ってください。\n- 食事の制約やアレルギーへの対応は、申込み前に主催者へ確認してください。\n- 撮影時は周囲の同意とプライバシーに配慮し、動画撮影・配信には事前にスタッフの許可を得てください。\n- 荷物はコンパクトにまとめ、持ち物とゴミは各自で管理してください。忘れ物はスタッフにお問い合わせください。\n- 言語の違いに配慮してください。個人間の取引は主催者の案内に従い、当事者同士で責任を持って行ってください。',
+  'panel_template.title': 'パネル本文テンプレート',
+  'panel_template.ja': '日本語のパネル本文',
+  'panel_template.en': '英語のパネル本文',
+  'panel_template.help':
+    'Markdownで編集できます。使用可能な変数: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}。料金は現在空欄です。非公開の会場情報は表示されません。保存すると両言語を確認済みにします。',
+  'panel_template.unknown':
+    '不明なテンプレート変数です。使用可能: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}。',
+  'panel_template.save': 'テンプレートを保存して確認済みにする',
+  'panel_template.saved': 'パネルテンプレートを保存しました。',
+  'panel_template.truncated': '本文を省略しています。ルールの全文は主催者に確認してください。',
+  'discord_setup.manual':
+    'Botはまだこのサーバーにアクセスできません。下のリンクで招待するか、IDを手入力して保存してください。導入済みの場合は「チャンネルを見る」権限を確認してください。',
+  'discord_setup.failed':
+    'Discordに接続できませんでした。IDの手入力は利用できます。ページを再読み込みしてください。',
+  'discord_setup.announcement': 'パネル・お知らせチャンネル',
+  'discord_setup.none': '未設定',
+  'discord_setup.unavailable_selection': '保存済みの選択先はBotから見えません',
+  'discord_setup.hierarchy':
+    'Botは「{role}」を付与できません。管理対象、@everyone、またはBot以上の役職です。管理対象ではない役職を選び、サーバー設定 → ロールでBotの役職をその上に移動してください。',
+  'discord_setup.missing':
+    '{feature}に必要な権限がありません: {permissions}。管理者によるチャンネルの権限上書きの変更が必要な場合もあります。',
+  'discord_setup.feature.panel': 'パネル投稿',
+  'discord_setup.feature.roles': '参加者ロール同期',
+  'discord_setup.feature.notifications': '通知用プライベートスレッド',
+  'discord_setup.feature.layout': '推奨構成の作成',
+  'discord_setup.add_permissions': 'Botの権限を追加',
+  'discord_setup.admin_label': 'サーバー管理者へのメッセージ（選択してコピー）',
+  'discord_setup.admin_message':
+    'イベントBotを導入してください: {url}\n権限の用途: チャンネルを見る・メッセージ履歴を読む＝パネルへのアクセス、メッセージを送信＝パネル投稿、ロールの管理＝参加者ロール同期、プライベートスレッドの作成・スレッドでメッセージを送信＝任意の通知機能。推奨構成の作成には別途チャンネルの管理とロールの管理が必要です。管理者権限は要求しません。\nサーバー設定 → 連携サービス → Bot → コマンドで /offkai を主催者の役職・チャンネルに制限してください。サーバー設定 → ロールでBotの役職を参加者ロールより上に移動してください。',
+  'discord_setup.layout_title': '推奨サーバー構成',
+  'discord_setup.layout_help':
+    '任意: カテゴリ1個、お知らせ・パネル、質問、通知スレッドの親、スタッフ・ログの各チャンネルと、参加者・支払済み（未使用）・スタッフの役職を作成します。記録済みのリソースだけを再利用し、既存リソースは変更・削除しません。適用するとこのイベントの送信先を設定します。',
+  'discord_setup.preview': '推奨構成のプレビュー',
+  'discord_setup.create': '作成: {name}',
+  'discord_setup.reuse': '再利用: {name}',
+  'discord_setup.apply': 'この構成計画を適用',
+  'discord_setup.complete': '推奨構成を設定しました。',
+  'discord_setup.empty': '推奨リソースはすべて作成済みです。新規作成はありません。',
+  'discord_setup.error':
+    '構成の適用を完了できませんでした。保存済みリソースは再利用します。再度プレビューして再開してください。',
+  'discord_setup.changed':
+    '計画が変更されたか、別の適用処理が実行中です。再度プレビューしてください。',
+  'event.copy_from': '前回のイベントからコピー',
+  'event.copy_none': '初期設定から作成',
+  'event.copy_help':
+    '設定・有効なフォーム項目・テンプレート・Discordの送信先をコピーします。日付は新しい開始日時に合わせて移動します。定員と登録方式を空欄にすると引き継ぎます。新しいイベントでテンプレートを確認してください。',
+  'event.copy_inherit': '前回の設定・初期値を使用',
+  'event.setup_linked': 'Discordを連携',
+  'event.setup_reviewed': 'パネル本文を確認',
+  'event.setup_posted': 'パネルを投稿',
+  'event.setup_post_help':
+    '公開後、設定したDiscordチャンネルで /offkai panel を実行して、このイベントと言語を選んでください。',
+  'event.stats_confirmed': '参加確定 / 定員',
+  'event.stats_waitlisted': 'キャンセル待ち',
+  'event.stats_cancelled': 'キャンセル',
+  'command.event.name': 'イベント',
+  'command.language.name': '言語',
+  'discord_setup.permission.administrator': '管理者',
+  'discord_setup.permission.manageChannels': 'チャンネルの管理',
+  'discord_setup.permission.viewChannel': 'チャンネルを見る',
+  'discord_setup.permission.sendMessages': 'メッセージを送信',
+  'discord_setup.permission.readMessageHistory': 'メッセージ履歴を読む',
+  'discord_setup.permission.manageRoles': 'ロールの管理',
+  'discord_setup.permission.createPrivateThreads': 'プライベートスレッドの作成',
+  'discord_setup.permission.sendMessagesInThreads': 'スレッドでメッセージを送信',
+  'activity.action.event.panel_templates_update': 'パネル本文を更新',
+  'activity.action.discord.layout_begin': '構成の適用を開始',
+  'activity.action.discord.layout_step': '構成リソースの作成を開始',
+  'activity.action.discord.layout_created': '構成リソースを作成',
+  'activity.action.discord.layout_applied': 'Discord構成を適用',
+  'activity.action.discord.layout_end': '構成の適用処理を終了',
+
   'activity.action.registration.edit_answers': '参加登録の回答を編集',
   'activity.action.discord.panel_post': 'Discord パネルを投稿',
   'activity.action.interaction.draft_save': 'Discord の回答を一時保存',
@@ -65,9 +139,9 @@ export const ja = {
   'participant.yes': 'はい',
   'participant.no': 'いいえ',
   'participant.agree': '同意します',
-  'discord_settings.staff_role_id': 'スタッフロール ID',
-  'discord_settings.log_channel_id': 'ログチャンネル ID',
-  'discord_settings.notification_channel_id': '通知チャンネル ID',
+  'discord_settings.staff_role_id': 'スタッフロール',
+  'discord_settings.log_channel_id': 'ログチャンネル',
+  'discord_settings.notification_channel_id': '通知チャンネル',
   'discord_settings.ids_help':
     '任意。空欄の場合は無効です。ID は17〜20桁の数字で入力してください。',
   'discord_settings.validation_id': '正しい Discord ロール・チャンネル ID を入力してください。',

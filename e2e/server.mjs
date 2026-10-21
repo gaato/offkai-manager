@@ -10,6 +10,7 @@ const directory = await mkdtemp(join(tmpdir(), 'offkai-e2e-'));
 const databasePath = join(directory, 'offkai.sqlite');
 
 const apps = [];
+let fakeDiscord;
 try {
   const vite = await createServer({
     appType: 'custom',
@@ -19,6 +20,8 @@ try {
   try {
     const { seedE2E } = await vite.ssrLoadModule('/e2e/seed.ts');
     await seedE2E(databasePath);
+    const { startFakeDiscord } = await vite.ssrLoadModule('/e2e/discord-rest.ts');
+    fakeDiscord = await startFakeDiscord();
   } finally {
     await vite.close();
   }
@@ -28,6 +31,7 @@ try {
   for (const app of apps) {
     if (app.exitCode === null) app.kill('SIGTERM');
   }
+  await fakeDiscord?.close();
   await rm(directory, { recursive: true, force: true });
   throw cause;
 }
@@ -47,6 +51,9 @@ function spawnApp(appPort) {
       OFFKAI_DB_MIGRATE: 'false',
       OFFKAI_CLIENT_IP_HEADER: 'X-Test-Client-IP',
       OFFKAI_WORKER_ENABLED: 'false',
+      OFFKAI_DISCORD_BOT_TOKEN: 'fake-e2e-token',
+      OFFKAI_DISCORD_APPLICATION_ID: '400000000000000002',
+      OFFKAI_DISCORD_SETUP_API_URL: fakeDiscord.url,
       OFFKAI_LOG_LEVEL: 'warn'
     }
   });
@@ -62,6 +69,7 @@ function stop(signal) {
         await exited;
       }
     }
+    await fakeDiscord?.close();
     await rm(directory, { recursive: true, force: true });
   })();
   return shutdownPromise;

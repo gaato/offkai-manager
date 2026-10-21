@@ -48,7 +48,8 @@ export async function init(): Promise<void> {
         logger,
         config.tuning,
         systemClock,
-        discordRest
+        discordRest,
+        config.time.zone
       );
       roleSyncWorker.start();
       logger.info('Discord role sync worker started');

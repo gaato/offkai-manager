@@ -32,6 +32,23 @@
           {/if}
           <form method="POST" action="?/create" use:enhance class="grid gap-6">
             <div class="grid gap-2">
+              <label for="copyFromEventId" class="label">{t('event.copy_from')}</label>
+              <select
+                id="copyFromEventId"
+                name="copyFromEventId"
+                bind:value={$form.copyFromEventId}
+                class="select w-full"
+                aria-describedby="copy-help"
+              >
+                <option value="">{t('event.copy_none')}</option>
+                {#each data.copySources as source (source.id)}<option value={source.id}
+                    >{source.title}</option
+                  >{/each}
+              </select>
+              <p id="copy-help">{t('event.copy_help')}</p>
+              {#if $errors.copyFromEventId}<p role="alert">{$errors.copyFromEventId[0]}</p>{/if}
+            </div>
+            <div class="grid gap-2">
               <label for="title" class="label">{t('event.title')}</label>
               <input
                 id="title"
@@ -86,6 +103,15 @@
             <fieldset class="fieldset grid gap-3">
               <legend class="fieldset-legend">{t('event.registration_mode_label')}</legend>
               <p>{t('event.registration_mode_help')}</p>
+              <label class="label"
+                ><input
+                  type="radio"
+                  name="registrationMode"
+                  value=""
+                  bind:group={$form.registrationMode}
+                  class="radio"
+                />{t('event.copy_inherit')}</label
+              >
               {#each registrationModes as mode (mode)}
                 <label
                   for={`field-registrationMode-${mode}`}

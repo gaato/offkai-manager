@@ -42,7 +42,8 @@ export function commandDefinitions() {
       if (part === 'panel') {
         sub.addStringOption((option) =>
           option
-            .setName('event')
+            .setName(translate('en', 'command.event.name'))
+            .setNameLocalizations({ ja: translate('ja', 'command.event.name') })
             .setDescription(translate('en', 'panel.event_option'))
             .setDescriptionLocalizations({ ja: translate('ja', 'panel.event_option') })
             .setRequired(true)
@@ -50,7 +51,8 @@ export function commandDefinitions() {
         );
         sub.addStringOption((option) =>
           option
-            .setName('language')
+            .setName(translate('en', 'command.language.name'))
+            .setNameLocalizations({ ja: translate('ja', 'command.language.name') })
             .setDescription(translate('en', 'panel.language_option'))
             .setDescriptionLocalizations({ ja: translate('ja', 'panel.language_option') })
             .setRequired(true)

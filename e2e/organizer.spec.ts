@@ -28,29 +28,46 @@ test('organizer creates a group and manages a team member', async ({ page }) => 
   await expect(memberRow.getByRole('cell', { name: 'Disabled', exact: true })).toBeVisible();
 });
 
-test('event settings and Discord forms save via their named actions', async ({ page }) => {
-  await signInAs(page, e2eUsers.organizer);
-  await page.getByRole('link', { name: 'Create group' }).first().click();
-  await page.getByLabel('Group name').fill('Settings Regression');
-  await page.getByRole('button', { name: 'Create group' }).click();
-  await expect(page).toHaveURL(/\/app\/organizations\/[0-9a-f-]+$/);
-
-  await page.getByRole('link', { name: 'Create event' }).first().click();
-  await page.getByLabel(/title/i).fill('Settings Regression Event');
-  await page.getByLabel('Start date and time').fill('2026-12-01T18:00');
-  await page.getByRole('button', { name: 'Create event' }).click();
-  await expect(page).toHaveURL(/\/app\/events\/[0-9a-f-]+$/);
-
-  await page.getByRole('button', { name: 'Publish event' }).click();
-
-  await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  const mainForm = page.locator('form[action="?/settings"]');
-  await expect(mainForm).toBeVisible();
-  await mainForm.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.locator('main')).toContainText(/saved|保存/);
-
-  const discordForm = page.locator('form[action="?/discord"]');
-  await expect(discordForm).toBeVisible();
-  await discordForm.getByRole('button', { name: 'Save Discord settings' }).click();
-  await expect(page.locator('main')).not.toContainText('500');
-});
+for (const javaScriptEnabled of [true, false]) {
+  test.describe(`Event settings (JavaScript ${javaScriptEnabled ? 'enabled' : 'disabled'})`, () => {
+    test.use({ javaScriptEnabled });
+    test('event settings and Discord forms save via their named actions', async ({ page }) => {
+      await signInAs(page, e2eUsers.organizer);
+      await page.getByRole('link', { name: 'Create group' }).first().click();
+      await page.getByLabel('Group name').fill('Settings Regression');
+      await page.getByRole('button', { name: 'Create group' }).click();
+      await expect(page).toHaveURL(/\/app\/organizations\/[0-9a-f-]+$/);
+      await page.getByRole('link', { name: 'Create event' }).first().click();
+      await page.getByLabel('Event title', { exact: true }).fill('Settings Regression Event');
+      await page.getByLabel('Start date and time').fill('2026-12-01T18:00');
+      await page.getByRole('button', { name: 'Create event', exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/events\/[0-9a-f-]+$/);
+      await page.getByRole('button', { name: 'Publish event' }).click();
+      await page.getByRole('link', { name: 'Settings', exact: true }).click();
+      const mainForm = page.locator('form[action="?/settings"]');
+      const capacity = mainForm.getByLabel('Capacity', { exact: true });
+      const save = mainForm.getByRole('button', { name: 'Save changes', exact: true });
+      const saved = page.getByRole('status').filter({ hasText: 'The event settings were saved.' });
+      await expect(capacity).toHaveValue('');
+      await save.click();
+      await expect(saved).toBeVisible();
+      await page.reload();
+      await expect(capacity).toHaveValue('');
+      await capacity.fill('40');
+      await save.click();
+      await expect(saved).toBeVisible();
+      await page.reload();
+      await expect(capacity).toHaveValue('40');
+      await capacity.fill('');
+      await save.click();
+      await expect(saved).toBeVisible();
+      await page.reload();
+      await expect(capacity).toHaveValue('');
+      const discordForm = page.locator('form[action="?/discord"]');
+      await discordForm.getByRole('button', { name: 'Save Discord settings' }).click();
+      await expect(
+        page.getByRole('status').filter({ hasText: 'The Discord settings were saved.' })
+      ).toBeVisible();
+    });
+  });
+}

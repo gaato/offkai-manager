@@ -24,6 +24,9 @@ export interface EventDiscordIntegration {
   guildId: string;
   guildNameSnapshot: string;
   inviteUrl: string;
+  announcementChannelId: string;
+  paidRoleId: string;
+  questionsChannelId: string;
   roleId: string;
   staffRoleId: string;
   logChannelId: string;
@@ -44,6 +47,7 @@ export interface UpdateDiscordSettingsInput {
   guildId: string;
   inviteUrl: string;
   roleId: string;
+  announcementChannelId?: string;
   staffRoleId?: string;
   logChannelId?: string;
   notificationChannelId?: string;
@@ -119,13 +123,19 @@ export async function updateEventDiscordSettings(
       );
     }
     try {
-      if (!(await gateway.canManageGuild(input.guildId, preflight.providerUserId))) {
+      const resources = gateway.getGuildResources
+        ? await gateway.getGuildResources(input.guildId)
+        : undefined;
+      if (
+        resources !== null &&
+        !(await gateway.canManageGuild(input.guildId, preflight.providerUserId))
+      ) {
         throw new DiscordSettingsError(
           'guild_not_managed',
           'the actor cannot manage the Discord guild'
         );
       }
-      guildNameSnapshot = await gateway.getGuildName(input.guildId);
+      if (resources !== null) guildNameSnapshot = await gateway.getGuildName(input.guildId);
     } catch (cause) {
       if (cause instanceof DiscordSettingsError) throw cause;
       throw new DiscordSettingsError('gateway', 'Discord guild verification failed', { cause });
@@ -154,34 +164,27 @@ export async function updateEventDiscordSettings(
       .set({ discordPolicy: input.policy, updatedAt: clock.now() })
       .where(eq(events.id, input.eventId))
       .run();
+    const sameGuild = beforeIntegration?.guildId === input.guildId;
+    const values = {
+      guildId: input.guildId,
+      guildNameSnapshot,
+      inviteUrl: input.inviteUrl,
+      roleId: input.roleId,
+      staffRoleId: input.staffRoleId ?? (sameGuild ? beforeIntegration.staffRoleId : ''),
+      staffChannelId: input.logChannelId ?? (sameGuild ? beforeIntegration.staffChannelId : ''),
+      notificationChannelId:
+        input.notificationChannelId ?? (sameGuild ? beforeIntegration.notificationChannelId : ''),
+      announcementChannelId:
+        input.announcementChannelId ?? (sameGuild ? beforeIntegration.announcementChannelId : ''),
+      paidRoleId: sameGuild ? beforeIntegration.paidRoleId : '',
+      questionsChannelId: sameGuild ? beforeIntegration.questionsChannelId : ''
+    };
     const rows = tx
       .insert(eventDiscordIntegrations)
-      .values({
-        createdAt: clock.now(),
-        updatedAt: clock.now(),
-        eventId: input.eventId,
-        guildId: input.guildId,
-        guildNameSnapshot,
-        inviteUrl: input.inviteUrl,
-        staffRoleId: input.staffRoleId ?? beforeIntegration?.staffRoleId ?? '',
-        staffChannelId: input.logChannelId ?? beforeIntegration?.staffChannelId ?? '',
-        notificationChannelId:
-          input.notificationChannelId ?? beforeIntegration?.notificationChannelId ?? '',
-        roleId: input.roleId
-      })
+      .values({ ...values, createdAt: clock.now(), updatedAt: clock.now(), eventId: input.eventId })
       .onConflictDoUpdate({
         target: eventDiscordIntegrations.eventId,
-        set: {
-          guildId: input.guildId,
-          guildNameSnapshot,
-          inviteUrl: input.inviteUrl,
-          staffRoleId: input.staffRoleId ?? beforeIntegration?.staffRoleId ?? '',
-          staffChannelId: input.logChannelId ?? beforeIntegration?.staffChannelId ?? '',
-          notificationChannelId:
-            input.notificationChannelId ?? beforeIntegration?.notificationChannelId ?? '',
-          roleId: input.roleId,
-          updatedAt: clock.now()
-        }
+        set: { ...values, updatedAt: clock.now() }
       })
       .returning()
       .all();
@@ -230,7 +233,12 @@ function validateInput(input: UpdateDiscordSettingsInput): UpdateDiscordSettings
   const guildId = input.guildId.trim();
   const roleId = input.roleId.trim();
   const inviteUrl = input.inviteUrl.trim();
-  for (const value of [input.staffRoleId, input.logChannelId, input.notificationChannelId]) {
+  for (const value of [
+    input.announcementChannelId,
+    input.staffRoleId,
+    input.logChannelId,
+    input.notificationChannelId
+  ]) {
     if (value?.trim() && !snowflake.test(value.trim()))
       throw new DiscordSettingsError('validation', 'Discord role or channel ID is invalid');
   }
@@ -263,6 +271,7 @@ function validateInput(input: UpdateDiscordSettingsInput): UpdateDiscordSettings
     guildId,
     roleId,
     inviteUrl,
+    announcementChannelId: input.announcementChannelId?.trim(),
     staffRoleId: input.staffRoleId?.trim(),
     logChannelId: input.logChannelId?.trim(),
     notificationChannelId: input.notificationChannelId?.trim()
@@ -304,6 +313,9 @@ function parseIntegration(
     guildId: row.guildId,
     guildNameSnapshot: row.guildNameSnapshot,
     inviteUrl: row.inviteUrl,
+    announcementChannelId: row.announcementChannelId,
+    paidRoleId: row.paidRoleId,
+    questionsChannelId: row.questionsChannelId,
     roleId: row.roleId,
     staffRoleId: row.staffRoleId,
     logChannelId: row.staffChannelId,
@@ -319,6 +331,9 @@ function integrationAuditSnapshot(row: typeof eventDiscordIntegrations.$inferSel
         guildId: row.guildId,
         guildNameSnapshot: row.guildNameSnapshot,
         inviteUrl: row.inviteUrl,
+        announcementChannelId: row.announcementChannelId,
+        paidRoleId: row.paidRoleId,
+        questionsChannelId: row.questionsChannelId,
         roleId: row.roleId,
         staffRoleId: row.staffRoleId,
         logChannelId: row.staffChannelId,

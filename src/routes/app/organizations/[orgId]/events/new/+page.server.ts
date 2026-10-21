@@ -6,7 +6,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { requireSession } from '$lib/server/auth/guards';
 import { getConfig } from '$lib/server/config';
 import { getDatabaseClient } from '$lib/server/db/client';
-import { createEvent, EventError } from '$lib/server/domain/events';
+import { createEvent, EventError, listCopySources } from '$lib/server/domain/events';
 import { OrganizationError } from '$lib/server/domain/orgs';
 import { formatWallClockInput } from '$lib/server/time';
 import { registrationModeSchema } from '$lib/shared/event';
@@ -25,20 +25,24 @@ function newEventSchema(t: App.Locals['t']) {
       (value) => (value === '' || value === undefined ? undefined : Number(value)),
       z.number().int().positive(t('event.validation_capacity')).optional()
     ),
-    registrationMode: registrationModeSchema.default('auto_confirm')
+    copyFromEventId: z.union([z.uuid(), z.literal('')]).default(''),
+    registrationMode: z.union([registrationModeSchema, z.literal('')]).default('')
   });
 }
 
-export const load: PageServerLoad = async ({ locals, parent }) => {
-  const data = await parent();
+export const load: PageServerLoad = async (event) => {
+  const { locals } = event;
+  const data = await event.parent();
+  const session = requireSession(event);
   if (!data.capabilities.canManageEvent) throw error(404);
   const config = getConfig();
   return {
+    copySources: listCopySources(getDatabaseClient(config), session.userId, data.organization.id),
     form: await superValidate(
       {
         title: '',
         startsAt: formatWallClockInput(Date.now() + 24 * 60 * 60 * 1_000, config.time.zone),
-        registrationMode: 'auto_confirm' as const
+        registrationMode: '' as const
       },
       zod4(newEventSchema(locals.t))
     )
@@ -62,8 +66,9 @@ export const actions: Actions = {
           organizationId: organizationId.data,
           title: form.data.title,
           startsAt: form.data.startsAt,
-          capacity: form.data.capacity ?? null,
-          registrationMode: form.data.registrationMode,
+          capacity: form.data.capacity,
+          copyFromEventId: form.data.copyFromEventId || undefined,
+          registrationMode: form.data.registrationMode || undefined,
           timeZone: config.time.zone
         },
         undefined,

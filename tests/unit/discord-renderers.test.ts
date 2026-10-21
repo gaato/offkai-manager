@@ -3,6 +3,8 @@ import { renderPanel, renderStatus, renderCancelConfirm } from '$lib/server/inte
 import { renderRegistrationModal, submittedAnswers } from '$lib/server/interactions/modal';
 import type { EventSummary, RegistrationFormField } from '$lib/server/domain/events';
 import type { OwnedRegistrationDetail } from '$lib/server/domain/registrations/participant';
+import { translator } from '$lib/i18n';
+import { panelVariables, unknownPanelVariables } from '$lib/shared/panel-template';
 import { formFieldTypes } from '$lib/shared/registration-form';
 import { makeModalSubmit } from '../support/interactions';
 
@@ -23,6 +25,9 @@ const event: EventSummary = {
   venueAddress: 'Tokyo',
   venueReveal: 'public',
   contact: '',
+  panelTemplateJa: '',
+  panelTemplateEn: '',
+  panelTemplateReviewedAt: null,
   cancellationPolicy: 'Contact staff.',
   registrationMode: 'auto_confirm',
   cancelledAt: null,
@@ -110,6 +115,71 @@ describe('Discord pure renderers', () => {
     }
   );
   it.each(['ja', 'en'] as const)(
+    'keeps the adapted default structured, neutral, and limited to supported variables in %s',
+    (locale) => {
+      const t = translator(locale);
+      const template = t('panel_template.default');
+      const headings =
+        locale === 'ja'
+          ? ['重要なルール', '開催概要', '参加方法', 'キャンセル', 'マナー・注意事項']
+          : [
+              'Important rules',
+              'Event details',
+              'How to join',
+              'Cancellation',
+              'Conduct and practical notes'
+            ];
+      expect(template.match(/^### (.+)$/gm)).toEqual(headings.map((heading) => `### ${heading}`));
+      expect(unknownPanelVariables(template)).toEqual([]);
+      for (const variable of panelVariables) expect(template).toContain(`{${variable}}`);
+      for (const key of ['panel.join', 'panel.status', 'panel.cancel'] as const)
+        expect(template).toContain(t(key));
+      expect(template).toContain('20');
+      expect(template).toMatch(
+        locale === 'ja' ? /参加確定後の返金はできません/ : /non-refundable after confirmation/
+      );
+      expect(template).not.toMatch(
+        /Peatix|hololive|Expo|7th|ちばちゃん|海浜幕張|Chibachan|Kaihin|Makuhari|4,?500|\b180\b|https?:\/\/|<[@#][^>]*>|\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/i
+      );
+    }
+  );
+  it.each(['ja', 'en'] as const)(
+    'renders the complete adapted default within the message budget in %s',
+    (locale) => {
+      const panel = renderPanel(event, { confirmed: 4, now }, locale);
+      const text = JSON.stringify(panel);
+      const inspected = inspect(panel.components);
+      expect(inspected.components).toBeLessThanOrEqual(40);
+      expect(inspected.text).toBeLessThanOrEqual(4_000);
+      expect(text).not.toContain(translator(locale)('panel_template.truncated'));
+      expect(text).toContain(
+        locale === 'ja' ? '当事者同士で責任を持って' : 'responsibility of those involved'
+      );
+      expect(text).not.toMatch(/\{(?:title|date|start|end|venue|fee|capacity|deadline)\}/);
+    }
+  );
+  it.each(['ja', 'en'] as const)(
+    'bounds the adapted default with maximally long escaped event values in %s',
+    (locale) => {
+      const panel = renderPanel(
+        {
+          ...event,
+          title: '\\'.repeat(200),
+          venueName: '\\'.repeat(300),
+          venueAddress: '\\'.repeat(500),
+          capacity: Number.MAX_SAFE_INTEGER
+        },
+        { confirmed: 4, now },
+        locale
+      );
+      const inspected = inspect(panel.components);
+      expect(inspected.components).toBeLessThanOrEqual(40);
+      expect(inspected.text).toBeLessThanOrEqual(4_000);
+      expect(panel.allowed_mentions).toEqual({ parse: [] });
+      expect(JSON.stringify(panel)).toContain(translator(locale)('panel_template.truncated'));
+    }
+  );
+  it.each(['ja', 'en'] as const)(
     'enforces limits including worst-case text and five questions in %s',
     (locale) => {
       const long = {
@@ -118,6 +188,8 @@ describe('Discord pure renderers', () => {
         venueName: '@everyone'.repeat(500),
         venueAddress: '*'.repeat(5_000),
         description: '*'.repeat(20_000),
+        panelTemplateJa: '{title} {venue} '.repeat(500),
+        panelTemplateEn: '{title} {venue} '.repeat(500),
         cancellationPolicy: '*'.repeat(5_000)
       };
       const worst = {
@@ -140,6 +212,10 @@ describe('Discord pure renderers', () => {
         const inspected = inspect(response.components);
         expect(inspected.components).toBeLessThanOrEqual(40);
         expect(inspected.text).toBeLessThanOrEqual(4_000);
+        if (response === responses[0])
+          expect(JSON.stringify(response)).toContain(
+            locale === 'ja' ? '本文を省略' : 'Text shortened'
+          );
         expect(response.allowed_mentions).toEqual({ parse: [] });
       }
       const modal = renderRegistrationModal(

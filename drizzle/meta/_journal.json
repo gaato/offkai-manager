@@ -22,6 +22,13 @@
       "when": 1792545094841,
       "tag": "0002_discord_registration",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792545094842,
+      "tag": "0003_discord_organizer_setup",
+      "breakpoints": true
     }
   ]
 }

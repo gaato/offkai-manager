@@ -47,7 +47,11 @@ export async function postPanel(
       let key: MessageKey = 'panel.posted';
       try {
         const message = await rest.post(`/channels/${channelId}/messages`, {
-          body: renderPanel(data.event, { ...data.counts, now: clock.now() }, locale)
+          body: renderPanel(
+            data.event,
+            { ...data.counts, now: clock.now(), timeZone: dependencies.timeZone },
+            locale
+          )
         });
         messageId = z.object({ id: z.string().regex(/^\d{17,20}$/) }).parse(message).id;
         storeDiscordPanel(

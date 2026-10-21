@@ -11,6 +11,7 @@ import {
   toggleEventUnlisted,
   type EventMutationInput
 } from '$lib/server/domain/events';
+import { getEventDashboard } from '$lib/server/domain/events/dashboard';
 import { OrganizationError } from '$lib/server/domain/orgs';
 
 export const load: PageServerLoad = async (event) => {
@@ -19,6 +20,7 @@ export const load: PageServerLoad = async (event) => {
   if (!eventId.success) throw error(404);
   const config = getConfig();
   return {
+    dashboard: getEventDashboard(getDatabaseClient(config), session.userId, eventId.data),
     discordSettings: await getEventDiscordSettings(
       getDatabaseClient(config),
       session.userId,

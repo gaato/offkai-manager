@@ -17,6 +17,7 @@ type Context = ReturnType<typeof interactionContext>;
 export interface RouterDependencies {
   database: () => DatabaseClient;
   publicBaseUrl: string;
+  timeZone?: string;
   rest?: REST;
   clock?: Clock;
   tuning?: Tuning;

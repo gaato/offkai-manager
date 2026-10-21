@@ -9,3 +9,5 @@ export * from './slug';
 export * from './transitions';
 
 export * from './types';
+
+export * from './templates';

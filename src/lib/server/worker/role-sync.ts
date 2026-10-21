@@ -105,14 +105,15 @@ export async function processRoleSyncBatch(
   logger?: Logger,
   clock: Clock = systemClock,
   tuning: Tuning = defaultTuning,
-  rest?: REST
+  rest?: REST,
+  timeZone = 'Asia/Tokyo'
 ): Promise<number> {
   const claimed = claimRoleSyncEvents(client, tuning.OFFKAI_OUTBOX_BATCH_SIZE, clock);
   for (const event of claimed) {
     try {
       if (event.type === 'panel.refresh') {
         if (!rest) throw new Error('Discord message transport is unavailable');
-        await refreshPanels(client, rest, event.payloadJson, clock);
+        await refreshPanels(client, rest, event.payloadJson, clock, timeZone);
       } else {
         const task = resolveRoleSyncTask(client, event.payloadJson);
         if (task?.guildId && task.roleId && task.discordUserId) {
@@ -256,7 +257,8 @@ export class RoleSyncWorker {
     private readonly logger: Logger,
     private readonly tuning: Tuning = defaultTuning,
     private readonly clock: Clock = systemClock,
-    private readonly rest?: REST
+    private readonly rest?: REST,
+    private readonly timeZone = 'Asia/Tokyo'
   ) {}
 
   start(): void {
@@ -280,7 +282,8 @@ export class RoleSyncWorker {
       this.logger,
       this.clock,
       this.tuning,
-      this.rest
+      this.rest,
+      this.timeZone
     )
       .then(() => undefined)
       .catch((cause: unknown) => {
@@ -302,7 +305,8 @@ async function refreshPanels(
   client: DatabaseClient,
   rest: REST,
   raw: unknown,
-  clock: Clock
+  clock: Clock,
+  timeZone: string
 ): Promise<void> {
   const payload = z.object({ event_id: z.uuid() }).parse(raw);
   const panels = read(client, (tx) =>
@@ -327,7 +331,7 @@ async function refreshPanels(
     }
     try {
       await rest.patch(`/channels/${panel.channelId}/messages/${panel.messageId}`, {
-        body: renderPanel(data.event, { ...data.counts, now: clock.now() }, panel.locale)
+        body: renderPanel(data.event, { ...data.counts, now: clock.now(), timeZone }, panel.locale)
       });
     } catch (cause) {
       if (cause instanceof DiscordAPIError && (cause.status === 404 || cause.code === 10008)) {

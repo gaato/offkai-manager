@@ -1,6 +1,16 @@
 import { REST } from '@discordjs/rest';
 import { defaultTuning, type Tuning } from '$lib/server/config';
 import { z } from 'zod';
+import type {
+  CreateChannel,
+  DiscordSetupGateway,
+  GuildResources
+} from '$lib/server/domain/discord/resources';
+import {
+  channelPermissions,
+  hasPermissions,
+  permissions
+} from '$lib/server/domain/discord/permissions';
 import type { DiscordGateway } from '$lib/server/domain/discord/gateway';
 
 const discordApiBaseUrl = 'https://discord.com/api/v10';
@@ -15,6 +25,33 @@ const guildRolesSchema = z.array(
   z.object({
     id: snowflakeSchema,
     permissions: z.string().regex(/^\d+$/)
+  })
+);
+const resourceRolesSchema = z.array(
+  z.object({
+    id: snowflakeSchema,
+    name: z.string(),
+    position: z.number().int(),
+    permissions: z.string().regex(/^\d+$/),
+    managed: z.boolean()
+  })
+);
+const resourceChannelsSchema = z.array(
+  z.object({
+    id: snowflakeSchema,
+    name: z.string(),
+    type: z.number().int(),
+    parent_id: snowflakeSchema.nullable().optional(),
+    permission_overwrites: z
+      .array(
+        z.object({
+          id: snowflakeSchema,
+          type: z.number().int(),
+          allow: z.string().regex(/^\d+$/),
+          deny: z.string().regex(/^\d+$/)
+        })
+      )
+      .default([])
   })
 );
 const rateLimitSchema = z.object({ retry_after: z.number().nonnegative() });
@@ -60,7 +97,7 @@ interface DiscordRestOptions {
 }
 
 /** Minimal bot-token Discord REST client used by guild gates and role synchronization. */
-export class DiscordRestGateway implements DiscordGateway {
+export class DiscordRestGateway implements DiscordGateway, DiscordSetupGateway {
   readonly enabled = true;
   private readonly fetchImplementation: typeof fetch;
   private readonly baseUrl: string;
@@ -171,6 +208,64 @@ export class DiscordRestGateway implements DiscordGateway {
     return (await this.parseJson(response, guildSchema, 'get guild')).name;
   }
 
+  async getGuildResources(guildId: string): Promise<GuildResources | null> {
+    const response = await this.request(
+      'get guild roles',
+      'GET',
+      `${this.guildPath(guildId)}/roles`
+    );
+    if (response.status === 403 || response.status === 404) return null;
+    const roles = await this.parseJson(response, resourceRolesSchema, 'get guild roles');
+    const bot = await this.parseJson(
+      await this.request('get bot user', 'GET', '/users/@me'),
+      z.object({ id: snowflakeSchema }),
+      'get bot user'
+    );
+    const memberResponse = await this.request(
+      'get bot member',
+      'GET',
+      this.memberPath(guildId, bot.id)
+    );
+    if (memberResponse.status === 403 || memberResponse.status === 404) return null;
+    const member = await this.parseJson(memberResponse, guildMemberSchema, 'get bot member');
+    const channels = await this.parseJson(
+      await this.request('get guild channels', 'GET', `${this.guildPath(guildId)}/channels`),
+      resourceChannelsSchema,
+      'get guild channels'
+    );
+    const resources = { guildId, botId: bot.id, botRoleIds: member.roles, roles, channels };
+    return {
+      ...resources,
+      channels: channels.filter((channel) =>
+        hasPermissions(
+          channelPermissions(resources, channel.permission_overwrites),
+          permissions.viewChannel
+        )
+      )
+    };
+  }
+
+  async createRole(guildId: string, name: string): Promise<{ id: string }> {
+    return this.parseJson(
+      await this.request('create role', 'POST', `${this.guildPath(guildId)}/roles`, {
+        name,
+        permissions: '0',
+        mentionable: false,
+        hoist: false
+      }),
+      z.object({ id: snowflakeSchema }),
+      'create role'
+    );
+  }
+
+  async createChannel(guildId: string, input: CreateChannel): Promise<{ id: string }> {
+    return this.parseJson(
+      await this.request('create channel', 'POST', `${this.guildPath(guildId)}/channels`, input),
+      z.object({ id: snowflakeSchema }),
+      'create channel'
+    );
+  }
+
   private guildPath(guildId: string): string {
     return `/guilds/${encodeURIComponent(guildId)}`;
   }
@@ -179,14 +274,21 @@ export class DiscordRestGateway implements DiscordGateway {
     return `${this.guildPath(guildId)}/members/${encodeURIComponent(discordUserId)}`;
   }
 
-  private async request(operation: string, method: string, path: string): Promise<Response> {
+  private async request(
+    operation: string,
+    method: string,
+    path: string,
+    body?: unknown
+  ): Promise<Response> {
     let response: Response;
     try {
       response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
         method,
+        body: body === undefined ? undefined : JSON.stringify(body),
         headers: {
           Authorization: `Bot ${this.botToken}`,
-          'X-Audit-Log-Reason': 'offkai-manager role sync'
+          'X-Audit-Log-Reason': 'offkai-manager organizer setup',
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
         },
         signal: AbortSignal.timeout(this.tuning.OFFKAI_DISCORD_REQUEST_TIMEOUT_MS)
       });
@@ -238,7 +340,7 @@ export class DiscordRestGateway implements DiscordGateway {
   }
 }
 
-export class DisabledDiscordGateway implements DiscordGateway {
+export class DisabledDiscordGateway implements DiscordGateway, DiscordSetupGateway {
   readonly enabled = false;
 
   async isGuildMember(): Promise<boolean> {
@@ -256,12 +358,21 @@ export class DisabledDiscordGateway implements DiscordGateway {
   async getGuildName(): Promise<string> {
     return '';
   }
+  async getGuildResources(): Promise<null> {
+    return null;
+  }
+  async createRole(): Promise<{ id: string }> {
+    throw new DiscordGatewayError('forbidden', 'Discord bot is disabled');
+  }
+  async createChannel(): Promise<{ id: string }> {
+    throw new DiscordGatewayError('forbidden', 'Discord bot is disabled');
+  }
 }
 
 export function createDiscordGateway(
   botToken: string,
   options: DiscordRestOptions = {}
-): DiscordGateway {
+): DiscordGateway & DiscordSetupGateway {
   return botToken.trim() ? new DiscordRestGateway(botToken, options) : new DisabledDiscordGateway();
 }
 

@@ -100,3 +100,12 @@ export const participantFixtures = {
     displayName: 'Refunded Participant'
   }
 } as const;
+
+export const discordSetupFixture = {
+  eventId: 'ee000000-0000-4000-8000-000000000001',
+  organizationName: 'Discord Setup Fixtures',
+  title: 'Previous Discord Event',
+  guildId: '400000000000000001',
+  highRoleId: '400000000000000004',
+  channelId: '400000000000000005'
+} as const;

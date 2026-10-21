@@ -13,7 +13,8 @@ export default tseslint.config(
       'node_modules/**',
       'playwright-report/**',
       'test-results/**',
-      'e2e/legacy-reference/**'
+      'e2e/legacy-reference/**',
+      'outputs/**'
     ]
   },
   js.configs.recommended,

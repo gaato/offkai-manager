@@ -150,6 +150,9 @@ export const events = sqliteTable(
     contact: text('contact').notNull().default(''),
     cancellationPolicy: text('cancellation_policy').notNull().default(''),
     registrationMode: text('registration_mode').notNull().default('auto_confirm'),
+    panelTemplateJa: text('panel_template_ja').notNull().default(''),
+    panelTemplateEn: text('panel_template_en').notNull().default(''),
+    panelTemplateReviewedAt: integer('panel_template_reviewed_at', { mode: 'timestamp_ms' }),
     cancelledAt: integer('cancelled_at', { mode: 'timestamp_ms' }),
     archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
@@ -190,6 +193,10 @@ export const eventDiscordIntegrations = sqliteTable(
     staffRoleId: text('staff_role_id').notNull().default(''),
     notificationChannelId: text('notification_channel_id').notNull().default(''),
     roleId: text('role_id').notNull().default(''),
+    paidRoleId: text('paid_role_id').notNull().default(''),
+    questionsChannelId: text('questions_channel_id').notNull().default(''),
+    layoutClaim: text('layout_claim').notNull().default(''),
+    layoutClaimedAt: integer('layout_claimed_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
     updatedAt: updatedAt()
   },
@@ -777,5 +784,26 @@ export const interactionDrafts = sqliteTable(
     check('interaction_drafts_kind_check', sql`${table.kind} in ('join', 'edit')`),
     check('interaction_drafts_payload_check', sql`json_valid(${table.payloadJson})`),
     index('interaction_drafts_expiry_idx').on(table.expiresAt)
+  ]
+);
+
+export const discordLayoutResources = sqliteTable(
+  'discord_layout_resources',
+  {
+    id: id(),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    guildId: text('guild_id').notNull(),
+    kind: text('kind').notNull(),
+    discordId: text('discord_id').notNull(),
+    creationName: text('creation_name').notNull(),
+    createdAt: createdAt(),
+    retiredAt: integer('retired_at', { mode: 'timestamp_ms' })
+  },
+  (table) => [
+    uniqueIndex('discord_layout_resources_active_kind_key')
+      .on(table.eventId, table.guildId, table.kind)
+      .where(sql`${table.retiredAt} is null`)
   ]
 );

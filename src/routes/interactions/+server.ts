@@ -37,6 +37,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       database: () => getDatabaseClient(config),
       publicBaseUrl: config.auth.publicBaseUrl,
       tuning: config.tuning,
+      timeZone: config.time.zone,
       get rest() {
         return config.discord.botToken
           ? getInteractionRest(

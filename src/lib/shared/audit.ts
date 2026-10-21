@@ -1,5 +1,11 @@
 export type AuditActionLabelKey =
   | 'activity.action.unknown'
+  | 'activity.action.event.panel_templates_update'
+  | 'activity.action.discord.layout_begin'
+  | 'activity.action.discord.layout_step'
+  | 'activity.action.discord.layout_created'
+  | 'activity.action.discord.layout_applied'
+  | 'activity.action.discord.layout_end'
   | 'activity.action.identity.discord_link'
   | 'activity.action.identity.discord_refresh'
   | 'activity.action.organization.create'
@@ -51,6 +57,13 @@ export type AuditActionLabelKey =
   | 'activity.action.platform.user_unsuspend';
 
 const actionLabels: Readonly<Record<string, AuditActionLabelKey>> = {
+  'event.panel_templates_update': 'activity.action.event.panel_templates_update',
+  'discord.layout_begin': 'activity.action.discord.layout_begin',
+  'discord.layout_step': 'activity.action.discord.layout_step',
+  'discord.layout_created': 'activity.action.discord.layout_created',
+  'discord.layout_applied': 'activity.action.discord.layout_applied',
+  'discord.layout_end': 'activity.action.discord.layout_end',
+
   'registration.edit_answers': 'activity.action.registration.edit_answers',
   'discord.panel_post': 'activity.action.discord.panel_post',
   'interaction.draft_save': 'activity.action.interaction.draft_save',

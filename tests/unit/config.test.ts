@@ -6,6 +6,30 @@ const dev = {
 };
 
 describe('configuration', () => {
+  it('permits the fake setup REST endpoint only on loopback with dev bypass', () => {
+    expect(
+      loadConfig({ ...dev, OFFKAI_DISCORD_SETUP_API_URL: 'http://127.0.0.1:12345/api/v10' }).discord
+        .setupApiUrl
+    ).toBe('http://127.0.0.1:12345/api/v10');
+    for (const url of [
+      'https://evil.example/api',
+      'http://localhost:12345',
+      'http://127.0.0.1.evil.example',
+      'http://user:password@127.0.0.1:12345'
+    ]) {
+      expect(() => loadConfig({ ...dev, OFFKAI_DISCORD_SETUP_API_URL: url })).toThrow(/loopback/);
+    }
+    expect(() =>
+      loadConfig({
+        OFFKAI_DATABASE_PATH: ':memory:',
+        OFFKAI_SESSION_SECRET: 'test-production-secret',
+        OFFKAI_DISCORD_CLIENT_ID: 'test-client',
+        OFFKAI_DISCORD_CLIENT_SECRET: 'test-secret',
+        OFFKAI_DISCORD_REDIRECT_URL: 'https://example.test/auth/discord/callback',
+        OFFKAI_DISCORD_SETUP_API_URL: 'http://127.0.0.1:12345'
+      })
+    ).toThrow(/dev bypass/);
+  });
   it('ports the legacy defaults and new flags', () => {
     const config = loadConfig(dev);
     expect(config.http).toMatchObject({

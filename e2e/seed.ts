@@ -1,8 +1,13 @@
 import { and, eq } from 'drizzle-orm';
 import { loadConfig } from '$lib/server/config';
-import { closeDatabase, createDatabaseClient } from '$lib/server/db/client';
+import { systemClock } from '$lib/server/clock';
+import { parseWallClock } from '$lib/server/time';
+import { appendAudit } from '$lib/server/domain/audit';
+import { closeDatabase, createDatabaseClient, write } from '$lib/server/db/client';
 import {
   organizations,
+  events,
+  eventDiscordIntegrations,
   externalAccounts,
   collectionPaymentMethods,
   paymentRequests,
@@ -18,7 +23,8 @@ import {
   createEvent,
   publishEvent,
   updateSettings,
-  upsertField
+  upsertField,
+  updatePanelTemplates
 } from '$lib/server/domain/events';
 import { createOrganization, inviteMember } from '$lib/server/domain/orgs';
 import {
@@ -30,6 +36,7 @@ import {
 } from '$lib/server/domain/payments';
 import { changeRegistrationStatus, createRegistration } from '$lib/server/domain/registrations';
 import {
+  discordSetupFixture,
   devStripeOrganizations,
   e2eUsers,
   participantFixtures,
@@ -528,6 +535,70 @@ export async function seedE2E(databasePath: string): Promise<void> {
         });
       }
     }
+    const setupOrg = await createOrganization(client, {
+      actorUserId: sweepOwner.userId,
+      name: discordSetupFixture.organizationName
+    });
+    const setupStartsAt = parseWallClock('2027-12-01T18:00', 'Asia/Tokyo');
+    // createEvent already appends an audit FK, so this fixture needs its final ID at insertion.
+    write(client, (tx) => {
+      const setupEvent = tx
+        .insert(events)
+        .values({
+          id: discordSetupFixture.eventId,
+          organizationId: setupOrg.id,
+          title: discordSetupFixture.title,
+          slug: 'previous-discord-event',
+          startsAt: setupStartsAt,
+          endsAt: parseWallClock('2027-12-01T21:00', 'Asia/Tokyo'),
+          capacity: 25,
+          venueName: 'Copied Hall',
+          visibility: 'draft',
+          discordPolicy: 'not_used',
+          registrationOpensAt: systemClock.now(),
+          registrationClosesAt: setupStartsAt,
+          createdAt: systemClock.now(),
+          updatedAt: systemClock.now()
+        })
+        .returning()
+        .get()!;
+      appendAudit(tx, {
+        actorUserId: sweepOwner.userId,
+        eventId: setupEvent.id,
+        action: 'event.create',
+        targetType: 'event',
+        targetId: setupEvent.id,
+        after: {
+          title: setupEvent.title,
+          slug: setupEvent.slug,
+          visibility: setupEvent.visibility,
+          copyFromEventId: null
+        }
+      });
+    });
+    client.db
+      .insert(eventDiscordIntegrations)
+      .values({
+        eventId: discordSetupFixture.eventId,
+        guildId: discordSetupFixture.guildId,
+        roleId: discordSetupFixture.highRoleId,
+        announcementChannelId: discordSetupFixture.channelId,
+        guildNameSnapshot: 'Setup Test Server'
+      })
+      .run();
+    await upsertField(client, {
+      actorUserId: sweepOwner.userId,
+      eventId: discordSetupFixture.eventId,
+      label: 'Copied question',
+      type: 'text',
+      required: false
+    });
+    updatePanelTemplates(client, {
+      actorUserId: sweepOwner.userId,
+      eventId: discordSetupFixture.eventId,
+      panelTemplateJa: 'コピー {title}',
+      panelTemplateEn: 'Copied panel {title}'
+    });
     const suspendedOrganization = await createOrganization(client, {
       actorUserId: sweepOwner.userId,
       name: 'Suspended Fixtures'

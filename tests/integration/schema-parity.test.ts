@@ -7,6 +7,7 @@ const expectedTables = [
   'checkin_records',
   'collection_payment_methods',
   'collections',
+  'discord_layout_resources',
   'discord_panels',
   'event_discord_integrations',
   'event_form_field_options',
@@ -57,6 +58,7 @@ const expectedUniqueConstraints = [
 ] as const;
 
 const expectedPartialUniqueIndexes = [
+  ['discord_layout_resources', ['event_id', 'guild_id', 'kind'], 'retired_at is null'],
   ['discord_panels', ['event_id', 'locale'], 'deleted_at is null'],
   ['organizations', ['personal_owner_user_id'], 'personal_owner_user_id is not null'],
   ['outbox_events', ['dedupe_key'], "status = 'pending' and dedupe_key is not null"],
@@ -260,7 +262,7 @@ describe('database schema parity', () => {
     client.db.$client.close();
   });
 
-  it('creates all 22 application tables as STRICT tables', () => {
+  it('creates all application tables as STRICT tables', () => {
     const tables = client.db.$client
       .prepare(
         "select name from sqlite_schema where type = 'table' and name not like 'sqlite_%' and name <> '__drizzle_migrations' order by name"

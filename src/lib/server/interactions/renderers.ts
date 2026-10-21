@@ -9,6 +9,8 @@ import type {
   APIInteractionResponseChannelMessageWithSource,
   RESTPostAPIChannelMessageJSONBody
 } from 'discord-api-types/v10';
+import { formatWallClock } from '$lib/server/time';
+import { renderPanelTemplate, truncatePanelBody } from './panel-template';
 import { discordLimits } from '$lib/shared/discord-limits';
 import { translator, type Locale, type MessageKey } from '$lib/i18n';
 import type { events } from '$lib/server/db/schema';
@@ -49,7 +51,7 @@ export function ephemeralCard(
 /** now is data supplied by the shell; rendering never reads the wall clock. */
 export function renderPanel(
   event: PanelEvent,
-  counts: { confirmed: number; now: Date },
+  counts: { confirmed: number; now: Date; timeZone?: string },
   locale: Locale
 ): RESTPostAPIChannelMessageJSONBody {
   const t = translator(locale);
@@ -70,7 +72,7 @@ export function renderPanel(
       ? t('panel.venue_hidden')
       : [safe(event.venueName, 300), safe(event.venueAddress, 500)].filter(Boolean).join('\n') ||
         t('panel.venue_empty');
-  const text = [
+  const header = [
     `# ${safe(event.title, 300)}`,
     t('panel.start', { absolute: time(event.startsAt, 'F'), relative: time(event.startsAt, 'R') }),
     t('panel.end', { absolute: time(event.endsAt, 'F'), relative: time(event.endsAt, 'R') }),
@@ -78,12 +80,34 @@ export function renderPanel(
     event.capacity === null
       ? t('panel.count', { count: counts.confirmed })
       : t('panel.capacity', { count: counts.confirmed, capacity: event.capacity }),
-    t(state),
-    safe(event.description, 2_000)
+    t(state)
   ]
     .filter(Boolean)
     .join('\n\n');
-  return card(excerpt(text, messageTextBudget), [
+  const zone = counts.timeZone ?? 'Asia/Tokyo';
+  const template =
+    (locale === 'ja' ? event.panelTemplateJa : event.panelTemplateEn) ||
+    t('panel_template.default');
+  const body = renderPanelTemplate(template, {
+    title: event.title,
+    date: formatWallClock(event.startsAt, locale, zone, { dateStyle: 'long' }),
+    start: formatWallClock(event.startsAt, locale, zone, { timeStyle: 'short' }),
+    end: formatWallClock(event.endsAt, locale, zone, { timeStyle: 'short' }),
+    venue:
+      event.venueReveal === 'confirmed'
+        ? t('panel.venue_hidden')
+        : [event.venueName, event.venueAddress].filter(Boolean).join(' · ') ||
+          t('panel.venue_empty'),
+    fee: '',
+    capacity: event.capacity === null ? t('event.capacity_unlimited') : String(event.capacity),
+    deadline: formatWallClock(event.registrationClosesAt, locale, zone)
+  });
+  // Keep state and controls intact; only the organizer-authored body is shortened.
+  const text =
+    header +
+    '\n\n' +
+    truncatePanelBody(body, messageTextBudget - header.length - 2, t('panel_template.truncated'));
+  return card(text, [
     actionButton({ action: 'join', args: [event.id] }, t('panel.join'), 1),
     actionButton({ action: 'status', args: [event.id] }, t('panel.status')),
     actionButton({ action: 'cancel', args: [event.id] }, t('panel.cancel'), 4)

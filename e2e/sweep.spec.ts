@@ -8,6 +8,7 @@ import {
   stripeSweepFixtures
 } from './fixtures';
 import { signInAs } from './auth';
+import { findRawEnums, opsRawEnums } from './render-guards';
 import { authenticatedRouteManifest, pageRouteSweepFixtures, routeManifest } from './routes';
 
 test.describe.configure({ mode: 'serial' });
@@ -50,10 +51,6 @@ test('route sweep guard rejects a newly discovered route without a fixture', () 
 });
 
 const badMarkers = ['undefined', 'NaN', '[object Object]', '⟦'];
-const rawEnums =
-  /\b(owner|staff|viewer|organizer|active|disabled|draft|public|unlisted|auto_confirm|approval|cancelled|archived|pending|payment_pending|paid|waived|advance|onsite|internal)\b/g;
-const opsRawEnums = /\b(owner|staff|viewer|auto_confirm|payment_pending|onsite|internal)\b/g;
-
 for (const locale of ['ja', 'en'] as const) {
   test(`Discord settings and check-in fixtures render in ${locale}`, async ({ page }) => {
     await signInAs(page, e2eUsers.sweepOwner, '/app', 'Sweep Owner');
@@ -84,7 +81,7 @@ for (const locale of ['ja', 'en'] as const) {
     ).toBeVisible();
     const body = await page.locator('body').innerText();
     for (const marker of badMarkers) expect(body).not.toContain(marker);
-    expect(body.match(rawEnums) ?? []).toEqual([]);
+    expect(findRawEnums(body, locale)).toEqual([]);
     expect(await page.locator('html').getAttribute('lang')).toBe(locale);
   });
 }
@@ -101,7 +98,7 @@ for (const locale of ['ja', 'en'] as const) {
       await expect(page.getByText(fixture.label[locale], { exact: true })).toBeVisible();
       const body = await page.locator('body').innerText();
       for (const marker of badMarkers) expect(body).not.toContain(marker);
-      expect(body.match(rawEnums) ?? []).toEqual([]);
+      expect(findRawEnums(body, locale)).toEqual([]);
       expect(await page.locator('html').getAttribute('lang')).toBe(locale);
     });
   }
@@ -121,7 +118,7 @@ for (const locale of ['ja', 'en'] as const) {
     await expect(page).toHaveURL(/\/dev\/stripe\/onboarding\/acct_dev_/);
     let body = await page.locator('body').innerText();
     for (const marker of badMarkers) expect(body).not.toContain(marker);
-    expect(body.match(rawEnums) ?? []).toEqual([]);
+    expect(findRawEnums(body, locale)).toEqual([]);
     expect(await page.locator('html').getAttribute('lang')).toBe(locale);
     await page
       .getByRole('button', { name: locale === 'ja' ? '未完了のまま戻る' : 'Leave incomplete' })
@@ -147,7 +144,7 @@ for (const locale of ['ja', 'en'] as const) {
       expect(response?.status()).toBe(route.status);
       const body = await page.locator('body').innerText();
       for (const marker of badMarkers) expect(body).not.toContain(marker);
-      expect(body.match(rawEnums) ?? []).toEqual([]);
+      expect(findRawEnums(body, locale)).toEqual([]);
       if (route.document) {
         expect(await page.locator('html').getAttribute('lang')).toBe(locale);
       }
@@ -209,7 +206,7 @@ for (const locale of ['ja', 'en'] as const) {
       expect(page.url()).toContain(path);
       const body = await page.locator('body').innerText();
       for (const marker of badMarkers) expect(body).not.toContain(marker);
-      expect(body.match(rawEnums) ?? []).toEqual([]);
+      expect(findRawEnums(body, locale)).toEqual([]);
       expect(await page.locator('html').getAttribute('lang')).toBe(locale);
     });
   }
@@ -261,7 +258,7 @@ for (const locale of ['ja', 'en'] as const) {
       expect(response?.status(), path).toBe(200);
       const body = await page.locator('body').innerText();
       for (const marker of badMarkers) expect(body, path).not.toContain(marker);
-      expect(body.match(opsRawEnums) ?? [], path).toEqual([]);
+      expect(findRawEnums(body, locale, opsRawEnums), path).toEqual([]);
       expect(await page.locator('html').getAttribute('lang'), path).toBe(locale);
     }
   });
