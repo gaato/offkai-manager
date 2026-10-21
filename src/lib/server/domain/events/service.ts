@@ -1,13 +1,15 @@
+import { configureEventPayment } from '../payments/event-payment';
 import { defaultTuning, type Tuning } from '$lib/server/config';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
   events,
   eventDiscordIntegrations,
   eventFormFields,
-  eventFormFieldOptions
+  eventFormFieldOptions,
+  registrations
 } from '$lib/server/db/schema';
 import { enqueueExistingPanelRefresh } from '$lib/server/domain/discord/outbox';
 import { appendAudit } from '$lib/server/domain/audit';
@@ -41,7 +43,8 @@ export async function createEvent(
   input: CreateEventInput,
   slugFactory: SlugFactory = generateEventSlug,
   clock: Clock = systemClock,
-  tuning: Tuning = defaultTuning
+  tuning: Tuning = defaultTuning,
+  roundingUnits: number[] = [1, 10, 100]
 ): Promise<EventSummary> {
   const title = validateTitle(input.title);
   const startsAt = parseInputTime(input.startsAt, input.timeZone, 'start time');
@@ -97,6 +100,7 @@ export async function createEvent(
             endsAt,
             capacity: input.capacity === undefined ? (source?.capacity ?? capacity) : capacity,
             visibility: 'draft',
+            platformFeeBps: tuning.OFFKAI_PLATFORM_FEE_BPS,
             discordPolicy: source?.discordPolicy ?? 'not_used',
             registrationOpensAt: source
               ? new Date(source.registrationOpensAt.getTime() + delta)
@@ -109,7 +113,8 @@ export async function createEvent(
           })
           .returning()
           .all();
-        const event = parseEvent(created[0]);
+        configureEventPayment(tx, created[0], input, clock, tuning, roundingUnits);
+        const event = loadEvent(tx, created[0].id);
         if (source) {
           const integration = tx
             .select()
@@ -192,6 +197,9 @@ export async function createEvent(
               title: event.title,
               slug: event.slug,
               visibility: event.visibility,
+              paymentRequirement: event.paymentRequirement,
+              platformFeeBps: event.platformFeeBps,
+              amountToCollectMinor: event.amountToCollectMinor.toString(),
               copyFromEventId: input.copyFromEventId ?? null
             }
           },
@@ -252,7 +260,9 @@ export async function getEventAccess(
 export async function updateSettings(
   client: DatabaseClient,
   input: UpdateEventSettingsInput,
-  clock: Clock = systemClock
+  clock: Clock = systemClock,
+  tuning: Tuning = defaultTuning,
+  roundingUnits: number[] = [1, 10, 100]
 ): Promise<EventSummary> {
   const values = validateSettings(input);
   return write(client, (tx) => {
@@ -261,6 +271,22 @@ export async function updateSettings(
     if (current.archivedAt) {
       throw new EventError('illegal_transition', 'archived events cannot be changed');
     }
+    if (values.capacity !== null) {
+      const occupied = tx
+        .select({ n: count() })
+        .from(registrations)
+        .where(
+          and(
+            eq(registrations.eventId, current.id),
+            inArray(registrations.status, ['held', 'confirmed'])
+          )
+        )
+        .get()!.n;
+      if (occupied > values.capacity)
+        throw new EventError('validation', 'capacity cannot be smaller than reserved seats');
+    }
+    const full = tx.select().from(events).where(eq(events.id, current.id)).get()!;
+    configureEventPayment(tx, full, input, clock, tuning, roundingUnits);
     const updatedRows = tx
       .update(events)
       .set({ ...values, updatedAt: clock.now() })
@@ -520,6 +546,11 @@ function lifecycleAuditSnapshot(event: EventSummary) {
 
 function settingsAuditSnapshot(event: EventSummary) {
   return {
+    paymentRequirement: event.paymentRequirement,
+    platformFeeBps: event.platformFeeBps,
+    amountToCollectMinor: event.amountToCollectMinor.toString(),
+    roundingUnit: event.roundingUnit,
+    holdMinutes: event.holdMinutes,
     title: event.title,
     description: event.description,
     startsAt: event.startsAt.toISOString(),

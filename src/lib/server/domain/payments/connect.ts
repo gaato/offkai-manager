@@ -2,7 +2,7 @@ import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { eq } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
-import { stripeConnectAccounts } from '$lib/server/db/schema';
+import { stripeConnectAccounts, stripeWebhookEvents } from '$lib/server/db/schema';
 import { appendAudit } from '$lib/server/domain/audit';
 import { authorizeOrganizationRole, OrganizationError } from '$lib/server/domain/orgs';
 import type { ConnectAccount, ConnectGateway } from './gateway';
@@ -29,16 +29,16 @@ export interface OnboardingInput {
   refreshUrl: string;
 }
 
-/** Ensures one persisted Express account and returns a fresh single-use onboarding link. */
-export async function startOnboarding(
+/** Ensures one persisted v2 account and returns a fresh single-use onboarding link. */
+export async function ensureConnectedAccount(
   client: DatabaseClient,
   gateway: ConnectGateway,
   input: OnboardingInput,
   clock: Clock = systemClock
-): Promise<string> {
+): Promise<ConnectAccountRecord> {
   let account = await findAuthorizedAccount(client, input.organizationId, input.actor, 'owner');
   if (!account) {
-    const created = await gateway.createExpressAccount({ organizationId: input.organizationId });
+    const created = await gateway.createAccount({ organizationId: input.organizationId });
     try {
       account = write(client, (tx) => {
         authorizeOwner(tx, input.organizationId, input.actor);
@@ -51,7 +51,7 @@ export async function startOnboarding(
             updatedAt: clock.now(),
             organizationId: input.organizationId,
             stripeAccountId: created.accountId,
-            dashboardType: 'express',
+            dashboardType: 'none',
             onboardingStatus: 'onboarding_required'
           })
           .returning()
@@ -76,7 +76,29 @@ export async function startOnboarding(
       if (!account) throw cause;
     }
   }
+  return account;
+}
+
+export async function startOnboarding(
+  client: DatabaseClient,
+  gateway: ConnectGateway,
+  input: OnboardingInput,
+  clock: Clock = systemClock
+): Promise<string> {
+  const account = await ensureConnectedAccount(client, gateway, input, clock);
   return createLink(gateway, account.stripeAccountId, input);
+}
+
+export async function createEmbeddedSession(
+  client: DatabaseClient,
+  gateway: ConnectGateway,
+  organizationId: string,
+  actor: ConnectActor
+) {
+  const account = await findAuthorizedAccount(client, organizationId, actor, 'owner');
+  if (!account || !gateway.createAccountSession)
+    throw new ConnectError('not_connected', 'embedded account unavailable');
+  return gateway.createAccountSession(account.stripeAccountId);
 }
 
 /** Refreshes the stored flags from Stripe and audits only an onboarding-status transition. */
@@ -105,6 +127,15 @@ export async function syncAccount(
       throw new ConnectError('not_connected', 'connected account changed during sync');
     }
     const onboardingStatus = onboardingStatusForAccount(live);
+    const changed =
+      current.dashboardType !== live.dashboardType ||
+      current.chargesEnabled !== live.chargesEnabled ||
+      current.payoutsEnabled !== live.payoutsEnabled ||
+      current.detailsSubmitted !== live.detailsSubmitted ||
+      current.country !== live.country ||
+      current.defaultCurrency !== live.defaultCurrency.toLowerCase() ||
+      current.onboardingStatus !== onboardingStatus;
+    if (!changed) return current;
     const rows = tx
       .update(stripeConnectAccounts)
       .set({
@@ -121,12 +152,15 @@ export async function syncAccount(
       .returning()
       .all();
     const updated = parseAccount(rows[0]);
-    if (updated.onboardingStatus !== current.onboardingStatus) {
+    {
       appendAudit(
         tx,
         {
           actorUserId: actor.userId,
-          action: 'stripe.status_change',
+          action:
+            updated.onboardingStatus !== current.onboardingStatus
+              ? 'stripe.status_change'
+              : 'stripe.account_refresh',
           targetType: 'stripe_connect_account',
           targetId: updated.id,
           before: { onboardingStatus: current.onboardingStatus },
@@ -263,4 +297,51 @@ function isOrganizationAccountCollision(cause: unknown): boolean {
       error.message?.includes('stripe_connect_accounts.organization_id') === true) ||
     isOrganizationAccountCollision(error.cause)
   );
+}
+
+/** Thin events are authenticated by the gateway; persist the live snapshot and ledger atomically. */
+export function applyAccountNotification(
+  client: DatabaseClient,
+  input: { id: string; type: string; accountId: string; account: ConnectAccount },
+  clock: Clock = systemClock
+) {
+  return write(client, (tx) => {
+    const current = tx
+      .select()
+      .from(stripeConnectAccounts)
+      .where(eq(stripeConnectAccounts.stripeAccountId, input.accountId))
+      .get();
+    if (!current) return;
+    const inserted = tx
+      .insert(stripeWebhookEvents)
+      .values({
+        stripeEventId: input.id,
+        stripeAccountId: input.accountId,
+        eventType: input.type,
+        payloadJson: { accountId: input.accountId },
+        processedAt: clock.now(),
+        createdAt: clock.now()
+      })
+      .onConflictDoNothing()
+      .returning()
+      .get();
+    if (!inserted) return;
+    const status = onboardingStatusForAccount(input.account);
+    tx.update(stripeConnectAccounts)
+      .set({ ...input.account, onboardingStatus: status, updatedAt: clock.now() })
+      .where(eq(stripeConnectAccounts.id, current.id))
+      .run();
+    appendAudit(
+      tx,
+      {
+        actorUserId: null,
+        action: 'stripe.status_change',
+        targetType: 'stripe_connect_account',
+        targetId: current.id,
+        before: { onboardingStatus: current.onboardingStatus },
+        after: { onboardingStatus: status }
+      },
+      clock
+    );
+  });
 }

@@ -4,6 +4,7 @@ import { z } from 'zod';
 export const actionSchemas = {
   web: z.tuple([]),
   join: z.tuple([z.uuid()]),
+  pay: z.tuple([z.uuid()]),
   status: z.tuple([z.uuid()]),
   cancel: z.tuple([z.uuid()]),
   cancel_confirm: z.tuple([z.uuid()]),
@@ -34,6 +35,7 @@ export function decodeCustomId(value: string): DecodeResult {
       const parsed = actionSchemas.soon.safeParse(args);
       return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
     }
+    case 'pay':
     case 'join':
     case 'status':
     case 'cancel':

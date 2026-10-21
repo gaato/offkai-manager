@@ -11,6 +11,11 @@ import { makeModalSubmit } from '../support/interactions';
 const event: EventSummary = {
   id: '12345678-1234-4234-8234-123456789012',
   organizationId: '12345678-1234-4234-8234-123456789013',
+  paymentRequirement: 'none',
+  platformFeeBps: 0,
+  amountToCollectMinor: 0n,
+  roundingUnit: 1,
+  holdMinutes: 30,
   title: 'Meetup @everyone',
   slug: 'meetup',
   description: 'Welcome!',
@@ -281,3 +286,64 @@ describe('Discord pure renderers', () => {
     expect(submittedAnswers(submit, [field(type)])).toEqual({ question: value });
   });
 });
+
+it.each(['ja', 'en'] as const)(
+  'keeps every paid state and controls within Discord limits in %s',
+  (locale) => {
+    for (const status of ['pending', 'payment_pending', 'paid', 'waived', 'refund_due'] as const) {
+      const paidDetail = detail('held');
+      paidDetail.event = {
+        ...paidDetail.event,
+        paymentRequirement: 'pay_later',
+        title: '長い題名'.repeat(100)
+      };
+      paidDetail.registration.holdExpiresAt = new Date('2027-01-01');
+      const request = {
+        id: 'request',
+        eventId: event.id,
+        collectionId: 'collection',
+        registrationId: paidDetail.registration.id,
+        collectionPaymentMethodId: 'card',
+        amountMinor: 99999999n,
+        applicationFeeAmount: 100n,
+        currency: 'JPY',
+        status,
+        dueAt: null,
+        stripeAccountId: 'acct',
+        checkoutSessionId: 'cs',
+        checkoutAttempt: 1,
+        checkoutExpiresAt: new Date('2027-01-01'),
+        checkoutUrl: '',
+        paymentIntentId: '',
+        chargeType: 'direct',
+        createdAt: now,
+        updatedAt: now
+      };
+      const rendered = renderStatus(paidDetail, event.id, locale, {
+        request,
+        checkoutUrl: 'https://checkout.stripe.test/session',
+        manualMethods: [
+          'payments.default_method.cash.label',
+          'payments.default_method.paypay.label'
+        ]
+      });
+      const data = JSON.stringify(rendered);
+      if (['pending', 'payment_pending'].includes(status))
+        expect(data).toContain('https://checkout.stripe.test/session');
+      else expect(data).not.toContain('https://checkout.stripe.test/session');
+      expect(data).toContain(':R>');
+      expect(data).not.toMatch(/undefined|NaN|\[object Object\]/);
+      const text =
+        rendered.data.components
+          ?.flatMap((container) =>
+            'components' in container
+              ? container.components.flatMap((component) =>
+                  component.type === 10 ? [component.content] : []
+                )
+              : []
+          )
+          .join('') ?? '';
+      expect(text.length).toBeLessThanOrEqual(4000);
+    }
+  }
+);

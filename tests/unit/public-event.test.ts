@@ -3,6 +3,11 @@ import type { EventSummary } from '$lib/server/domain/events';
 import { publicVenue, registrationAvailability } from '$lib/server/domain/registrations';
 
 const event = {
+  paymentRequirement: 'none',
+  platformFeeBps: 0,
+  amountToCollectMinor: 0n,
+  roundingUnit: 1,
+  holdMinutes: 30,
   id: 'event-id',
   organizationId: 'organization-id',
   title: 'Test event',

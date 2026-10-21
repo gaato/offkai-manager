@@ -207,12 +207,17 @@ export async function updateCollection(
 ): Promise<Collection> {
   const normalized = validateCollectionInput({ ...input, currency: 'JPY' });
   return write(client, (tx) => {
-    loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
+    const event = loadAuthorizedEvent(tx, input.eventId, input.actorUserId);
     const current = requireMainCollection(tx, input.eventId);
     if (current.status === 'archived') {
       throw new CollectionError('illegal_transition', 'collection is archived');
     }
     if (current.amountMinor !== normalized.amountMinor) {
+      if (
+        event.paymentRequirement !== 'none' &&
+        tx.select().from(paymentRequests).where(eq(paymentRequests.collectionId, current.id)).get()
+      )
+        throw new CollectionError('amount_frozen', 'paid event price is frozen after registration');
       const started = tx
         .select({ id: paymentRequests.id })
         .from(paymentRequests)
@@ -543,7 +548,11 @@ function isAllowedCollectionTransition(from: CollectionStatus, to: CollectionSta
 
 function loadAuthorizedEvent(tx: DatabaseTransaction, eventId: string, actorUserId: string) {
   const query = tx
-    .select({ organizationId: events.organizationId, archivedAt: events.archivedAt })
+    .select({
+      organizationId: events.organizationId,
+      archivedAt: events.archivedAt,
+      paymentRequirement: events.paymentRequirement
+    })
     .from(events)
     .where(eq(events.id, eventId))
     .limit(1);

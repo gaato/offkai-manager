@@ -1,3 +1,4 @@
+import type { PaymentGateway } from '$lib/server/domain/payments/gateway';
 import { z } from 'zod';
 import { escapeMarkdown } from '@discordjs/formatters';
 import type { APIInteraction, APIInteractionResponse } from 'discord-api-types/v10';
@@ -19,6 +20,8 @@ export interface RouterDependencies {
   publicBaseUrl: string;
   timeZone?: string;
   rest?: REST;
+  paymentGateway?: PaymentGateway | null;
+  editReply?: (response: APIInteractionResponse) => Promise<void>;
   clock?: Clock;
   tuning?: Tuning;
   defer?: (work: () => Promise<void>) => void;
@@ -104,7 +107,19 @@ export async function dispatchInteraction(
         return participantAction(
           decoded.value,
           context,
-          dependencies,
+          {
+            ...dependencies,
+            editReply:
+              dependencies.defer && dependencies.rest
+                ? async (response) => {
+                    if (response.type === 4)
+                      await dependencies.rest!.patch(
+                        `/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`,
+                        { body: response.data }
+                      );
+                  }
+                : undefined
+          },
           interaction.type === 5 ? interaction : undefined
         );
       return dispatchAction(decoded.value, context, dependencies);

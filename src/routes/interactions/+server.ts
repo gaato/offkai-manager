@@ -1,3 +1,4 @@
+import { getApp } from '$lib/server/app';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { APIInteraction } from 'discord-api-types/v10';
@@ -37,6 +38,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       database: () => getDatabaseClient(config),
       publicBaseUrl: config.auth.publicBaseUrl,
       tuning: config.tuning,
+      paymentGateway: getApp(config).stripe.payment,
       timeZone: config.time.zone,
       get rest() {
         return config.discord.botToken

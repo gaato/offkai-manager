@@ -36,12 +36,17 @@ export const pageRouteSweepFixtures = {
   '/ops/users/[userId]': 'platform operations fixtures',
   '/ops/users/[userId]/suspend': 'platform operations fixtures',
   '/ops/users/[userId]/unsuspend': 'platform operations fixtures',
+  '/checkout/done': 'anonymous manifest',
+  '/checkout/cancelled': 'anonymous manifest',
+  '/app/organizations/[orgId]/payouts': 'authenticated manifest',
   '/privacy': 'anonymous manifest',
   '/terms': 'anonymous manifest'
 } as const;
 
 export const routeManifest = [
   { path: '/', status: 200, document: true },
+  { path: '/checkout/done', status: 200, document: true },
+  { path: '/checkout/cancelled', status: 200, document: true },
   { path: '/terms', status: 200, document: true },
   { path: '/privacy', status: 200, document: true },
   { path: '/healthz', status: 200, document: false },
@@ -55,6 +60,9 @@ export const routeManifest = [
 
 export const authenticatedRouteManifest = [
   { path: '/app', status: 200 },
+  { path: '/connect/return', status: 400 },
+  { path: '/connect/refresh', status: 400 },
+  { path: '/app/organizations/[fixture]/payouts', status: 200 },
   { path: '/app/organizations/new', status: 200 },
   { path: '/app/organizations/[fixture]', status: 200 },
   { path: '/app/organizations/[fixture]/activity', status: 200 },

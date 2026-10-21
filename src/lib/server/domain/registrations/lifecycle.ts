@@ -1,9 +1,10 @@
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import type { Clock } from '$lib/server/clock';
 import type { DatabaseTransaction } from '$lib/server/db/client';
 import { events, registrations } from '$lib/server/db/schema';
 import { appendAudit } from '$lib/server/domain/audit';
 import { enqueuePanelRefresh, enqueueRoleSync } from '$lib/server/domain/discord/outbox';
+import { paymentRequirementSchema } from '$lib/shared/payment';
 import { registrationModeSchema } from '$lib/shared/event';
 import { decide, type RegistrationCommand, type RegistrationState } from './core';
 import { RegistrationError } from './errors';
@@ -18,7 +19,9 @@ export function decideRegistration(
   const confirmedCount = tx
     .select({ n: count() })
     .from(registrations)
-    .where(and(eq(registrations.eventId, event.id), eq(registrations.status, 'confirmed')))
+    .where(
+      and(eq(registrations.eventId, event.id), inArray(registrations.status, ['confirmed', 'held']))
+    )
     .get()!.n;
   const result = decide(state, command, {
     now: clock.now(),
@@ -28,6 +31,8 @@ export function decideRegistration(
     accepting: !event.cancelledAt && !event.archivedAt && event.visibility !== 'draft',
     capacity: event.capacity,
     confirmedCount,
+    paymentRequirement: paymentRequirementSchema.parse(event.paymentRequirement),
+    holdMinutes: event.holdMinutes,
     registrationMode: registrationModeSchema.parse(event.registrationMode)
   });
   if (!result.ok) throw new RegistrationError(result.code, 'registration transition rejected');

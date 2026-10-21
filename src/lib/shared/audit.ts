@@ -1,5 +1,14 @@
 export type AuditActionLabelKey =
   | 'activity.action.unknown'
+  | 'activity.action.registration.hold_expired'
+  | 'activity.action.registration.hold_expiring'
+  | 'activity.action.payment.checkout_expired'
+  | 'activity.action.payment.stripe_checkout_stale'
+  | 'activity.action.payment.checkout_already_settled'
+  | 'activity.action.stripe.account_refresh'
+  | 'activity.action.notification.attempt'
+  | 'activity.action.notification.thread_created'
+  | 'activity.action.notification.thread_archived'
   | 'activity.action.discord.guild_name_refresh'
   | 'activity.action.event.panel_templates_update'
   | 'activity.action.discord.layout_begin'
@@ -58,6 +67,16 @@ export type AuditActionLabelKey =
   | 'activity.action.platform.user_unsuspend';
 
 const actionLabels: Readonly<Record<string, AuditActionLabelKey>> = {
+  'registration.hold_expired': 'activity.action.registration.hold_expired',
+  'registration.hold_expiring': 'activity.action.registration.hold_expiring',
+  'payment.checkout_expired': 'activity.action.payment.checkout_expired',
+  'payment.stripe_checkout_stale': 'activity.action.payment.stripe_checkout_stale',
+  'payment.checkout_already_settled': 'activity.action.payment.checkout_already_settled',
+  'stripe.account_refresh': 'activity.action.stripe.account_refresh',
+  'notification.attempt': 'activity.action.notification.attempt',
+  'notification.thread_created': 'activity.action.notification.thread_created',
+  'notification.thread_archived': 'activity.action.notification.thread_archived',
+
   'discord.guild_name_refresh': 'activity.action.discord.guild_name_refresh',
   'event.panel_templates_update': 'activity.action.event.panel_templates_update',
   'discord.layout_begin': 'activity.action.discord.layout_begin',

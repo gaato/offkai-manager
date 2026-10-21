@@ -44,7 +44,12 @@
   {#snippet steps()}
     {#each data.dashboard.steps as step (step.key)}
       <li class:step-primary={step.done} class="step" data-content={step.done ? '✓' : '○'}>
-        <a class="link" href={`${discordHref}#${step.anchor}`}>{t(step.key)}</a>
+        <a
+          class="link"
+          href={step.anchor === 'payouts'
+            ? `/app/organizations/${data.event.organizationId}/payouts`
+            : `${discordHref}#${step.anchor}`}>{t(step.key)}</a
+        >
       </li>
     {/each}
   {/snippet}

@@ -17,7 +17,8 @@ export const paymentRequestStatuses = [
   'payment_pending',
   'paid',
   'waived',
-  'cancelled'
+  'cancelled',
+  'refund_due'
 ] as const;
 export const paymentRequestStatusSchema = z.enum(paymentRequestStatuses);
 export type PaymentRequestStatus = z.infer<typeof paymentRequestStatusSchema>;
@@ -81,3 +82,9 @@ export function stripeOnboardingStatusLabelKey(
 ): `stripe.status.${StripeOnboardingStatus}` {
   return `stripe.status.${status}`;
 }
+
+export const paymentRequirements = ['none', 'pay_to_confirm', 'pay_later'] as const;
+export const paymentRequirementSchema = z.enum(paymentRequirements);
+export type PaymentRequirement = z.infer<typeof paymentRequirementSchema>;
+export const paymentRequirementLabelKey = (value: PaymentRequirement) =>
+  `payment.requirement.${value}` as const;

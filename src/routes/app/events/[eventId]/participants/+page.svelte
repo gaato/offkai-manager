@@ -111,6 +111,9 @@
                   <tr>
                     <th scope="row" class="px-5 py-4">
                       {row.displayName}
+                      {#if row.unreachable}<span class="badge badge-warning"
+                          >{t('participant.unreachable')}</span
+                        >{/if}
                     </th>
                     <td class="px-5 py-4">{row.username || t('participants.username_missing')}</td>
                     <td class="px-5 py-4">

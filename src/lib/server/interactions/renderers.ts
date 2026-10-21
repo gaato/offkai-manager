@@ -1,3 +1,6 @@
+import { systemPaymentMethodMessageKey } from '$lib/shared/payment';
+import { formatMoney } from '$lib/shared/money';
+import type { paymentRequests } from '$lib/server/db/schema';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -19,7 +22,7 @@ import { encodeCustomId, type CustomAction } from './custom-id';
 
 // Reserve space for button labels and translated status text within the total message budget.
 const messageTextBudget = discordLimits.messageText - 350;
-type PanelEvent = typeof events.$inferSelect;
+type PanelEvent = typeof events.$inferSelect & { priceMinor?: bigint };
 export const excerpt = (value: string, max: number): string =>
   value.length > max ? value.slice(0, max - 1) + '…' : value;
 const safe = (value: string, max: number) => excerpt(escapeMarkdown(value), max);
@@ -80,6 +83,9 @@ export function renderPanel(
     event.capacity === null
       ? t('panel.count', { count: counts.confirmed })
       : t('panel.capacity', { count: counts.confirmed, capacity: event.capacity }),
+    ...(event.priceMinor && event.priceMinor > 0n
+      ? [formatMoney(event.priceMinor, 'JPY', locale)]
+      : []),
     t(state)
   ]
     .filter(Boolean)
@@ -98,7 +104,8 @@ export function renderPanel(
         ? t('panel.venue_hidden')
         : [event.venueName, event.venueAddress].filter(Boolean).join(' · ') ||
           t('panel.venue_empty'),
-    fee: '',
+    fee:
+      event.priceMinor && event.priceMinor > 0n ? formatMoney(event.priceMinor, 'JPY', locale) : '',
     capacity: event.capacity === null ? t('event.capacity_unlimited') : String(event.capacity),
     deadline: formatWallClock(event.registrationClosesAt, locale, zone)
   });
@@ -117,7 +124,12 @@ export function renderPanel(
 export function renderStatus(
   detail: OwnedRegistrationDetail | null,
   eventId: string,
-  locale: Locale
+  locale: Locale,
+  payment?: {
+    request: typeof paymentRequests.$inferSelect;
+    checkoutUrl?: string;
+    manualMethods: string[];
+  }
 ): APIInteractionResponseChannelMessageWithSource {
   const t = translator(locale);
   if (!detail)
@@ -150,11 +162,51 @@ export function renderStatus(
       `# ${String(registration.number).padStart(3, '0')}`,
       t(statusKey),
       venue,
+      ...(payment
+        ? [
+            formatMoney(payment.request.amountMinor, payment.request.currency, locale),
+            t(
+              payment.request.status === 'paid'
+                ? 'payment.paid'
+                : payment.request.status === 'waived'
+                  ? 'payment.waived'
+                  : payment.request.status === 'refund_due'
+                    ? 'payment.refund_due'
+                    : payment.request.status === 'payment_pending'
+                      ? 'payment.checkout_open'
+                      : 'payment.unpaid'
+            ),
+            ...(registration.holdExpiresAt && registration.status === 'held'
+              ? [t('payment.hold_countdown', { time: time(registration.holdExpiresAt, 'R') })]
+              : []),
+            ...(event.paymentRequirement === 'pay_later' && payment.manualMethods.length
+              ? [
+                  t('payment.manual_note', {
+                    methods: payment.manualMethods
+                      .map((value) => {
+                        const key = systemPaymentMethodMessageKey(value);
+                        return key ? t(key) : safe(value, 100);
+                      })
+                      .join(' / ')
+                  })
+                ]
+              : [])
+          ]
+        : []),
       excerpt(summary, 2_000)
     ]
       .filter(Boolean)
       .join('\n\n'),
     [
+      ...(payment?.checkoutUrl && ['pending', 'payment_pending'].includes(payment.request.status)
+        ? [new ButtonBuilder().setStyle(5).setLabel(t('payment.pay')).setURL(payment.checkoutUrl)]
+        : payment &&
+            ['pending', 'payment_pending'].includes(payment.request.status) &&
+            registration.status !== 'cancelled'
+          ? [actionButton({ action: 'pay', args: [eventId] }, t('payment.pay'), 1)]
+          : registration.holdReleased
+            ? [actionButton({ action: 'pay', args: [eventId] }, t('payment.pay'), 1)]
+            : []),
       ...(registration.status !== 'cancelled'
         ? [
             actionButton({ action: 'edit', args: [eventId] }, t('participant.edit')),

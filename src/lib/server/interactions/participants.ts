@@ -1,3 +1,7 @@
+import { startCheckout, ownedPaymentSnapshot } from '$lib/server/domain/payments/checkout';
+import { tickOnce } from '$lib/server/domain/payments/holds';
+import { collectionPaymentMethods } from '$lib/server/db/schema';
+import { and, eq } from 'drizzle-orm';
 import type { APIInteractionResponse, APIModalSubmitInteraction } from 'discord-api-types/v10';
 import { escapeMarkdown } from '@discordjs/formatters';
 import { defaultTuning } from '$lib/server/config';
@@ -60,23 +64,127 @@ export async function participantAction(
   const user = await resolveInteractionUser(client, context.actor);
   if (user.suspended) return ephemeralReply(t('interaction.unavailable'));
   const eventId = action.args[0];
-  const statusCard = async () => {
+  const buildStatus = async (): Promise<APIInteractionResponse> => {
+    tickOnce(client, clock.now(), dependencies.tuning);
     const current = getParticipantPanelEvent(client, eventId, context.guildId, user.userId);
+    let detail = current.registration
+      ? await getOwnedRegistration(client, current.registration.id, user.userId)
+      : null;
+    let payment = current.registration
+      ? ownedPaymentSnapshot(client, current.registration.id, user.userId)
+      : null;
+    let checkoutUrl: string | undefined;
+    if (
+      current.registration &&
+      payment &&
+      ['pending', 'payment_pending'].includes(payment.status) &&
+      ['held', 'confirmed'].includes(current.registration.status) &&
+      dependencies.paymentGateway
+    ) {
+      try {
+        const target = new URLSearchParams({
+          guild: context.guildId ?? '',
+          channel: context.channelId ?? '',
+          lang: context.locale
+        });
+        checkoutUrl = await startCheckout(
+          client,
+          dependencies.paymentGateway,
+          {
+            userId: user.userId,
+            registrationId: current.registration.id,
+            successUrl: `${dependencies.publicBaseUrl}/checkout/done?${target}`,
+            cancelUrl: `${dependencies.publicBaseUrl}/checkout/cancelled?${target}`
+          },
+          clock
+        );
+        payment = ownedPaymentSnapshot(client, current.registration.id, user.userId);
+        detail = await getOwnedRegistration(client, current.registration.id, user.userId);
+      } catch {
+        /* Keep a Pay control so a transient failure is retryable. */
+      }
+    }
+    const manualMethods = payment
+      ? read(client, (tx) =>
+          tx
+            .select()
+            .from(collectionPaymentMethods)
+            .where(
+              and(
+                eq(collectionPaymentMethods.collectionId, payment!.collectionId),
+                eq(collectionPaymentMethods.confirmation, 'manual'),
+                eq(collectionPaymentMethods.enabled, true)
+              )
+            )
+            .all()
+            .map((m) => m.label)
+        )
+      : [];
     return renderStatus(
-      current.registration
-        ? await getOwnedRegistration(client, current.registration.id, user.userId)
-        : null,
+      detail,
       eventId,
-      context.locale
+      context.locale,
+      payment
+        ? {
+            request: payment,
+            checkoutUrl: checkoutUrl
+              ? new URL(checkoutUrl, dependencies.publicBaseUrl).href
+              : undefined,
+            manualMethods
+          }
+        : undefined
     );
   };
+  const statusCard = async (): Promise<APIInteractionResponse> => {
+    if (
+      dependencies.defer &&
+      dependencies.editReply &&
+      getParticipantPanelEvent(client, eventId, context.guildId, user.userId).event
+        .paymentRequirement !== 'none'
+    ) {
+      dependencies.defer(async () => {
+        await dependencies.editReply!(await buildStatus());
+      });
+      return { type: 5, data: { flags: 64 } };
+    }
+    return buildStatus();
+  };
   try {
+    tickOnce(client, clock.now(), dependencies.tuning);
     const data = getParticipantPanelEvent(client, eventId, context.guildId, user.userId);
     const active = data.registration && data.registration.status !== 'cancelled';
     // A modal submit cannot open another modal, and component buttons cannot submit answers.
     const isSubmit = action.action === 'join_submit' || action.action === 'edit_submit';
     if (isSubmit !== Boolean(modal)) return ephemeralReply(t('interaction.unknown'));
     switch (action.action) {
+      case 'pay': {
+        if (!active && data.registration?.holdReleased) {
+          const previous = loadOwnedAnswerData(client, data.registration.id, user.userId);
+          const parsed = buildRegistrationSchema(data.fields, {
+            required: t('form.validation_required'),
+            tooLong: (max) => t('form.validation_too_long', { max }),
+            invalidOption: t('participant.invalid_option'),
+            consentRequired: t('participant.consent_required')
+          }).safeParse(previous);
+          if (parsed.success) {
+            await createRegistration(
+              client,
+              {
+                organizationSlug: data.organizationSlug,
+                eventSlug: data.event.slug,
+                userId: user.userId,
+                displayName: context.actor.global_name || context.actor.username,
+                answers: registrationAnswersFromData(data.fields, parsed.data)
+              },
+              clock
+            );
+            return statusCard();
+          }
+        }
+        if (!active)
+          return participantAction({ action: 'join', args: [eventId] }, context, dependencies);
+        return statusCard();
+      }
       case 'status':
         return statusCard();
       case 'cancel':

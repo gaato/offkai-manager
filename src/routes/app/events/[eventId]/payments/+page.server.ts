@@ -1,5 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
-import { message, superValidate } from 'sveltekit-superforms';
+import { message, superValidate } from 'sveltekit-superforms/server';
 import { zod4 } from 'sveltekit-superforms/adapters';
 import { z } from 'zod';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';

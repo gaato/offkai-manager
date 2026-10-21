@@ -28,7 +28,7 @@ import {
 
 class NeverConnectGateway implements ConnectGateway {
   calls = 0;
-  createExpressAccount(): Promise<{
+  createAccount(): Promise<{
     accountId: string;
   }> {
     this.calls += 1;

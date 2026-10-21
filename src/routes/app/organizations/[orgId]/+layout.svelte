@@ -49,6 +49,12 @@
             </li>
           {/if}
 
+          {#if data.capabilities.canManageStripe}
+            <li>
+              <a href={`/app/organizations/${data.organization.id}/payouts`}>{t('payouts.title')}</a
+              >
+            </li>
+          {/if}
           <li>
             <a
               aria-current={page.url.pathname === teamHref ? 'page' : undefined}

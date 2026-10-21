@@ -1,3 +1,4 @@
+import { attendanceState } from './core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { read, write, type DatabaseClient, type DatabaseTransaction } from '$lib/server/db/client';
@@ -10,7 +11,6 @@ import {
   organizations
 } from '$lib/server/db/schema';
 import { loadActiveFormFields } from '$lib/server/domain/events/forms';
-import { registrationStatusSchema } from '$lib/shared/registration';
 import { decideRegistration, applyRegistrationEffects } from './lifecycle';
 import { RegistrationError } from './errors';
 import { saveAnswers } from './service';
@@ -94,7 +94,7 @@ export function editRegistrationAnswers(
     const decision = decideRegistration(
       tx,
       event,
-      { kind: registrationStatusSchema.parse(current.status) },
+      attendanceState(current),
       { type: 'editAnswers' },
       clock
     );

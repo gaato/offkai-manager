@@ -31,7 +31,7 @@ export class DevConnectGateway implements ConnectGateway, PaymentGateway {
   private readonly sessions = new Map<string, DevCheckoutSession>();
   private readonly checkoutIdempotency = new Map<string, string>();
 
-  async createExpressAccount(): Promise<{ accountId: string }> {
+  async createAccount(): Promise<{ accountId: string }> {
     this.sequence += 1;
     const accountId = `acct_dev_${this.sequence}`;
     this.accounts.set(accountId, { ready: false, returnUrl: '', refreshUrl: '' });
@@ -49,6 +49,10 @@ export class DevConnectGateway implements ConnectGateway, PaymentGateway {
     return { url: `/dev/stripe/onboarding/${encodeURIComponent(input.accountId)}` };
   }
 
+  async createAccountSession() {
+    return { clientSecret: 'e2e_account_session' };
+  }
+
   async getAccount(accountId: string): Promise<ConnectAccount> {
     const account = this.requireAccount(accountId);
     return {
@@ -57,7 +61,7 @@ export class DevConnectGateway implements ConnectGateway, PaymentGateway {
       detailsSubmitted: account.ready,
       country: 'JP',
       defaultCurrency: 'jpy',
-      dashboardType: 'express'
+      dashboardType: 'none'
     };
   }
 

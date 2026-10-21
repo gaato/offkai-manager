@@ -1,8 +1,9 @@
+import { attendanceState } from './core';
 import { defaultTuning, type Tuning } from '$lib/server/config';
 import { escapeLikePattern, ilike } from '$lib/server/db/search';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
-import { and, asc, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
 import {
   auditLogs,
@@ -37,6 +38,7 @@ export interface ParticipantListRow {
   username: string;
   status: RegistrationStatus;
   registeredAt: Date;
+  unreachable: boolean;
 }
 
 export interface ParticipantList {
@@ -74,6 +76,7 @@ export async function listParticipants(
     const counts: Record<ParticipantStatusFilter, number> = {
       all: 0,
       applied: 0,
+      held: 0,
       confirmed: 0,
       waitlisted: 0,
       cancelled: 0
@@ -93,6 +96,7 @@ export async function listParticipants(
         displayName: registrations.displayNameSnapshot,
         username: externalAccounts.username,
         status: registrations.status,
+        unreachable: sql<number>`exists(select 1 from notification_deliveries d where d.registration_id = ${registrations.id} and d.result like 'failed:%' and not exists(select 1 from notification_deliveries success where success.registration_id = d.registration_id and success.kind = d.kind and success.result = 'sent'))`,
         registeredAt: registrations.createdAt
       })
       .from(registrations)
@@ -110,6 +114,7 @@ export async function listParticipants(
     return {
       rows: rows.slice(0, tuning.OFFKAI_PARTICIPANT_LIST_LIMIT).map((row) => ({
         ...row,
+        unreachable: Boolean(row.unreachable),
         username: row.username ?? '',
         status: registrationStatusSchema.parse(row.status)
       })),
@@ -301,13 +306,17 @@ export async function changeRegistrationStatus(
     const decision = decideRegistration(
       tx,
       event,
-      { kind: currentStatus },
+      attendanceState(current),
       { type: 'setStatus', status: input.status },
       clock
     );
     const updatedRows = tx
       .update(registrations)
-      .set({ status: input.status, updatedAt: clock.now() })
+      .set({
+        status: decision.next.kind,
+        holdExpiresAt: decision.next.kind === 'held' ? decision.next.holdExpiresAt : null,
+        updatedAt: clock.now()
+      })
       .where(and(eq(registrations.id, current.id), eq(registrations.status, currentStatus)))
       .returning()
       .all();
@@ -337,7 +346,7 @@ export async function changeRegistrationStatus(
     }
     if (
       input.status === 'cancelled' &&
-      currentStatus === 'confirmed' &&
+      ['confirmed', 'held'].includes(currentStatus) &&
       event.registrationMode === 'auto_confirm'
     ) {
       promoteOldestWaitlisted(

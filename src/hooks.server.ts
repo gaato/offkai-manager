@@ -109,12 +109,14 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 };
 
 // Discord authenticates the raw body with Ed25519 rather than browser cookies.
+const isStripeWebhook = (path: string): boolean =>
+  path === '/webhooks/stripe' || path === '/webhooks/stripe/v2';
 const isInteraction = (path: string): boolean => path === '/interactions';
 
 const rejectCrossSite: Handle = async ({ event, resolve }) => {
   if (
     !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) &&
-    !event.url.pathname.startsWith('/webhooks/stripe') &&
+    !isStripeWebhook(event.url.pathname) &&
     !isInteraction(event.url.pathname)
   ) {
     if (event.request.headers.get('sec-fetch-site') === 'cross-site') {
@@ -184,7 +186,8 @@ function takeRateLimit(
 }
 
 const rateLimit: Handle = async ({ event, resolve }) => {
-  if (isInteraction(event.url.pathname)) return resolve(event);
+  if (isInteraction(event.url.pathname) || isStripeWebhook(event.url.pathname))
+    return resolve(event);
   const limited =
     event.request.method === 'POST' &&
     ['/auth/'].some((prefix) => event.url.pathname.startsWith(prefix));
@@ -204,7 +207,8 @@ const rateLimit: Handle = async ({ event, resolve }) => {
 };
 
 const locale: Handle = async ({ event, resolve }) => {
-  if (isInteraction(event.url.pathname)) return resolve(event);
+  if (isInteraction(event.url.pathname) || isStripeWebhook(event.url.pathname))
+    return resolve(event);
   const queryLocale = normalizeLocale(event.url.searchParams.get('lang'));
   const selected = resolveLocale(
     event.url.searchParams.get('lang'),
@@ -230,7 +234,8 @@ const locale: Handle = async ({ event, resolve }) => {
 };
 
 const session: Handle = async ({ event, resolve }) => {
-  if (isInteraction(event.url.pathname)) return resolve(event);
+  if (isInteraction(event.url.pathname) || isStripeWebhook(event.url.pathname))
+    return resolve(event);
   const config = getConfig();
   await populateRequestSession(event, config);
   return resolve(event);

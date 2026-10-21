@@ -1,11 +1,17 @@
+import { requireReadyConnectedAccount } from '$lib/server/domain/payments/gateway';
 import { describe, expect, it } from 'vitest';
 import { DevConnectGateway } from '$lib/server/gateways/stripe/dev';
 
 describe('development Stripe Checkout', () => {
   it('retains quantity on an idempotent session', async () => {
     const gateway = new DevConnectGateway();
-    const { accountId } = await gateway.createExpressAccount();
+    const { accountId } = await gateway.createAccount();
     const input = {
+      readyAccount: requireReadyConnectedAccount({
+        stripeAccountId: 'acct_dev_seeded',
+        chargesEnabled: true,
+        onboardingStatus: 'ready'
+      }),
       referenceId: 'request-reference',
       productName: 'Event fee',
       amountMinor: 1000n,
@@ -27,6 +33,11 @@ describe('development Stripe Checkout', () => {
   it('accepts a database-seeded ready account identifier', async () => {
     const gateway = new DevConnectGateway();
     const result = await gateway.createCheckoutSession({
+      readyAccount: requireReadyConnectedAccount({
+        stripeAccountId: 'acct_dev_seeded',
+        chargesEnabled: true,
+        onboardingStatus: 'ready'
+      }),
       referenceId: 'seeded-request',
       productName: 'Seeded event',
       amountMinor: 500n,

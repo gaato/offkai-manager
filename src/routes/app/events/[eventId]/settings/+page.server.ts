@@ -1,3 +1,6 @@
+import { eventPaymentFields } from '$lib/shared/event-payment-form';
+import { getConnectAccount, getCollectionDashboard } from '$lib/server/domain/payments';
+import { paymentRequirementSchema } from '$lib/shared/payment';
 import { error, fail } from '@sveltejs/kit';
 import { message, superValidate } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
@@ -14,6 +17,7 @@ const datetimeLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 function settingsSchema(t: App.Locals['t']) {
   const datetime = z.string().regex(datetimeLocal, t('event.validation_datetime'));
   return z.object({
+    ...eventPaymentFields(t('payments.error_validation')),
     title: z
       .string()
       .trim()
@@ -42,10 +46,36 @@ export const load: PageServerLoad = async (event) => {
   const { locals } = event;
   const config = getConfig();
   const item = data.event;
+  const session = requireSession(event);
+  const client = getDatabaseClient(config);
+  const account = await getConnectAccount(client, item.organizationId, session);
+  const payments = await getCollectionDashboard(client, {
+    actorUserId: session.userId,
+    eventId: item.id
+  });
   return {
+    paymentUi: {
+      ready: account?.onboardingStatus === 'ready',
+      stripeBps: config.tuning.OFFKAI_STRIPE_FEE_BPS_ESTIMATE,
+      platformBps: item.platformFeeBps,
+      units: config.priceRoundingUnits,
+      holdMin: config.tuning.OFFKAI_HOLD_MINUTES_MIN,
+      holdMax: config.tuning.OFFKAI_HOLD_MINUTES_MAX
+    },
     timeZone: config.time.zone,
     form: await superValidate(
       {
+        paymentRequirement: paymentRequirementSchema.parse(item.paymentRequirement),
+        amountToCollect: item.amountToCollectMinor.toString(),
+        roundingUnit: item.roundingUnit,
+        priceOverride: payments.collection?.amountMinor.toString() ?? '',
+        manualCash:
+          payments.methods.find((m) => m.label === 'payments.default_method.cash.label')?.enabled ??
+          true,
+        manualPayPay:
+          payments.methods.find((m) => m.label === 'payments.default_method.paypay.label')
+            ?.enabled ?? true,
+        holdMinutes: item.holdMinutes,
         title: item.title,
         description: item.description,
         startsAt: formatWallClockInput(item.startsAt, config.time.zone),
@@ -73,12 +103,18 @@ export const actions: Actions = {
     if (!form.valid) return fail(400, { form });
     const config = getConfig();
     try {
-      await updateSettings(getDatabaseClient(config), {
-        actorUserId: session.userId,
-        eventId: eventId.data,
-        ...form.data,
-        timeZone: config.time.zone
-      });
+      await updateSettings(
+        getDatabaseClient(config),
+        {
+          actorUserId: session.userId,
+          eventId: eventId.data,
+          ...form.data,
+          timeZone: config.time.zone
+        },
+        undefined,
+        config.tuning,
+        config.priceRoundingUnits
+      );
       return message(form, event.locals.t('event.settings_success'));
     } catch (cause) {
       event.locals.logger[

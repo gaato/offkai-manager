@@ -1,3 +1,5 @@
+import { eventPaymentFields } from '$lib/shared/event-payment-form';
+import { getConnectAccount } from '$lib/server/domain/payments';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { message, superValidate } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
@@ -15,6 +17,7 @@ const datetimeLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
 function newEventSchema(t: App.Locals['t']) {
   return z.object({
+    ...eventPaymentFields(t('payments.error_validation')),
     title: z
       .string()
       .trim()
@@ -36,11 +39,23 @@ export const load: PageServerLoad = async (event) => {
   const session = requireSession(event);
   if (!data.capabilities.canManageEvent) throw error(404);
   const config = getConfig();
+  const account = await getConnectAccount(getDatabaseClient(config), data.organization.id, session);
   return {
+    paymentUi: {
+      ready: account?.onboardingStatus === 'ready',
+      stripeBps: config.tuning.OFFKAI_STRIPE_FEE_BPS_ESTIMATE,
+      platformBps: config.tuning.OFFKAI_PLATFORM_FEE_BPS,
+      units: config.priceRoundingUnits,
+      holdMin: config.tuning.OFFKAI_HOLD_MINUTES_MIN,
+      holdMax: config.tuning.OFFKAI_HOLD_MINUTES_MAX
+    },
     copySources: listCopySources(getDatabaseClient(config), session.userId, data.organization.id),
     form: await superValidate(
       {
         title: '',
+        manualCash: true,
+        manualPayPay: true,
+        holdMinutes: config.tuning.OFFKAI_HOLD_MINUTES_DEFAULT,
         startsAt: formatWallClockInput(Date.now() + 24 * 60 * 60 * 1_000, config.time.zone),
         registrationMode: '' as const
       },
@@ -64,6 +79,7 @@ export const actions: Actions = {
         {
           actorUserId: session.userId,
           organizationId: organizationId.data,
+          ...form.data,
           title: form.data.title,
           startsAt: form.data.startsAt,
           capacity: form.data.capacity,
@@ -73,7 +89,8 @@ export const actions: Actions = {
         },
         undefined,
         undefined,
-        config.tuning
+        config.tuning,
+        config.priceRoundingUnits
       );
     } catch (cause) {
       event.locals.logger[

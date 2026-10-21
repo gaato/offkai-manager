@@ -4,7 +4,15 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openDatabase } from '$lib/server/db/client';
 import { runMigrations } from '$lib/server/db/migrate';
-import { eventDiscordIntegrations, outboxEvents, registrations } from '$lib/server/db/schema';
+import {
+  eventDiscordIntegrations,
+  outboxEvents,
+  registrations,
+  events,
+  paymentRecords,
+  paymentRequests,
+  registrationFormAnswers
+} from '$lib/server/db/schema';
 
 it('upgrades populated databases without losing registration history, roles, or pending outbox retries', () => {
   const directory = mkdtempSync(join(tmpdir(), 'offkai-discord-migration-'));
@@ -26,6 +34,18 @@ it('upgrades populated databases without losing registration history, roles, or 
       VALUES ('a', 'event-a', 'user-a', 'cancelled', 'A', 10), ('b', 'event-a', 'user-b', 'confirmed', 'B', 20), ('c', 'event-b', 'user-a', 'confirmed', 'A', 10);
       INSERT INTO event_discord_integrations (id, event_id, guild_id, staff_channel_id, role_id)
       VALUES ('integration', 'event-a', '400000000000000001', '500000000000000001', '600000000000000001');
+      INSERT INTO collections (id, event_id, title, amount_minor, currency, status)
+      VALUES ('collection', 'event-a', 'Fee', 1000, 'JPY', 'open');
+      INSERT INTO collection_payment_methods (id, collection_id, label, timing, confirmation)
+      VALUES ('cash', 'collection', 'Cash', 'onsite', 'manual');
+      INSERT INTO payment_requests (id, event_id, collection_id, registration_id, collection_payment_method_id, amount_minor, currency, status)
+      VALUES ('request', 'event-a', 'collection', 'b', 'cash', 1000, 'JPY', 'paid');
+      INSERT INTO payment_records (id, payment_request_id, registration_id, collection_id, collection_payment_method_id, amount_minor, currency, status, idempotency_key)
+      VALUES ('record', 'request', 'b', 'collection', 'cash', 1000, 'JPY', 'settled', 'old-cash');
+      INSERT INTO event_form_fields (id, event_id, field_key, label, field_type)
+      VALUES ('field', 'event-a', 'food', 'Food', 'text');
+      INSERT INTO registration_form_answers (id, event_id, registration_id, field_id, field_key_snapshot, field_label_snapshot, field_type_snapshot, value_text)
+      VALUES ('answer', 'event-a', 'b', 'field', 'food', 'Food', 'text', 'Saved answer');
       INSERT INTO outbox_events (id, type, payload_json, status, attempts, last_error, next_attempt_at)
       VALUES ('task', 'discord.role_sync_requested', '{"event_id":"event-a","registration_id":"b"}', 'pending', 3, 'Previously unavailable', 123456);
     `);
@@ -64,6 +84,25 @@ it('upgrades populated databases without losing registration history, roles, or 
         .all()
         .find((row) => row.id === 'd')!.number
     ).toBe(3);
+    expect(
+      client.db
+        .select()
+        .from(events)
+        .all()
+        .find((row) => row.id === 'event-a')?.paymentRequirement
+    ).toBe('pay_later');
+    expect(client.db.select().from(paymentRequests).get()).toMatchObject({
+      id: 'request',
+      status: 'paid',
+      amountMinor: 1000n,
+      applicationFeeAmount: 0n
+    });
+    expect(client.db.select().from(paymentRecords).get()).toMatchObject({
+      id: 'record',
+      amountMinor: 1000n,
+      idempotencyKey: 'old-cash'
+    });
+    expect(client.db.select().from(registrationFormAnswers).get()?.valueText).toBe('Saved answer');
     expect(client.db.$client.pragma('foreign_key_check')).toEqual([]);
   } finally {
     client.db.$client.close();

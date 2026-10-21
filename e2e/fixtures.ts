@@ -109,3 +109,9 @@ export const discordSetupFixture = {
   highRoleId: '400000000000000004',
   channelId: '400000000000000005'
 } as const;
+
+export const paidJourney = {
+  organizationName: 'Paid Organizer Journey',
+  eventTitle: 'Pay later meetup',
+  payoutOrganizationName: 'Embedded Payouts Journey'
+} as const;

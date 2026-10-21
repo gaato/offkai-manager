@@ -40,6 +40,15 @@ const positiveInteger = (fallback: number, min: number, max: number) =>
   );
 
 export const tuningSchema = z.object({
+  OFFKAI_PLATFORM_FEE_BPS: positiveInteger(0, 0, 9000),
+  OFFKAI_STRIPE_FEE_BPS_ESTIMATE: positiveInteger(360, 0, 9000),
+  OFFKAI_HOLD_MINUTES_DEFAULT: positiveInteger(30, 1, 1440),
+  OFFKAI_HOLD_MINUTES_MIN: positiveInteger(30, 1, 1440),
+  OFFKAI_HOLD_MINUTES_MAX: positiveInteger(1440, 31, 1440),
+  OFFKAI_HOLD_TICK_INTERVAL_MS: positiveInteger(15000, 100, 3600000),
+  OFFKAI_HOLD_EXPIRING_SOON_MINUTES: positiveInteger(5, 1, 1440),
+  OFFKAI_NOTIFICATION_DM_INTERVAL_MS: positiveInteger(1000, 0, 60000),
+  OFFKAI_NOTIFICATION_ARCHIVE_DAYS: positiveInteger(7, 0, 365),
   OFFKAI_RATE_LIMIT_WINDOW_MS: positiveInteger(60_000, 1_000, 3_600_000),
   OFFKAI_RATE_LIMIT_REQUESTS: positiveInteger(60, 1, 10_000),
   OFFKAI_RATE_LIMIT_CLEANUP_THRESHOLD: positiveInteger(10_000, 100, 1_000_000),
@@ -105,6 +114,12 @@ const rawSchema = z.object({
     .default(''),
   OFFKAI_STRIPE_SECRET_KEY: z.string().default(''),
   OFFKAI_STRIPE_WEBHOOK_SECRET: z.string().default(''),
+  OFFKAI_STRIPE_V2_WEBHOOK_SECRET: z.string().default(''),
+  OFFKAI_STRIPE_PUBLISHABLE_KEY: z.string().default(''),
+  OFFKAI_PRICE_ROUNDING_UNITS: z
+    .string()
+    .regex(/^\d+(,\d+)*$/)
+    .default('1,10,100'),
   OFFKAI_PLATFORM_ADMIN_DISCORD_IDS: z.string().default(''),
   OFFKAI_WORKER_ENABLED: boolWithDefault(true)
 });
@@ -139,7 +154,13 @@ export interface Config {
     publicKey: string;
     commandGuildId: string;
   };
-  stripe: { secretKey: string; webhookSecret: string };
+  stripe: {
+    secretKey: string;
+    webhookSecret: string;
+    v2WebhookSecret: string;
+    publishableKey: string;
+  };
+  priceRoundingUnits: number[];
   platform: { adminDiscordIds: string[] };
   workerEnabled: boolean;
 }
@@ -187,6 +208,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   const raw = parsed.data;
   const address = parseHttpAddress(raw.OFFKAI_HTTP_ADDR);
+  if (raw.OFFKAI_PLATFORM_FEE_BPS + raw.OFFKAI_STRIPE_FEE_BPS_ESTIMATE >= 10000)
+    throw new Error('combined fee rates must be less than 10000 bps');
+  if (
+    raw.OFFKAI_HOLD_MINUTES_MIN > raw.OFFKAI_HOLD_MINUTES_DEFAULT ||
+    raw.OFFKAI_HOLD_MINUTES_DEFAULT > raw.OFFKAI_HOLD_MINUTES_MAX
+  )
+    throw new Error('hold default must be within hold bounds');
+  const priceRoundingUnits = raw.OFFKAI_PRICE_ROUNDING_UNITS.split(',').map(Number);
+  if (priceRoundingUnits.some((unit) => !Number.isSafeInteger(unit) || unit < 1))
+    throw new Error('rounding units must be positive safe integers');
 
   let publicBaseUrl: URL;
   try {
@@ -239,6 +270,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       'OFFKAI_STRIPE_SECRET_KEY and OFFKAI_STRIPE_WEBHOOK_SECRET must be configured together'
     );
   }
+  if (
+    !raw.OFFKAI_AUTH_DEV_BYPASS &&
+    raw.OFFKAI_STRIPE_SECRET_KEY &&
+    (!raw.OFFKAI_STRIPE_V2_WEBHOOK_SECRET || !raw.OFFKAI_STRIPE_PUBLISHABLE_KEY)
+  )
+    throw new Error('Stripe v2 webhook secret and publishable key are required with Stripe');
   if (raw.OFFKAI_DISCORD_REDIRECT_URL) {
     let redirectUrl: URL;
     try {
@@ -320,13 +357,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     stripe: {
       secretKey: raw.OFFKAI_STRIPE_SECRET_KEY,
-      webhookSecret: raw.OFFKAI_STRIPE_WEBHOOK_SECRET
+      webhookSecret: raw.OFFKAI_STRIPE_WEBHOOK_SECRET,
+      v2WebhookSecret: raw.OFFKAI_STRIPE_V2_WEBHOOK_SECRET,
+      publishableKey: raw.OFFKAI_STRIPE_PUBLISHABLE_KEY
     },
     platform: {
       adminDiscordIds: raw.OFFKAI_PLATFORM_ADMIN_DISCORD_IDS.split(',')
         .map((value) => value.trim())
         .filter(Boolean)
     },
+    priceRoundingUnits,
     workerEnabled: raw.OFFKAI_WORKER_ENABLED
   };
 }

@@ -37,35 +37,40 @@ describe('interaction hook exemptions', () => {
     vi.unstubAllEnvs();
     resetConfigForTests();
   });
-  it('explicitly bypasses CSRF, cookies, session, and rate limiting for the exact path', async () => {
-    vi.stubEnv('OFFKAI_AUTH_DEV_BYPASS', 'true');
-    vi.stubEnv('OFFKAI_RATE_LIMIT_REQUESTS', '1');
-    vi.stubEnv('OFFKAI_LOG_LEVEL', 'error');
-    resetConfigForTests();
-    const event = eventFor('/interactions');
-    const resolve = vi.fn(async () => new Response('ok'));
-    for (let i = 0; i < 3; i++) {
-      const response = await runHandle(event, resolve);
-      expect(response.status).toBe(200);
-      expect(response.headers.get('X-Request-Id')).toBeTruthy();
-      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
-    }
-    expect(event.cookies.get).not.toHaveBeenCalled();
-    expect(event.cookies.set).not.toHaveBeenCalled();
-    expect(event.cookies.delete).not.toHaveBeenCalled();
-    expect(event.locals).not.toHaveProperty('locale');
-    expect(event.locals).not.toHaveProperty('session');
-    expect(resolve).toHaveBeenCalledTimes(3);
-  });
-  it.each(['/interactions/other', '/auth/dev'])(
-    'keeps browser CSRF protection on %s',
+  it.each(['/interactions', '/webhooks/stripe', '/webhooks/stripe/v2'])(
+    'explicitly bypasses CSRF, cookies, session, and rate limiting for %s',
     async (path) => {
       vi.stubEnv('OFFKAI_AUTH_DEV_BYPASS', 'true');
+      vi.stubEnv('OFFKAI_RATE_LIMIT_REQUESTS', '1');
       vi.stubEnv('OFFKAI_LOG_LEVEL', 'error');
       resetConfigForTests();
+      const event = eventFor(path);
       const resolve = vi.fn(async () => new Response('ok'));
-      await expect(runHandle(eventFor(path), resolve)).rejects.toMatchObject({ status: 403 });
-      expect(resolve).not.toHaveBeenCalled();
+      for (let i = 0; i < 3; i++) {
+        const response = await runHandle(event, resolve);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('X-Request-Id')).toBeTruthy();
+        expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      }
+      expect(event.cookies.get).not.toHaveBeenCalled();
+      expect(event.cookies.set).not.toHaveBeenCalled();
+      expect(event.cookies.delete).not.toHaveBeenCalled();
+      expect(event.locals).not.toHaveProperty('locale');
+      expect(event.locals).not.toHaveProperty('session');
+      expect(resolve).toHaveBeenCalledTimes(3);
     }
   );
+  it.each([
+    '/interactions/other',
+    '/webhooks/stripe/other',
+    '/webhooks/stripe/v2/other',
+    '/auth/dev'
+  ])('keeps browser CSRF protection on %s', async (path) => {
+    vi.stubEnv('OFFKAI_AUTH_DEV_BYPASS', 'true');
+    vi.stubEnv('OFFKAI_LOG_LEVEL', 'error');
+    resetConfigForTests();
+    const resolve = vi.fn(async () => new Response('ok'));
+    await expect(runHandle(eventFor(path), resolve)).rejects.toMatchObject({ status: 403 });
+    expect(resolve).not.toHaveBeenCalled();
+  });
 });

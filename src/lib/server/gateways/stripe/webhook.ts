@@ -15,6 +15,8 @@ const envelopeSchema = z.object({
 
 const checkoutSessionSchema = z.object({
   id: z.string().min(1),
+  client_reference_id: z.string().optional().nullable(),
+  application_fee_amount: z.number().int().nonnegative().optional().nullable(),
   payment_status: z.string().min(1),
   amount_total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   currency: z.string().length(3),
@@ -26,7 +28,8 @@ const checkoutSessionSchema = z.object({
 
 const checkoutEvents = new Set([
   'checkout.session.completed',
-  'checkout.session.async_payment_succeeded'
+  'checkout.session.async_payment_succeeded',
+  'checkout.session.expired'
 ]);
 
 export class StripeWebhookVerifier implements StripeWebhookGateway {
@@ -57,6 +60,10 @@ export class StripeWebhookVerifier implements StripeWebhookGateway {
       eventType: envelope.type,
       stripeAccountId: envelope.account ?? '',
       sessionId: session.id,
+      ...(session.client_reference_id ? { referenceId: session.client_reference_id } : {}),
+      ...(session.application_fee_amount !== undefined && session.application_fee_amount !== null
+        ? { applicationFeeAmount: BigInt(session.application_fee_amount) }
+        : {}),
       ...(paymentIntent
         ? { paymentIntentId: typeof paymentIntent === 'string' ? paymentIntent : paymentIntent.id }
         : {}),

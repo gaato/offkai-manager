@@ -74,9 +74,18 @@ for (const javaScriptEnabled of [true, false]) {
       await expect(
         checklist.getByRole('link', { name: 'Link Discord', exact: true })
       ).toBeVisible();
-      await expect(checklist.locator('li').nth(0)).toHaveClass(/step-primary/);
-      await expect(checklist.locator('li').nth(1)).not.toHaveClass(/step-primary/);
-      await expect(checklist.locator('li').nth(2)).not.toHaveClass(/step-primary/);
+      await expect(checklist.locator('li').filter({ hasText: 'Payout account ready' })).toHaveClass(
+        /step-primary/
+      );
+      await expect(checklist.locator('li').filter({ hasText: 'Link Discord' })).toHaveClass(
+        /step-primary/
+      );
+      await expect(
+        checklist.locator('li').filter({ hasText: 'Review panel templates' })
+      ).not.toHaveClass(/step-primary/);
+      await expect(checklist.locator('li').filter({ hasText: 'Post a panel' })).not.toHaveClass(
+        /step-primary/
+      );
       await expect(page.getByText('Confirmed / capacity', { exact: true })).toBeVisible();
       await checklist.getByRole('link', { name: 'Review panel templates', exact: true }).click();
       await expect(page.getByLabel('English panel body', { exact: true })).toHaveValue(

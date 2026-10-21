@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EventPaymentFields from '$lib/components/payments/event-payment-fields.svelte';
   import FormPage from '$lib/components/page/form-page.svelte';
   import { untrack } from 'svelte';
   import { resolve } from '$app/paths';
@@ -129,6 +130,19 @@
                 </label>
               {/each}
             </fieldset>
+            <EventPaymentFields
+              bind:values={$form}
+              errors={{
+                paymentRequirement: $errors.paymentRequirement,
+                amountToCollect: $errors.amountToCollect,
+                priceOverride: $errors.priceOverride,
+                roundingUnit: $errors.roundingUnit,
+                holdMinutes: $errors.holdMinutes
+              }}
+              locale={data.locale}
+              {...data.paymentUi}
+              payoutsHref={`/app/organizations/${data.organization.id}/payouts`}
+            />
             <div class="flex flex-wrap gap-3">
               <button type="submit" class="btn btn-primary">{t('event.create_submit')}</button>
               <a href={backHref} class="btn inline-flex min-h-12 items-center px-5"

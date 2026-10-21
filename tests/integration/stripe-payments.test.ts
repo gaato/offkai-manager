@@ -37,7 +37,7 @@ describe('Stripe checkout settlement', () => {
     if (client) await closeDatabase(client);
   });
 
-  it('records checkout intent before Stripe and restores pending status if Stripe fails', async () => {
+  it('records checkout intent before Stripe and retains a retryable idempotent intent if Stripe fails', async () => {
     const fixture = await paymentFixture();
     const gateway: PaymentGateway = {
       async createCheckoutSession() {
@@ -61,9 +61,9 @@ describe('Stripe checkout settlement', () => {
       )
     ).rejects.toMatchObject({ code: 'gateway' });
     expect(await request(fixture.requestId)).toMatchObject({
-      status: 'pending',
+      status: 'payment_pending',
       checkoutSessionId: '',
-      stripeAccountId: ''
+      stripeAccountId: fixture.stripeAccountId
     });
   });
 
@@ -172,7 +172,7 @@ describe('Stripe checkout settlement', () => {
       fixedClock
     );
     expect(settlement).toMatchObject({ conflict: true, alreadyProcessed: false });
-    expect((await request(fixture.requestId)).status).toBe('cancelled');
+    expect((await request(fixture.requestId)).status).toBe('refund_due');
     expect((await getCollectionDashboard(client, fixture)).conflicts).toHaveLength(1);
     expect(await listPlatformPaymentConflicts(client)).toContainEqual(
       expect.objectContaining({
@@ -240,7 +240,7 @@ describe('Stripe checkout settlement', () => {
       },
       fixedClock
     );
-    return fixture;
+    return { ...fixture, sessionId: (await request(fixture.requestId)).checkoutSessionId };
   }
   async function paymentFixture() {
     sequence += 1;

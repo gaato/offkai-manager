@@ -70,3 +70,31 @@ describe('Stripe webhook stable-field parser', () => {
     expect(verifier.parseCheckoutEvent(new TextEncoder().encode(payload), signature)).toBeNull();
   });
 });
+
+it.each([
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+  'checkout.session.expired'
+])('recognizes signed %s with its phase-1 request reference', (type) => {
+  const payload = JSON.stringify({
+    id: `evt_${type}`,
+    type,
+    account: 'acct_connected',
+    data: {
+      object: {
+        id: 'cs',
+        client_reference_id: 'request:1',
+        payment_status: type.endsWith('expired') ? 'unpaid' : 'paid',
+        amount_total: 1000,
+        currency: 'jpy'
+      }
+    }
+  });
+  const signature = Stripe.webhooks.generateTestHeaderString({ payload, secret });
+  expect(
+    new StripeWebhookVerifier(secret).parseCheckoutEvent(
+      new TextEncoder().encode(payload),
+      signature
+    )
+  ).toMatchObject({ eventType: type, referenceId: 'request:1' });
+});

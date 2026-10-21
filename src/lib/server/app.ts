@@ -1,3 +1,7 @@
+import {
+  StripeV2WebhookVerifier,
+  type AccountNotificationGateway
+} from '$lib/server/gateways/stripe/v2-webhook';
 import type { Config } from '$lib/server/config';
 import type {
   ConnectGateway,
@@ -11,6 +15,7 @@ import { StripeWebhookVerifier } from '$lib/server/gateways/stripe/webhook';
 export type StripeApp =
   | {
       mode: 'real';
+      v2Webhook?: AccountNotificationGateway | null;
       connect: ConnectGateway;
       payment: PaymentGateway;
       webhook: StripeWebhookGateway | null;
@@ -35,6 +40,13 @@ export function createApp(config: Config): AppServices {
     return {
       stripe: {
         mode: 'real',
+        v2Webhook: config.stripe.v2WebhookSecret
+          ? new StripeV2WebhookVerifier(
+              config.stripe.secretKey,
+              config.stripe.v2WebhookSecret,
+              gateway
+            )
+          : null,
         connect: gateway,
         payment: gateway,
         webhook: config.stripe.webhookSecret

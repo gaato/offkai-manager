@@ -4,7 +4,8 @@ import {
   discordPanels,
   eventDiscordIntegrations,
   events,
-  registrations
+  registrations,
+  stripeConnectAccounts
 } from '$lib/server/db/schema';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
 import { EventError } from './errors';
@@ -13,8 +14,12 @@ export function preparationChecklist(input: {
   guildId: string;
   reviewed: boolean;
   panelPosted: boolean;
+  payoutsReady?: boolean;
 }) {
   return [
+    ...(input.payoutsReady === undefined
+      ? []
+      : [{ key: 'event.setup_payouts' as const, done: input.payoutsReady, anchor: 'payouts' }]),
     {
       key: 'event.setup_linked' as const,
       done: Boolean(input.guildId),
@@ -59,6 +64,13 @@ export function getEventDashboard(client: DatabaseClient, actorUserId: string, e
         cancelled: value('cancelled')
       },
       steps: preparationChecklist({
+        payoutsReady:
+          event.paymentRequirement === 'none' ||
+          tx
+            .select()
+            .from(stripeConnectAccounts)
+            .where(eq(stripeConnectAccounts.organizationId, event.organizationId))
+            .get()?.onboardingStatus === 'ready',
         guildId: integration?.guildId ?? '',
         reviewed: event.panelTemplateReviewedAt !== null,
         panelPosted: panels.length > 0

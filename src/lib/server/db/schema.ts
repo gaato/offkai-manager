@@ -150,6 +150,11 @@ export const events = sqliteTable(
     contact: text('contact').notNull().default(''),
     cancellationPolicy: text('cancellation_policy').notNull().default(''),
     registrationMode: text('registration_mode').notNull().default('auto_confirm'),
+    paymentRequirement: text('payment_requirement').notNull().default('none'),
+    platformFeeBps: integer('platform_fee_bps').notNull().default(0),
+    amountToCollectMinor: money('amount_to_collect_minor').default(sql`0`),
+    roundingUnit: integer('rounding_unit').notNull().default(1),
+    holdMinutes: integer('hold_minutes').notNull().default(30),
     panelTemplateJa: text('panel_template_ja').notNull().default(''),
     panelTemplateEn: text('panel_template_en').notNull().default(''),
     panelTemplateReviewedAt: integer('panel_template_reviewed_at', { mode: 'timestamp_ms' }),
@@ -160,6 +165,20 @@ export const events = sqliteTable(
   },
   (table) => [
     unique('events_organization_id_slug_key').on(table.organizationId, table.slug),
+    check(
+      'events_payment_requirement_check',
+      sql`${table.paymentRequirement} in ('none', 'pay_to_confirm', 'pay_later')`
+    ),
+    check(
+      'events_platform_fee_bps_check',
+      sql`${table.platformFeeBps} >= 0 and ${table.platformFeeBps} < 10000`
+    ),
+    check('events_amount_to_collect_minor_check', sql`${table.amountToCollectMinor} >= 0`),
+    check('events_rounding_unit_check', sql`${table.roundingUnit} > 0`),
+    check(
+      'events_hold_minutes_check',
+      sql`${table.holdMinutes} >= 30 and ${table.holdMinutes} <= 1440`
+    ),
     check('events_title_check', sql`length(${table.title}) > 0`),
     check('events_slug_check', sql`length(${table.slug}) > 0`),
     check('events_ends_at_check', sql`${table.endsAt} > ${table.startsAt}`),
@@ -269,6 +288,9 @@ export const registrations = sqliteTable(
       .references(() => users.id),
     number: integer('number').notNull().default(0),
     status: text('status').notNull(),
+    holdExpiresAt: integer('hold_expires_at', { mode: 'timestamp_ms' }),
+    holdWarnedAt: integer('hold_warned_at', { mode: 'timestamp_ms' }),
+    holdReleased: integer('hold_released', { mode: 'boolean' }).notNull().default(false),
     displayNameSnapshot: text('display_name_snapshot').notNull(),
     searchText: text('search_text').notNull().default(''),
     createdAt: createdAt(),
@@ -276,6 +298,11 @@ export const registrations = sqliteTable(
   },
   (table) => [
     uniqueIndex('registrations_event_number_key').on(table.eventId, table.number),
+    check(
+      'registrations_held_deadline_check',
+      sql`${table.status} <> 'held' or ${table.holdExpiresAt} is not null`
+    ),
+    check('registrations_hold_released_check', sql`${table.holdReleased} in (0, 1)`),
     check('registrations_number_check', sql`${table.number} >= 0`),
     unique('registrations_event_id_id_key').on(table.eventId, table.id),
     uniqueIndex('registrations_one_active_per_user_event')
@@ -284,7 +311,7 @@ export const registrations = sqliteTable(
     index('registrations_event_status_idx').on(table.eventId, table.status),
     check(
       'registrations_status_check',
-      sql`${table.status} in ('applied', 'confirmed', 'waitlisted', 'cancelled')`
+      sql`${table.status} in ('applied', 'held', 'confirmed', 'waitlisted', 'cancelled')`
     ),
     check(
       'registrations_display_name_snapshot_check',
@@ -515,6 +542,10 @@ export const paymentRequests = sqliteTable(
     status: text('status').notNull(),
     dueAt: integer('due_at', { mode: 'timestamp_ms' }),
     stripeAccountId: text('stripe_account_id').notNull().default(''),
+    applicationFeeAmount: money('application_fee_amount').default(sql`0`),
+    checkoutAttempt: integer('checkout_attempt').notNull().default(0),
+    checkoutExpiresAt: integer('checkout_expires_at', { mode: 'timestamp_ms' }),
+    checkoutUrl: text('checkout_url').notNull().default(''),
     checkoutSessionId: text('checkout_session_id').notNull().default(''),
     paymentIntentId: text('payment_intent_id').notNull().default(''),
     chargeType: text('charge_type').notNull().default(''),
@@ -554,11 +585,16 @@ export const paymentRequests = sqliteTable(
       columns: [table.collectionId, table.currency],
       foreignColumns: [collections.id, collections.currency]
     }),
+    check(
+      'payment_requests_fee_check',
+      sql`${table.applicationFeeAmount} >= 0 and ${table.applicationFeeAmount} <= ${table.amountMinor}`
+    ),
+    check('payment_requests_attempt_check', sql`${table.checkoutAttempt} >= 0`),
     check('payment_requests_amount_minor_check', sql`${table.amountMinor} >= 0`),
     check('payment_requests_currency_check', sql`length(${table.currency}) = 3`),
     check(
       'payment_requests_status_check',
-      sql`${table.status} in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled')`
+      sql`${table.status} in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled', 'refund_due')`
     ),
     check('payment_requests_charge_type_check', sql`${table.chargeType} in ('', 'direct')`),
     index('payment_requests_registration_idx').on(table.registrationId),
@@ -583,6 +619,7 @@ export const paymentRecords = sqliteTable(
       .references(() => collectionPaymentMethods.id),
     externalReference: text('external_reference').notNull().default(''),
     note: text('note').notNull().default(''),
+    applicationFeeAmount: money('application_fee_amount').default(sql`0`),
     amountMinor: money('amount_minor'),
     currency: text('currency').notNull(),
     status: text('status').notNull(),
@@ -614,6 +651,10 @@ export const paymentRecords = sqliteTable(
       foreignColumns: [collectionPaymentMethods.collectionId, collectionPaymentMethods.id]
     }),
     check('payment_records_raw_payload_json_check', sql`json_valid(${table.rawPayloadJson})`),
+    check(
+      'payment_records_fee_check',
+      sql`${table.applicationFeeAmount} >= 0 and ${table.applicationFeeAmount} <= ${table.amountMinor}`
+    ),
     check('payment_records_amount_minor_check', sql`${table.amountMinor} >= 0`),
     check('payment_records_currency_check', sql`length(${table.currency}) = 3`),
     check(
@@ -721,7 +762,7 @@ export const outboxEvents = sqliteTable(
     check('outbox_events_payload_json_check', sql`json_valid(${table.payloadJson})`),
     check(
       'outbox_events_type_check',
-      sql`${table.type} in ('discord.role_sync_requested', 'panel.refresh')`
+      sql`${table.type} in ('discord.role_sync_requested', 'panel.refresh', 'notify')`
     ),
     check(
       'outbox_events_status_check',
@@ -807,3 +848,32 @@ export const discordLayoutResources = sqliteTable(
       .where(sql`${table.retiredAt} is null`)
   ]
 );
+
+export const paymentCheckoutSessions = sqliteTable('payment_checkout_sessions', {
+  sessionId: text('session_id').primaryKey(),
+  paymentRequestId: text('payment_request_id')
+    .notNull()
+    .references(() => paymentRequests.id),
+  attempt: integer('attempt').notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  url: text('url').notNull()
+});
+
+export const notificationDeliveries = sqliteTable('notification_deliveries', {
+  id: id(),
+  registrationId: text('registration_id')
+    .notNull()
+    .references(() => registrations.id),
+  kind: text('kind').notNull(),
+  channel: text('channel').notNull(),
+  messageId: text('message_id').notNull().default(''),
+  result: text('result').notNull(),
+  at: integer('at', { mode: 'timestamp_ms' }).notNull()
+});
+export const notificationThreads = sqliteTable('notification_threads', {
+  registrationId: text('registration_id')
+    .primaryKey()
+    .references(() => registrations.id),
+  threadId: text('thread_id').notNull().default(''),
+  archivedAt: integer('archived_at', { mode: 'timestamp_ms' })
+});

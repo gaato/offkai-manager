@@ -27,7 +27,7 @@ const commands: RegistrationCommand[] = [
   { type: 'setStatus', status: 'cancelled' }
 ];
 // Explicit independent oracle for every state x command, including all organizer targets.
-const matrix: Record<RegistrationState['kind'], readonly string[]> = {
+const matrix: Record<Exclude<RegistrationState['kind'], 'held'>, readonly string[]> = {
   none: [
     'confirmed',
     '!illegal_transition',
@@ -78,7 +78,11 @@ describe('pure registration lifecycle', () => {
   for (const [kind, outcomes] of Object.entries(matrix)) {
     commands.forEach((command, index) => {
       it(`${kind} x ${JSON.stringify(command)} = ${outcomes[index]}`, () => {
-        const result = decide({ kind: kind as RegistrationState['kind'] }, command, context);
+        const result = decide(
+          { kind: kind as Exclude<RegistrationState['kind'], 'held'> },
+          command,
+          context
+        );
         expect(result.ok ? result.next.kind : `!${result.code}`).toBe(outcomes[index]);
         if (result.ok) expect(result.effects).toContainEqual({ type: 'audit' });
       });
@@ -125,7 +129,7 @@ describe('pure registration lifecycle', () => {
           { maxLength: 300 }
         ),
         (capacity, mode, sequence) => {
-          const model: RegistrationState['kind'][] = Array(8).fill('none');
+          const model: Exclude<RegistrationState['kind'], 'held'>[] = Array(8).fill('none');
           const actual: RegistrationState[] = model.map((kind) => ({ kind }));
           for (const step of sequence) {
             const count = model.filter((kind) => kind === 'confirmed').length;
@@ -150,6 +154,7 @@ describe('pure registration lifecycle', () => {
             expect(result.ok ? result.next.kind : `!${result.code}`).toBe(expected);
             if (result.ok) {
               actual[step.actor] = result.next;
+              if (result.next.kind === 'held') throw new Error('free admission unexpectedly held');
               model[step.actor] = result.next.kind;
             }
             if (before.kind === 'cancelled') expect(actual[step.actor]).toBe(before);

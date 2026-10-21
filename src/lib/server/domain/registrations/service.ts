@@ -1,3 +1,4 @@
+import { attendanceState } from './core';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { and, eq, ne, sql } from 'drizzle-orm';
@@ -34,6 +35,8 @@ export interface RegistrationSummary {
   status: RegistrationStatus;
   displayNameSnapshot: string;
   searchText: string;
+  holdExpiresAt?: Date | null;
+  holdReleased?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,7 +73,7 @@ export async function createRegistration(
         throw new RegistrationError('validation', 'registration answers are invalid', { cause });
       }
       const active = tx
-        .select({ status: registrations.status })
+        .select({ status: registrations.status, holdExpiresAt: registrations.holdExpiresAt })
         .from(registrations)
         .where(
           and(
@@ -84,7 +87,7 @@ export async function createRegistration(
       const decision = decideRegistration(
         tx,
         event,
-        { kind: active[0] ? registrationStatusSchema.parse(active[0].status) : 'none' },
+        active[0] ? attendanceState(active[0]) : { kind: 'none' },
         { type: 'join' },
         clock
       );
@@ -115,6 +118,7 @@ export async function createRegistration(
           eventId: event.id,
           userId: input.userId,
           status,
+          holdExpiresAt: decision.next.kind === 'held' ? decision.next.holdExpiresAt : null,
           number,
           displayNameSnapshot: displayName,
           searchText
@@ -136,7 +140,7 @@ export async function createRegistration(
         },
         clock
       );
-      if (registration.status === 'confirmed') {
+      if (['confirmed', 'held'].includes(registration.status)) {
         ensurePaymentRequestsForRegistration(tx, event.id, registration.id, clock);
       }
       return registration;

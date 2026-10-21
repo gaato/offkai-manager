@@ -30,7 +30,7 @@ class FakeConnectGateway implements ConnectGateway {
     this.expectedParallelCreates = expectedParallelCreates;
   }
   private readonly expectedParallelCreates: number;
-  async createExpressAccount(): Promise<{
+  async createAccount(): Promise<{
     accountId: string;
   }> {
     this.createCalls += 1;
@@ -146,8 +146,8 @@ describe('Stripe Connect domain', () => {
       fixedClock
     );
     const gateway = new FakeConnectGateway();
-    const create = gateway.createExpressAccount.bind(gateway);
-    gateway.createExpressAccount = async () => {
+    const create = gateway.createAccount.bind(gateway);
+    gateway.createAccount = async () => {
       expect(client.db.$client.inTransaction).toBe(false);
       return create();
     };

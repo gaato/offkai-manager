@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EventPaymentFields from '$lib/components/payments/event-payment-fields.svelte';
   import SettingsPage from '$lib/components/page/settings-page.svelte';
   import { untrack } from 'svelte';
   import { superForm } from 'sveltekit-superforms';
@@ -197,6 +198,19 @@
                 class="input w-full"
               />
             </div>
+            <EventPaymentFields
+              bind:values={$form}
+              errors={{
+                paymentRequirement: $errors.paymentRequirement,
+                amountToCollect: $errors.amountToCollect,
+                priceOverride: $errors.priceOverride,
+                roundingUnit: $errors.roundingUnit,
+                holdMinutes: $errors.holdMinutes
+              }}
+              locale={data.locale}
+              {...data.paymentUi}
+              payoutsHref={`/app/organizations/${data.event.organizationId}/payouts`}
+            />
             <div class="grid gap-2">
               <label for="cancellationPolicy" class="label">{t('event.cancellation_policy')}</label>
               <textarea

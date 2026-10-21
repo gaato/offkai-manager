@@ -1,6 +1,12 @@
+import { tickOnce } from '$lib/server/domain/payments/holds';
+import {
+  deliverNotification,
+  archiveNotificationThreads,
+  NotificationRetry
+} from './notifications';
 import { DiscordAPIError, RateLimitError, type REST } from '@discordjs/rest';
 import { defaultTuning, type Tuning } from '$lib/server/config';
-import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { systemClock, type Clock } from '$lib/server/clock';
@@ -17,7 +23,7 @@ import { loadPanelEvent } from '$lib/server/domain/discord/panels';
 import { renderPanel } from '$lib/server/interactions/renderers';
 import { DiscordRateLimitError } from '$lib/server/gateways/discord/rest';
 
-const supportedTypes = ['discord.role_sync_requested', 'panel.refresh'];
+const supportedTypes = ['discord.role_sync_requested', 'panel.refresh', 'notify'];
 const payloadSchema = z.object({ registration_id: z.uuid(), event_id: z.uuid() });
 
 export interface ClaimedRoleSyncEvent {
@@ -66,6 +72,10 @@ export function claimRoleSyncEvents(
           inArray(outboxEvents.type, supportedTypes),
           eq(outboxEvents.status, 'pending'),
           or(
+            ne(outboxEvents.type, 'notify'),
+            sql`not exists (select 1 from outbox_events notifying where notifying.type = 'notify' and notifying.status = 'processing')`
+          ),
+          or(
             isNull(outboxEvents.dedupeKey),
             sql`not exists (select 1 from outbox_events running where running.dedupe_key = ${outboxEvents.dedupeKey} and running.status = 'processing')`
           ),
@@ -111,7 +121,10 @@ export async function processRoleSyncBatch(
   const claimed = claimRoleSyncEvents(client, tuning.OFFKAI_OUTBOX_BATCH_SIZE, clock);
   for (const event of claimed) {
     try {
-      if (event.type === 'panel.refresh') {
+      if (event.type === 'notify') {
+        if (!rest) throw new Error('Discord message transport is unavailable');
+        await deliverNotification(client, rest, event.payloadJson, clock, tuning);
+      } else if (event.type === 'panel.refresh') {
         if (!rest) throw new Error('Discord message transport is unavailable');
         await refreshPanels(client, rest, event.payloadJson, clock, timeZone);
       } else {
@@ -145,10 +158,12 @@ export async function processRoleSyncBatch(
             : String(cause),
         permanentDiscordFailure(cause)
           ? 1
-          : cause instanceof RateLimitError || cause instanceof DiscordRateLimitError
+          : cause instanceof NotificationRetry ||
+              cause instanceof RateLimitError ||
+              cause instanceof DiscordRateLimitError
             ? Number.MAX_SAFE_INTEGER
             : tuning.OFFKAI_OUTBOX_MAX_ATTEMPTS,
-        cause instanceof RateLimitError
+        cause instanceof NotificationRetry || cause instanceof RateLimitError
           ? cause.retryAfter
           : cause instanceof DiscordRateLimitError
             ? cause.retryAfterMs
@@ -248,7 +263,7 @@ function resolveRoleSyncTask(client: DatabaseClient, rawPayload: unknown) {
 }
 
 export class RoleSyncWorker {
-  private timer: ReturnType<typeof setInterval> | undefined;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private inFlight: Promise<void> | undefined;
 
   constructor(
@@ -264,18 +279,26 @@ export class RoleSyncWorker {
   start(): void {
     if (this.timer) return;
     resetProcessingRoleSyncEvents(this.client);
-    this.timer = setInterval(() => this.tick(), this.tuning.OFFKAI_OUTBOX_POLL_INTERVAL_MS);
-    this.timer.unref();
+    this.schedule();
   }
 
   async stop(): Promise<void> {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     await this.inFlight;
   }
 
+  private schedule(): void {
+    this.timer = setTimeout(
+      () => this.tick(),
+      Math.min(this.tuning.OFFKAI_OUTBOX_POLL_INTERVAL_MS, this.tuning.OFFKAI_HOLD_TICK_INTERVAL_MS)
+    );
+    this.timer.unref();
+  }
+
   private tick(): void {
     if (this.inFlight) return;
+    tickOnce(this.client, this.clock.now(), this.tuning);
     this.inFlight = processRoleSyncBatch(
       this.client,
       this.gateway,
@@ -285,12 +308,16 @@ export class RoleSyncWorker {
       this.rest,
       this.timeZone
     )
-      .then(() => undefined)
+      .then(async () => {
+        if (this.rest)
+          await archiveNotificationThreads(this.client, this.rest, this.clock, this.tuning);
+      })
       .catch((cause: unknown) => {
         this.logger.error({ err: cause }, 'Discord outbox pass failed');
       })
       .finally(() => {
         this.inFlight = undefined;
+        if (this.timer) this.schedule();
       });
   }
 }

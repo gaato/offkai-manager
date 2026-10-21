@@ -147,3 +147,17 @@ describe('configuration', () => {
     expect(env).toMatchObject({ HOST: '0.0.0.0', PORT: '8080', SHUTDOWN_TIMEOUT: '10' });
   });
 });
+
+it('validates fee, rounding and hold bounds together', () => {
+  const base = { OFFKAI_AUTH_DEV_BYPASS: 'true' };
+  expect(loadConfig({ ...base, OFFKAI_PLATFORM_FEE_BPS: '0' }).tuning.OFFKAI_PLATFORM_FEE_BPS).toBe(
+    0
+  );
+  for (const values of [
+    { OFFKAI_PLATFORM_FEE_BPS: '9000', OFFKAI_STRIPE_FEE_BPS_ESTIMATE: '1000' },
+    { OFFKAI_HOLD_MINUTES_MIN: '60', OFFKAI_HOLD_MINUTES_DEFAULT: '30' },
+    { OFFKAI_HOLD_MINUTES_MAX: '30' },
+    { OFFKAI_PRICE_ROUNDING_UNITS: '1,0' }
+  ])
+    expect(() => loadConfig({ ...base, ...values })).toThrow();
+});

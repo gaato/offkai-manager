@@ -1,3 +1,4 @@
+import { attendanceState } from './core';
 import { read } from '$lib/server/db/client';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write } from '$lib/server/db/client';
@@ -147,7 +148,7 @@ export async function withdrawRegistration(
     const decision = decideRegistration(
       tx,
       eventRows[0],
-      { kind: current.status },
+      attendanceState(current),
       { type: 'cancel' },
       clock
     );
@@ -175,7 +176,10 @@ export async function withdrawRegistration(
     );
     cancelPaymentRequestsForRegistration(tx, current.id, clock);
     let promotedRegistrationId: string | null = null;
-    if (current.status === 'confirmed' && event.registrationMode === 'auto_confirm') {
+    if (
+      ['confirmed', 'held'].includes(current.status) &&
+      event.registrationMode === 'auto_confirm'
+    ) {
       promotedRegistrationId = promoteOldestWaitlisted(
         tx,
         {

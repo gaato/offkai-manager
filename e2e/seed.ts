@@ -43,6 +43,7 @@ import {
   opsJourney,
   paymentEventFixtures,
   paymentJourney,
+  paidJourney,
   stripeSweepFixtures,
   suspendedUserFixture
 } from './fixtures';
@@ -598,6 +599,55 @@ export async function seedE2E(databasePath: string): Promise<void> {
       eventId: discordSetupFixture.eventId,
       panelTemplateJa: 'コピー {title}',
       panelTemplateEn: 'Copied panel {title}'
+    });
+    await createOrganization(client, {
+      actorUserId: sweepOwner.userId,
+      name: paidJourney.payoutOrganizationName
+    });
+    const paidOrg = await createOrganization(client, {
+      actorUserId: sweepOwner.userId,
+      name: paidJourney.organizationName
+    });
+    client.db
+      .insert(stripeConnectAccounts)
+      .values({
+        organizationId: paidOrg.id,
+        stripeAccountId: 'acct_e2e_paid',
+        dashboardType: 'none',
+        chargesEnabled: true,
+        detailsSubmitted: true,
+        payoutsEnabled: true,
+        onboardingStatus: 'ready'
+      })
+      .run();
+    const paidDraft = await createEvent(client, {
+      actorUserId: sweepOwner.userId,
+      organizationId: paidOrg.id,
+      title: paidJourney.eventTitle,
+      startsAt: '2099-11-01T18:00',
+      timeZone: 'Asia/Tokyo',
+      paymentRequirement: 'pay_later',
+      amountToCollect: '5000',
+      roundingUnit: 100,
+      manualCash: true,
+      manualPayPay: true
+    });
+    const paid = await publishEvent(client, {
+      actorUserId: sweepOwner.userId,
+      eventId: paidDraft.id
+    });
+    const paidParticipant = await upsertDiscordIdentity(client, {
+      providerUserId: '110000000000000099',
+      username: 'paid-participant',
+      displayName: 'Pay Later Participant',
+      avatarUrl: ''
+    });
+    await createRegistration(client, {
+      organizationSlug: paidOrg.slug,
+      eventSlug: paid.slug,
+      userId: paidParticipant.userId,
+      displayName: 'Pay Later Participant',
+      answers: []
     });
     const suspendedOrganization = await createOrganization(client, {
       actorUserId: sweepOwner.userId,

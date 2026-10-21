@@ -11,16 +11,35 @@ export interface ConnectAccount {
 
 /** Stripe Connect account management without coupling the domain to Stripe's SDK. */
 export interface ConnectGateway {
-  createExpressAccount(input: { organizationId: string }): Promise<{
+  createAccount(input: { organizationId: string }): Promise<{
     accountId: string;
   }>;
   createAccountLink(input: { accountId: string; returnUrl: string; refreshUrl: string }): Promise<{
     url: string;
   }>;
+  createAccountSession?(accountId: string): Promise<{ clientSecret: string }>;
   getAccount(accountId: string): Promise<ConnectAccount>;
 }
 
+declare const readyAccountBrand: unique symbol;
+export type ReadyConnectedAccount = {
+  readonly stripeAccountId: string;
+  readonly [readyAccountBrand]: true;
+};
+export function requireReadyConnectedAccount(account: {
+  stripeAccountId: string;
+  chargesEnabled: boolean;
+  onboardingStatus: string;
+}): ReadyConnectedAccount {
+  if (!account.stripeAccountId || !account.chargesEnabled || account.onboardingStatus !== 'ready')
+    throw new Error('connected account is not ready');
+  return { stripeAccountId: account.stripeAccountId } as ReadyConnectedAccount;
+}
+
 export interface CreateCheckoutSessionInput {
+  readyAccount: ReadyConnectedAccount;
+  expiresAt?: Date;
+  applicationFeeAmount?: bigint;
   referenceId: string;
   productName: string;
   amountMinor: bigint;
@@ -47,6 +66,8 @@ interface VerifiedCheckoutEventBase {
   eventType: string;
   stripeAccountId: string;
   sessionId: string;
+  referenceId?: string;
+  applicationFeeAmount?: bigint;
   raw: unknown;
 }
 

@@ -373,7 +373,7 @@ describe('Discord organizer setup persistence', () => {
     ).toHaveLength(1);
     expect(
       getEventDashboard(client, owner.userId, event.id).steps.map((step) => step.done)
-    ).toEqual([true, true, true]);
+    ).toEqual([true, true, true, true]);
   });
   it('copies only same-organization configuration, shifting dates and clearing review/lifecycle/participation', async () => {
     const { owner, event, org } = await fixture();

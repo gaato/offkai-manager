@@ -1,3 +1,4 @@
+import type { EventPaymentInput } from '../payments/event-payment';
 import type {
   DiscordPolicy,
   EventVisibility,
@@ -25,6 +26,11 @@ export interface EventSummary {
   contact: string;
   cancellationPolicy: string;
   registrationMode: RegistrationMode;
+  paymentRequirement: string;
+  platformFeeBps: number;
+  amountToCollectMinor: bigint;
+  roundingUnit: number;
+  holdMinutes: number;
   panelTemplateJa: string;
   panelTemplateEn: string;
   panelTemplateReviewedAt: Date | null;
@@ -41,7 +47,7 @@ export interface EventAccess {
   organizationSuspendedAt: Date | null;
 }
 
-export interface CreateEventInput {
+export interface CreateEventInput extends EventPaymentInput {
   actorUserId: string;
   organizationId: string;
   title: string;
@@ -52,7 +58,7 @@ export interface CreateEventInput {
   timeZone: string;
 }
 
-export interface UpdateEventSettingsInput {
+export interface UpdateEventSettingsInput extends EventPaymentInput {
   actorUserId: string;
   eventId: string;
   title: string;

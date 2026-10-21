@@ -43,15 +43,29 @@ export function loadPanelEvent(tx: DatabaseTransaction, eventId: string) {
   const confirmed = tx
     .select({ value: count() })
     .from(registrations)
-    .where(and(eq(registrations.eventId, eventId), eq(registrations.status, 'confirmed')))
+    .where(
+      and(eq(registrations.eventId, eventId), inArray(registrations.status, ['confirmed', 'held']))
+    )
     .get()!.value;
-  return { ...row, counts: { confirmed }, fields: loadActiveFormFields(tx, eventId) };
+  const price = tx
+    .select()
+    .from(collections)
+    .where(and(eq(collections.eventId, eventId), ne(collections.status, 'archived')))
+    .get()?.amountMinor;
+  return {
+    ...row,
+    event: { ...row.event, ...(price ? { priceMinor: price } : {}) },
+    counts: { confirmed },
+    fields: loadActiveFormFields(tx, eventId)
+  };
 }
 function assertGuild(actual: string | null | undefined, guildId: string | undefined): void {
   if (!actual) throw new PanelError('no_guild');
   if (!guildId || actual !== guildId) throw new PanelError('wrong_guild');
 }
 export function assertFreeEvent(tx: DatabaseTransaction, eventId: string): void {
+  const event = tx.select().from(events).where(eq(events.id, eventId)).get();
+  if (event && event.paymentRequirement !== 'none') return;
   const paid = tx
     .select()
     .from(collections)

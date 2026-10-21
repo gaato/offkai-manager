@@ -7,6 +7,7 @@ import {
 } from '$lib/server/interactions/custom-id';
 
 const arbitraries = {
+  pay: fc.uuid().map((id): CustomAction => ({ action: 'pay', args: [id] })),
   join: fc.uuid().map((id): CustomAction => ({ action: 'join', args: [id] })),
   status: fc.uuid().map((id): CustomAction => ({ action: 'status', args: [id] })),
   cancel: fc.uuid().map((id): CustomAction => ({ action: 'cancel', args: [id] })),

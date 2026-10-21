@@ -15,9 +15,12 @@ const expectedTables = [
   'events',
   'external_accounts',
   'interaction_drafts',
+  'notification_deliveries',
+  'notification_threads',
   'organization_memberships',
   'organizations',
   'outbox_events',
+  'payment_checkout_sessions',
   'payment_records',
   'payment_requests',
   'registration_form_answer_options',
@@ -132,6 +135,16 @@ const expectedRetentionForeignKeys = [
 ] as const;
 
 const checkFragments: Readonly<Record<string, readonly string[]>> = {
+  events_payment_requirement_check: ['none', 'pay_to_confirm', 'pay_later'],
+  events_platform_fee_bps_check: ['platform_fee_bps>=0', 'platform_fee_bps<10000'],
+  events_amount_to_collect_minor_check: ['amount_to_collect_minor>=0'],
+  events_rounding_unit_check: ['rounding_unit>0'],
+  events_hold_minutes_check: ['hold_minutes>=30', 'hold_minutes<=1440'],
+  registrations_held_deadline_check: ["status<>'held'", 'hold_expires_atisnotnull'],
+  registrations_hold_released_check: ['hold_released', '0,1'],
+  payment_requests_fee_check: ['application_fee_amount>=0', 'application_fee_amount<=amount_minor'],
+  payment_requests_attempt_check: ['checkout_attempt>=0'],
+  payment_records_fee_check: ['application_fee_amount>=0', 'application_fee_amount<=amount_minor'],
   event_form_fields_required_check: ['required', '0,1'],
   registration_form_answers_value_bool_check: ['value_bool', '0,1'],
   stripe_connect_accounts_charges_enabled_check: ['charges_enabled', '0,1'],
@@ -327,8 +340,18 @@ describe('database schema parity', () => {
       .all() as { sql: string }[];
     const checks = new Map<string, string>();
     for (const { sql } of rows) {
-      for (const match of sql.matchAll(/CONSTRAINT\s+["`]([^"`]+)["`]\s+CHECK\(([^\n]+)\)/g))
-        checks.set(match[1], canonicalSql(match[2]));
+      // ALTER TABLE appends inline constraints on the same line; balance nested SQL calls.
+      for (const match of sql.matchAll(/CONSTRAINT\s+["`]([^"`]+)["`]\s+CHECK\(/g)) {
+        const start = match.index! + match[0].length;
+        let depth = 1;
+        let end = start;
+        while (depth && end < sql.length) {
+          if (sql[end] === '(') depth++;
+          if (sql[end] === ')') depth--;
+          end++;
+        }
+        checks.set(match[1], canonicalSql(sql.slice(start, end - 1)));
+      }
     }
     expect([...checks.keys()].sort()).toEqual(Object.keys(checkFragments).sort());
     for (const [name, fragments] of Object.entries(checkFragments)) {

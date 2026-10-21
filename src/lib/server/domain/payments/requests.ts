@@ -1,3 +1,4 @@
+import { completeAttendancePayment } from './completion';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { and, asc, desc, eq, gt, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
@@ -283,7 +284,7 @@ export function listUnresolvedSettleConflicts(
         eq(paymentRecords.status, 'settled'),
         gt(paymentRecords.amountMinor, 0n),
         or(
-          inArray(paymentRequests.status, ['cancelled', 'waived']),
+          inArray(paymentRequests.status, ['cancelled', 'waived', 'refund_due']),
           and(eq(paymentRequests.status, 'paid'), eq(registrations.status, 'cancelled'))
         ),
         notExists(
@@ -430,6 +431,13 @@ export function backfillPaymentRequests(
           collectionId: collection.id,
           registrationId: id,
           collectionPaymentMethodId: methodId,
+          applicationFeeAmount:
+            (collection.amountMinor *
+              BigInt(
+                tx.select().from(events).where(eq(events.id, collection.eventId)).get()!
+                  .platformFeeBps
+              )) /
+            10000n,
           amountMinor: collection.amountMinor,
           currency: collection.currency,
           status: 'pending',
@@ -474,6 +482,13 @@ export function ensurePaymentRequestsForRegistration(
         collectionId: collection.id,
         registrationId,
         collectionPaymentMethodId: methodId,
+        applicationFeeAmount:
+          (collection.amountMinor *
+            BigInt(
+              tx.select().from(events).where(eq(events.id, collection.eventId)).get()!
+                .platformFeeBps
+            )) /
+          10000n,
         amountMinor: collection.amountMinor,
         currency: collection.currency,
         status: 'pending',
@@ -506,6 +521,12 @@ export function cancelPaymentRequestsForRegistration(
     )
     .returning({ id: paymentRequests.id })
     .all();
+  tx.update(paymentRequests)
+    .set({ status: 'refund_due', updatedAt: clock.now() })
+    .where(
+      and(eq(paymentRequests.registrationId, registrationId), eq(paymentRequests.status, 'paid'))
+    )
+    .run();
   return rows.map(({ id }) => id);
 }
 
@@ -562,6 +583,7 @@ export async function confirmManualPayment(
       .set({ status: 'paid', updatedAt: clock.now() })
       .where(eq(paymentRequests.id, context.request.id))
       .run();
+    completeAttendancePayment(tx, context.request, clock, record.id, 'paid');
     appendAudit(
       tx,
       {
@@ -641,6 +663,7 @@ export async function waivePaymentRequest(
       .set({ status: 'waived', updatedAt: clock.now() })
       .where(eq(paymentRequests.id, context.request.id))
       .run();
+    completeAttendancePayment(tx, context.request, clock, record.id, 'waived');
     appendAudit(
       tx,
       {

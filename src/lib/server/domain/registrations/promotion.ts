@@ -1,9 +1,10 @@
+import { enqueueNotification } from '../notifications/outbox';
 import { systemClock, type Clock } from '$lib/server/clock';
-import { and, asc, count, eq } from 'drizzle-orm';
+import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import type { DatabaseTransaction } from '$lib/server/db/client';
 import { events, registrations } from '$lib/server/db/schema';
 import { decideRegistration, applyRegistrationEffects } from './lifecycle';
-import { ensurePaymentRequestsForRegistration } from '$lib/server/domain/payments';
+import { ensurePaymentRequestsForRegistration } from '$lib/server/domain/payments/requests';
 
 /** Promotes the oldest waiter inside the caller's write transaction if capacity permits. */
 export function promoteOldestWaitlisted(
@@ -19,7 +20,12 @@ export function promoteOldestWaitlisted(
   const confirmedRows = tx
     .select({ value: count(registrations.id) })
     .from(registrations)
-    .where(and(eq(registrations.eventId, input.eventId), eq(registrations.status, 'confirmed')))
+    .where(
+      and(
+        eq(registrations.eventId, input.eventId),
+        inArray(registrations.status, ['confirmed', 'held'])
+      )
+    )
     .all();
   if (input.capacity !== null && (confirmedRows[0]?.value ?? 0) >= input.capacity) return null;
   const waitlistedRows = tx
@@ -41,7 +47,11 @@ export function promoteOldestWaitlisted(
     clock
   );
   tx.update(registrations)
-    .set({ status: 'confirmed', updatedAt: clock.now() })
+    .set({
+      status: decision.next.kind,
+      holdExpiresAt: decision.next.kind === 'held' ? decision.next.holdExpiresAt : null,
+      updatedAt: clock.now()
+    })
     .where(and(eq(registrations.id, waitlisted.id), eq(registrations.status, 'waitlisted')))
     .run();
   applyRegistrationEffects(
@@ -60,5 +70,6 @@ export function promoteOldestWaitlisted(
     clock
   );
   ensurePaymentRequestsForRegistration(tx, input.eventId, waitlisted.id, clock);
+  enqueueNotification(tx, waitlisted.id, 'waitlist_confirmed', clock);
   return waitlisted.id;
 }

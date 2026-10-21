@@ -1,10 +1,15 @@
+import { completeAttendancePayment } from './completion';
+import { promoteOldestWaitlisted } from '../registrations/promotion';
+import { enqueuePanelRefresh, enqueueRoleSync } from '../discord/outbox';
+import { enqueueNotification } from '../notifications/outbox';
 import { systemClock, type Clock } from '$lib/server/clock';
-import { write, read } from '$lib/server/db/client';
+import { write } from '$lib/server/db/client';
 import { and, eq } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
   events,
   paymentRecords,
+  paymentCheckoutSessions,
   paymentRequests,
   registrations,
   stripeWebhookEvents
@@ -18,6 +23,8 @@ export interface SettleCheckoutInput {
   stripeEventId?: string;
   eventType?: string;
   sessionId: string;
+  referenceId?: string;
+  applicationFeeAmount?: bigint;
   paymentIntentId?: string;
   paymentStatus: string;
   amountTotal: bigint;
@@ -59,7 +66,7 @@ export async function settleCheckout(
   if (input.stripeEventId !== undefined && !stripeEventId) {
     throw new SettlementError('validation', 'stripe event id cannot be blank');
   }
-  return read(client, (tx) => {
+  return write(client, (tx) => {
     const webhookInserted = insertWebhookEvent(
       tx,
       {
@@ -70,13 +77,45 @@ export async function settleCheckout(
       },
       clock
     );
-    const requestRows = tx
-      .select({ request: paymentRequests })
-      .from(paymentRequests)
-      .where(eq(paymentRequests.checkoutSessionId, input.sessionId))
-      .limit(1)
-      .all();
-    const request = requestRows[0]?.request;
+    const history = tx
+      .select()
+      .from(paymentCheckoutSessions)
+      .where(eq(paymentCheckoutSessions.sessionId, input.sessionId))
+      .get();
+    const reference = input.referenceId?.split(':');
+    const request =
+      tx
+        .select()
+        .from(paymentRequests)
+        .where(
+          history
+            ? eq(paymentRequests.id, history.paymentRequestId)
+            : eq(paymentRequests.checkoutSessionId, input.sessionId)
+        )
+        .get() ??
+      (reference && reference.length === 2
+        ? tx.select().from(paymentRequests).where(eq(paymentRequests.id, reference[0])).get()
+        : undefined);
+    if (request && !history && request.checkoutSessionId !== input.sessionId) {
+      if (
+        request.stripeAccountId !== input.stripeAccountId ||
+        !reference ||
+        Number(reference[1]) < 1 ||
+        Number(reference[1]) > request.checkoutAttempt ||
+        request.checkoutAttempt === 0
+      )
+        throw new SettlementError('resolution_miss', 'unrecognized checkout intent');
+      tx.insert(paymentCheckoutSessions)
+        .values({
+          sessionId: input.sessionId,
+          paymentRequestId: request.id,
+          attempt: request.checkoutAttempt,
+          expiresAt: request.checkoutExpiresAt!,
+          url: ''
+        })
+        .onConflictDoNothing()
+        .run();
+    }
     if (request) {
       if (!webhookInserted) return alreadyProcessed('payment_request');
       return settlePaymentRequest(tx, request, input, currency, stripeEventId, clock);
@@ -97,8 +136,40 @@ function settlePaymentRequest(
   stripeEventId: string,
   clock: Clock = systemClock
 ): CheckoutSettlement {
-  if (request.stripeAccountId && request.stripeAccountId !== input.stripeAccountId) {
+  if (!request.stripeAccountId || request.stripeAccountId !== input.stripeAccountId) {
     throw new SettlementError('account_mismatch', 'webhook connected account does not match');
+  }
+  if (input.eventType === 'checkout.session.expired') {
+    if (
+      request.status === 'payment_pending' &&
+      (request.checkoutSessionId === input.sessionId ||
+        (!request.checkoutSessionId &&
+          input.referenceId === `${request.id}:${request.checkoutAttempt}`))
+    ) {
+      tx.update(paymentRequests)
+        .set({ status: 'pending', checkoutUrl: '', updatedAt: clock.now() })
+        .where(eq(paymentRequests.id, request.id))
+        .run();
+      appendAudit(
+        tx,
+        {
+          actorUserId: null,
+          eventId: request.eventId,
+          action: 'payment.checkout_expired',
+          targetType: 'payment_request',
+          targetId: request.id
+        },
+        clock
+      );
+    }
+    markWebhookProcessed(tx, stripeEventId, clock);
+    return {
+      alreadyProcessed: false,
+      ignoredUnpaid: true,
+      conflict: false,
+      kind: 'payment_request',
+      record: null
+    };
   }
   if (input.paymentStatus !== 'paid') {
     markWebhookProcessed(tx, stripeEventId, clock);
@@ -110,7 +181,13 @@ function settlePaymentRequest(
       record: null
     };
   }
-  if (request.status === 'paid') {
+  if (
+    tx
+      .select()
+      .from(paymentRecords)
+      .where(eq(paymentRecords.idempotencyKey, `stripe-session:${input.sessionId}`))
+      .get()
+  ) {
     markWebhookProcessed(tx, stripeEventId, clock);
     return alreadyProcessed('payment_request');
   }
@@ -127,17 +204,61 @@ function settlePaymentRequest(
       collectionPaymentMethodId: request.collectionPaymentMethodId,
       externalReference: input.paymentIntentId ?? '',
       note: '',
+      applicationFeeAmount: request.applicationFeeAmount,
       amountMinor: request.amountMinor,
       currency: request.currency,
       status: 'settled',
       confirmedAt: clock.now(),
       rawPayloadJson: jsonPayload(input.raw),
-      idempotencyKey: stripeEventId
+      idempotencyKey: `stripe-session:${input.sessionId}`
     })
     .returning()
     .all();
   const record = recordRows[0];
-  const conflict = request.status === 'cancelled' || request.status === 'waived';
+  const registration = tx
+    .select()
+    .from(registrations)
+    .where(eq(registrations.id, request.registrationId))
+    .get()!;
+  const event = tx.select().from(events).where(eq(events.id, request.eventId)).get()!;
+  const conflict =
+    ['cancelled', 'waived', 'paid', 'refund_due'].includes(request.status) ||
+    registration.status === 'cancelled' ||
+    Boolean(event.cancelledAt) ||
+    (registration.status === 'held' &&
+      (!registration.holdExpiresAt || registration.holdExpiresAt <= clock.now()));
+  if (conflict) {
+    tx.update(paymentRequests)
+      .set({ status: 'refund_due', updatedAt: clock.now() })
+      .where(eq(paymentRequests.id, request.id))
+      .run();
+    if (registration.status === 'held')
+      tx.update(registrations)
+        .set({ status: 'cancelled', holdReleased: true, updatedAt: clock.now() })
+        .where(eq(registrations.id, registration.id))
+        .run();
+    enqueuePanelRefresh(tx, request.eventId, clock);
+    if (registration.status === 'held') {
+      enqueueRoleSync(tx, request.eventId, registration.id, clock);
+      enqueueNotification(tx, registration.id, 'hold_expired', clock);
+      if (
+        event.registrationMode === 'auto_confirm' &&
+        !event.cancelledAt &&
+        !event.archivedAt &&
+        clock.now() < event.startsAt
+      )
+        promoteOldestWaitlisted(
+          tx,
+          {
+            eventId: event.id,
+            capacity: event.capacity,
+            actorUserId: registration.userId,
+            reason: 'late payment after hold release'
+          },
+          clock
+        );
+    }
+  }
   if (!conflict) {
     tx.update(paymentRequests)
       .set({
@@ -148,6 +269,7 @@ function settlePaymentRequest(
       .where(eq(paymentRequests.id, request.id))
       .run();
   }
+  if (!conflict) completeAttendancePayment(tx, request, clock, record.id, 'paid');
   markWebhookProcessed(tx, stripeEventId, clock);
   appendAudit(
     tx,
@@ -159,7 +281,7 @@ function settlePaymentRequest(
       targetId: request.id,
       before: { status: request.status },
       after: {
-        status: conflict ? request.status : 'paid',
+        status: conflict ? 'refund_due' : 'paid',
         paymentRecordId: record.id,
         amountMinor: record.amountMinor.toString(),
         currency: record.currency,
@@ -248,7 +370,8 @@ export async function markConflictRefunded(
     const conflict =
       row.record.status === 'settled' &&
       row.record.amountMinor > 0n &&
-      (row.requestStatus === 'cancelled' ||
+      (row.requestStatus === 'refund_due' ||
+        row.requestStatus === 'cancelled' ||
         row.requestStatus === 'waived' ||
         (row.requestStatus === 'paid' && row.registrationStatus === 'cancelled'));
     if (!conflict) {
