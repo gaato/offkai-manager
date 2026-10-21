@@ -25,7 +25,7 @@ describe('interaction router and responses', () => {
       }
     }
   );
-  it.each(['panel', 'status', 'remind'])('routes offkai %s to coming soon', async (subcommand) => {
+  it.each(['status', 'remind'])('routes offkai %s to coming soon', async (subcommand) => {
     expect(await dispatchInteraction(makeChatInput('offkai', subcommand), dependencies)).toEqual(
       ephemeralReply(translate('en', 'interaction.soon'))
     );

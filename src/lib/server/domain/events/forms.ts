@@ -7,7 +7,15 @@ import { eventFormFieldOptions, eventFormFields, events } from '$lib/server/db/s
 import { appendAudit } from '$lib/server/domain/audit';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
 import { formFieldTypeSchema, type FormFieldType } from '$lib/shared/registration-form';
+import { eventDiscordIntegrations } from '$lib/server/db/schema';
+import { discordLimits } from '$lib/shared/discord-limits';
 import { EventError } from './errors';
+
+export class DiscordFormLimitError extends EventError {
+  constructor(readonly limit: 'questions' | 'options') {
+    super('validation', 'form exceeds Discord modal limits');
+  }
+}
 
 export interface RegistrationFormOption {
   id: string;
@@ -371,6 +379,23 @@ function upsertFieldInTransaction(
   fixedKey?: string,
   clock: Clock = systemClock
 ): RegistrationFormField {
+  const guild = tx
+    .select()
+    .from(eventDiscordIntegrations)
+    .where(eq(eventDiscordIntegrations.eventId, input.eventId))
+    .get()?.guildId;
+  if (guild) {
+    if (
+      !input.fieldId &&
+      loadActiveFormFields(tx, input.eventId).length >= discordLimits.modalComponents
+    )
+      throw new DiscordFormLimitError('questions');
+    if (
+      (values.type === 'select' && values.optionLabels.length > discordLimits.selectOptions) ||
+      (values.type === 'multiselect' && values.optionLabels.length > discordLimits.checkboxOptions)
+    )
+      throw new DiscordFormLimitError('options');
+  }
   let fieldRow: typeof eventFormFields.$inferSelect;
   let before: ReturnType<typeof fieldAuditSnapshot> | undefined;
   if (input.fieldId) {

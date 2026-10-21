@@ -13,3 +13,5 @@ export * from './runtime-schema';
 export * from './service';
 
 export * from './types';
+
+export { editRegistrationAnswers, loadOwnedAnswerData } from './answers';

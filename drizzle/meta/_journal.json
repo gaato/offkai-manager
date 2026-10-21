@@ -15,6 +15,13 @@
       "when": 1792545094840,
       "tag": "0001_personal_organizations",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792545094841,
+      "tag": "0002_discord_registration",
+      "breakpoints": true
     }
   ]
 }

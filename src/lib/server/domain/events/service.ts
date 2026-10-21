@@ -4,6 +4,7 @@ import { write, read } from '$lib/server/db/client';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import { events } from '$lib/server/db/schema';
+import { enqueueExistingPanelRefresh } from '$lib/server/domain/discord/outbox';
 import { appendAudit } from '$lib/server/domain/audit';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
 import { parseWallClock } from '$lib/server/time';
@@ -163,6 +164,7 @@ export async function updateSettings(
       },
       clock
     );
+    enqueueExistingPanelRefresh(tx, updated.id, clock);
     return updated;
   });
 }
@@ -289,6 +291,7 @@ async function mutateLifecycle(
       },
       clock
     );
+    enqueueExistingPanelRefresh(tx, updated.id, clock);
     return updated;
   });
 }

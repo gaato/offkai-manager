@@ -1,9 +1,8 @@
 import { systemClock, type Clock } from '$lib/server/clock';
 import { and, asc, count, eq } from 'drizzle-orm';
 import type { DatabaseTransaction } from '$lib/server/db/client';
-import { registrations } from '$lib/server/db/schema';
-import { appendAudit } from '$lib/server/domain/audit';
-import { enqueueRoleSync } from '$lib/server/domain/discord';
+import { events, registrations } from '$lib/server/db/schema';
+import { decideRegistration, applyRegistrationEffects } from './lifecycle';
 import { ensurePaymentRequestsForRegistration } from '$lib/server/domain/payments';
 
 /** Promotes the oldest waiter inside the caller's write transaction if capacity permits. */
@@ -32,12 +31,22 @@ export function promoteOldestWaitlisted(
     .all();
   const waitlisted = waitlistedRows[0];
   if (!waitlisted) return null;
+  const event = tx.select().from(events).where(eq(events.id, input.eventId)).get();
+  if (!event) return null;
+  const decision = decideRegistration(
+    tx,
+    event,
+    { kind: 'waitlisted' },
+    { type: 'promote' },
+    clock
+  );
   tx.update(registrations)
     .set({ status: 'confirmed', updatedAt: clock.now() })
     .where(and(eq(registrations.id, waitlisted.id), eq(registrations.status, 'waitlisted')))
     .run();
-  appendAudit(
+  applyRegistrationEffects(
     tx,
+    decision,
     {
       actorUserId: input.actorUserId,
       eventId: input.eventId,
@@ -51,6 +60,5 @@ export function promoteOldestWaitlisted(
     clock
   );
   ensurePaymentRequestsForRegistration(tx, input.eventId, waitlisted.id, clock);
-  enqueueRoleSync(tx, input.eventId, waitlisted.id, clock);
   return waitlisted.id;
 }

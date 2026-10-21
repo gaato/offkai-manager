@@ -13,8 +13,7 @@ import {
   registrationFormAnswers,
   registrations
 } from '$lib/server/db/schema';
-import { appendAudit } from '$lib/server/domain/audit';
-import { enqueueRoleSync } from '$lib/server/domain/discord';
+import { decideRegistration, applyRegistrationEffects } from './lifecycle';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
 import {
   cancelPaymentRequestsForRegistration,
@@ -299,19 +298,13 @@ export async function changeRegistrationStatus(
       throw new RegistrationError('not_found', 'registration not found');
     }
     const currentStatus = registrationStatusSchema.parse(current.status);
-    if (!canChangeRegistrationStatus(currentStatus, input.status)) {
-      throw new RegistrationError('illegal_transition', 'registration status transition denied');
-    }
-    if (input.status === 'confirmed' && event.capacity !== null) {
-      const confirmedRows = tx
-        .select({ value: count(registrations.id) })
-        .from(registrations)
-        .where(and(eq(registrations.eventId, event.id), eq(registrations.status, 'confirmed')))
-        .all();
-      if ((confirmedRows[0]?.value ?? 0) >= event.capacity) {
-        throw new RegistrationError('capacity', 'event capacity has been reached');
-      }
-    }
+    const decision = decideRegistration(
+      tx,
+      event,
+      { kind: currentStatus },
+      { type: 'setStatus', status: input.status },
+      clock
+    );
     const updatedRows = tx
       .update(registrations)
       .set({ status: input.status, updatedAt: clock.now() })
@@ -322,8 +315,9 @@ export async function changeRegistrationStatus(
       throw new RegistrationError('illegal_transition', 'registration changed concurrently');
     }
     const updated = parseRegistration(updatedRows[0]);
-    appendAudit(
+    applyRegistrationEffects(
       tx,
+      decision,
       {
         actorUserId: input.actorUserId,
         eventId: event.id,
@@ -336,7 +330,6 @@ export async function changeRegistrationStatus(
       },
       clock
     );
-    enqueueRoleSync(tx, event.id, current.id, clock);
     if (input.status === 'confirmed') {
       ensurePaymentRequestsForRegistration(tx, event.id, current.id, clock);
     } else if (input.status === 'cancelled') {
@@ -360,15 +353,6 @@ export async function changeRegistrationStatus(
     }
     return updated;
   });
-}
-
-function canChangeRegistrationStatus(
-  from: RegistrationStatus,
-  to: Extract<RegistrationStatus, 'confirmed' | 'waitlisted' | 'cancelled'>
-): boolean {
-  if (to === 'confirmed') return from === 'applied' || from === 'waitlisted';
-  if (to === 'waitlisted') return from === 'applied' || from === 'confirmed';
-  return from !== 'cancelled';
 }
 
 function registrationAction(

@@ -386,7 +386,7 @@ describe('Discord role sync outbox', () => {
     }>(sql`
       select payload_json ->> 'registration_id' as "registrationId"
       from outbox_events
-      where payload_json ->> 'event_id' = ${approval.id}
+      where type = 'discord.role_sync_requested' and payload_json ->> 'event_id' = ${approval.id}
       order by created_at asc
     `);
     expect(approvalRows.map(({ registrationId }) => registrationId)).toEqual([
@@ -439,7 +439,7 @@ describe('Discord role sync outbox', () => {
     }>(sql`
       select payload_json ->> 'registration_id' as "registrationId"
       from outbox_events
-      where payload_json ->> 'event_id' = ${automatic.id}
+      where type = 'discord.role_sync_requested' and payload_json ->> 'event_id' = ${automatic.id}
       order by created_at asc, id asc
     `);
     expect(automaticRows.map(({ registrationId }) => registrationId).sort()).toEqual(

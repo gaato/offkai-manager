@@ -1,0 +1,881 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Discord pure renderers > maps checkbox to a prefilled native modal component > checkbox 1`] = `
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "field:question",
+          "max_values": 1,
+          "min_values": 1,
+          "options": [
+            {
+              "default": true,
+              "label": "Yes",
+              "value": "yes",
+            },
+          ],
+          "required": true,
+          "type": 22,
+        },
+        "description": "Please answer",
+        "label": "Question",
+        "type": 18,
+      },
+    ],
+    "custom_id": "om1:edit_submit:12345678-1234-4234-8234-123456789012",
+    "title": "Edit registration answers",
+  },
+  "type": 9,
+}
+`;
+
+exports[`Discord pure renderers > maps consent to a prefilled native modal component > consent 1`] = `
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "field:question",
+          "max_values": 1,
+          "min_values": 1,
+          "options": [
+            {
+              "default": true,
+              "label": "I agree",
+              "value": "yes",
+            },
+          ],
+          "required": true,
+          "type": 22,
+        },
+        "description": "Please answer",
+        "label": "Question",
+        "type": 18,
+      },
+    ],
+    "custom_id": "om1:edit_submit:12345678-1234-4234-8234-123456789012",
+    "title": "Edit registration answers",
+  },
+  "type": 9,
+}
+`;
+
+exports[`Discord pure renderers > maps multiselect to a prefilled native modal component > multiselect 1`] = `
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "field:question",
+          "max_values": 2,
+          "min_values": 1,
+          "options": [
+            {
+              "default": true,
+              "label": "Option A",
+              "value": "a",
+            },
+            {
+              "default": true,
+              "label": "Option B",
+              "value": "b",
+            },
+          ],
+          "required": true,
+          "type": 22,
+        },
+        "description": "Please answer",
+        "label": "Question",
+        "type": 18,
+      },
+    ],
+    "custom_id": "om1:edit_submit:12345678-1234-4234-8234-123456789012",
+    "title": "Edit registration answers",
+  },
+  "type": 9,
+}
+`;
+
+exports[`Discord pure renderers > maps select to a prefilled native modal component > select 1`] = `
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "field:question",
+          "max_values": 1,
+          "min_values": 1,
+          "options": [
+            {
+              "default": true,
+              "label": "Option A",
+              "value": "a",
+            },
+            {
+              "default": false,
+              "label": "Option B",
+              "value": "b",
+            },
+          ],
+          "required": true,
+          "type": 3,
+        },
+        "description": "Please answer",
+        "label": "Question",
+        "type": 18,
+      },
+    ],
+    "custom_id": "om1:edit_submit:12345678-1234-4234-8234-123456789012",
+    "title": "Edit registration answers",
+  },
+  "type": 9,
+}
+`;
+
+exports[`Discord pure renderers > maps text to a prefilled native modal component > text 1`] = `
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "field:question",
+          "max_length": 500,
+          "required": true,
+          "style": 1,
+          "type": 4,
+          "value": "My saved answer",
+        },
+        "description": "Please answer",
+        "label": "Question",
+        "type": 18,
+      },
+    ],
+    "custom_id": "om1:edit_submit:12345678-1234-4234-8234-123456789012",
+    "title": "Edit registration answers",
+  },
+  "type": 9,
+}
+`;
+
+exports[`Discord pure renderers > maps textarea to a prefilled native modal component > textarea 1`] = `
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "field:question",
+          "max_length": 4000,
+          "required": true,
+          "style": 2,
+          "type": 4,
+          "value": "My saved answer",
+        },
+        "description": "Please answer",
+        "label": "Question",
+        "type": 18,
+      },
+    ],
+    "custom_id": "om1:edit_submit:12345678-1234-4234-8234-123456789012",
+    "title": "Edit registration answers",
+  },
+  "type": 9,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in en > applied 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+Reception number
+
+# 042
+
+📝 Applied — waiting for organizer approval. You can refresh this card to check.
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:edit:12345678-1234-4234-8234-123456789012",
+                "label": "Edit answers",
+                "style": 2,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+                "label": "Cancel registration",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "Refresh",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in en > cancel 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "Cancel your registration for this event?
+
+## Meetup @everyone
+
+Contact staff.",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:cancel_confirm:12345678-1234-4234-8234-123456789012",
+                "label": "Confirm cancellation",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "My status",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in en > cancelled 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+Reception number
+
+# 042
+
+❌ Registration cancelled
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:join:12345678-1234-4234-8234-123456789012",
+                "label": "Join",
+                "style": 1,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "Refresh",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in en > confirmed 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+Reception number
+
+# 042
+
+✅ Participation confirmed
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:edit:12345678-1234-4234-8234-123456789012",
+                "label": "Edit answers",
+                "style": 2,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+                "label": "Cancel registration",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "Refresh",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in en > none 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "You have not registered for this event.",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:join:12345678-1234-4234-8234-123456789012",
+                "label": "Join",
+                "style": 1,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in en > panel 1`] = `
+{
+  "allowed_mentions": {
+    "parse": [],
+  },
+  "components": [
+    {
+      "components": [
+        {
+          "content": "# Meetup @everyone
+
+Starts: <t:1798772400:F> (<t:1798772400:R>)
+
+Ends: <t:1798783200:F> (<t:1798783200:R>)
+
+Venue
+Tokyo
+
+Confirmed: 4/20
+
+🟢 Registration open
+
+Welcome!",
+          "type": 10,
+        },
+        {
+          "components": [
+            {
+              "custom_id": "om1:join:12345678-1234-4234-8234-123456789012",
+              "label": "Join",
+              "style": 1,
+              "type": 2,
+            },
+            {
+              "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+              "label": "My status",
+              "style": 2,
+              "type": 2,
+            },
+            {
+              "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+              "label": "Cancel registration",
+              "style": 4,
+              "type": 2,
+            },
+          ],
+          "type": 1,
+        },
+      ],
+      "type": 17,
+    },
+  ],
+  "flags": 32768,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in en > waitlisted 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+Reception number
+
+# 042
+
+⏳ Waitlisted — you will be confirmed automatically when a place opens in automatic mode; otherwise the organizer decides.
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:edit:12345678-1234-4234-8234-123456789012",
+                "label": "Edit answers",
+                "style": 2,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+                "label": "Cancel registration",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "Refresh",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in ja > applied 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+受付番号
+
+# 042
+
+📝 申請中 — 主催者の承認をお待ちください。更新ボタンで状況を確認できます。
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:edit:12345678-1234-4234-8234-123456789012",
+                "label": "回答を編集",
+                "style": 2,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+                "label": "参加を取り消す",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "更新",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in ja > cancel 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "このイベントへの参加を取り消しますか？
+
+## Meetup @everyone
+
+Contact staff.",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:cancel_confirm:12345678-1234-4234-8234-123456789012",
+                "label": "参加取消を確定する",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "参加状況",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in ja > cancelled 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+受付番号
+
+# 042
+
+❌ 参加取消済み
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:join:12345678-1234-4234-8234-123456789012",
+                "label": "参加する",
+                "style": 1,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "更新",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in ja > confirmed 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+受付番号
+
+# 042
+
+✅ 参加確定
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:edit:12345678-1234-4234-8234-123456789012",
+                "label": "回答を編集",
+                "style": 2,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+                "label": "参加を取り消す",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "更新",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in ja > none 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "このイベントにはまだ参加登録していません。",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:join:12345678-1234-4234-8234-123456789012",
+                "label": "参加する",
+                "style": 1,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in ja > panel 1`] = `
+{
+  "allowed_mentions": {
+    "parse": [],
+  },
+  "components": [
+    {
+      "components": [
+        {
+          "content": "# Meetup @everyone
+
+開始: <t:1798772400:F>（<t:1798772400:R>）
+
+終了: <t:1798783200:F>（<t:1798783200:R>）
+
+Venue
+Tokyo
+
+参加確定: 4/20
+
+🟢 受付中
+
+Welcome!",
+          "type": 10,
+        },
+        {
+          "components": [
+            {
+              "custom_id": "om1:join:12345678-1234-4234-8234-123456789012",
+              "label": "参加する",
+              "style": 1,
+              "type": 2,
+            },
+            {
+              "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+              "label": "参加状況",
+              "style": 2,
+              "type": 2,
+            },
+            {
+              "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+              "label": "参加を取り消す",
+              "style": 4,
+              "type": 2,
+            },
+          ],
+          "type": 1,
+        },
+      ],
+      "type": 17,
+    },
+  ],
+  "flags": 32768,
+}
+`;
+
+exports[`Discord pure renderers > snapshots panel, status states, and cancellation in ja > waitlisted 1`] = `
+{
+  "data": {
+    "allowed_mentions": {
+      "parse": [],
+    },
+    "components": [
+      {
+        "components": [
+          {
+            "content": "## Meetup @everyone
+
+受付番号
+
+# 042
+
+⏳ キャンセル待ち — 即時確定方式では空席が出ると繰り上がります。承認方式では主催者が決定します。
+
+**Allergies**
+None",
+            "type": 10,
+          },
+          {
+            "components": [
+              {
+                "custom_id": "om1:edit:12345678-1234-4234-8234-123456789012",
+                "label": "回答を編集",
+                "style": 2,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:cancel:12345678-1234-4234-8234-123456789012",
+                "label": "参加を取り消す",
+                "style": 4,
+                "type": 2,
+              },
+              {
+                "custom_id": "om1:status:12345678-1234-4234-8234-123456789012",
+                "label": "更新",
+                "style": 2,
+                "type": 2,
+              },
+            ],
+            "type": 1,
+          },
+        ],
+        "type": 17,
+      },
+    ],
+    "flags": 32832,
+  },
+  "type": 4,
+}
+`;

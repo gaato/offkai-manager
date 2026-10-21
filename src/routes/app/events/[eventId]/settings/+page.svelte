@@ -349,6 +349,27 @@
                   {$discordErrors.roleId[0]}
                 </p>{/if}
             </div>
+            {#each [{ name: 'staffRoleId', key: 'discord_settings.staff_role_id' }, { name: 'logChannelId', key: 'discord_settings.log_channel_id' }, { name: 'notificationChannelId', key: 'discord_settings.notification_channel_id' }] as const as field (field.name)}
+              <div class="grid gap-2">
+                <label for={`discord-${field.name}`} class="label">{t(field.key)}</label>
+                <input
+                  id={`discord-${field.name}`}
+                  name={field.name}
+                  bind:value={$discordForm[field.name]}
+                  inputmode="numeric"
+                  pattern={'[0-9]{17,20}'}
+                  maxlength={20}
+                  disabled={!editable}
+                  aria-describedby={`discord-${field.name}-help discord-${field.name}-error`}
+                  aria-invalid={$discordErrors[field.name] ? 'true' : undefined}
+                  class="input w-full"
+                />
+                <p id={`discord-${field.name}-help`}>{t('discord_settings.ids_help')}</p>
+                <p id={`discord-${field.name}-error`} role="alert">
+                  {$discordErrors[field.name]?.[0] ?? ''}
+                </p>
+              </div>
+            {/each}
             {#if editable}
               <button type="submit" class="btn btn-primary justify-self-start"
                 >{t('discord_settings.save')}</button

@@ -33,13 +33,43 @@ export function commandDefinitions() {
     .setDefaultMemberPermissions(32n);
   for (const part of ['web', 'panel', 'status', 'remind'] as const) {
     const l = labels(part);
-    offkai.addSubcommand((sub) =>
+    offkai.addSubcommand((sub) => {
       sub
         .setName(l.name)
         .setNameLocalizations(l.names)
         .setDescription(l.description)
-        .setDescriptionLocalizations(l.descriptions)
-    );
+        .setDescriptionLocalizations(l.descriptions);
+      if (part === 'panel') {
+        sub.addStringOption((option) =>
+          option
+            .setName('event')
+            .setDescription(translate('en', 'panel.event_option'))
+            .setDescriptionLocalizations({ ja: translate('ja', 'panel.event_option') })
+            .setRequired(true)
+            .setAutocomplete(true)
+        );
+        sub.addStringOption((option) =>
+          option
+            .setName('language')
+            .setDescription(translate('en', 'panel.language_option'))
+            .setDescriptionLocalizations({ ja: translate('ja', 'panel.language_option') })
+            .setRequired(true)
+            .addChoices(
+              {
+                name: translate('en', 'panel.language_ja'),
+                name_localizations: { ja: translate('ja', 'panel.language_ja') },
+                value: 'ja'
+              },
+              {
+                name: translate('en', 'panel.language_en'),
+                name_localizations: { ja: translate('ja', 'panel.language_en') },
+                value: 'en'
+              }
+            )
+        );
+      }
+      return sub;
+    });
   }
   const checkinLabels = labels('checkin');
   const who = labels('who');

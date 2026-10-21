@@ -11,8 +11,7 @@ import {
   registrationFormAnswers,
   registrations
 } from '$lib/server/db/schema';
-import { appendAudit } from '$lib/server/domain/audit';
-import { enqueueRoleSync } from '$lib/server/domain/discord';
+import { decideRegistration, applyRegistrationEffects } from './lifecycle';
 import type { EventSummary } from '$lib/server/domain/events';
 import { cancelPaymentRequestsForRegistration } from '$lib/server/domain/payments';
 import {
@@ -145,9 +144,13 @@ export async function withdrawRegistration(
       .all();
     if (!registrationRows[0]) throw new RegistrationError('not_found', 'registration not found');
     const current = parseRegistration(registrationRows[0]);
-    if (!canWithdrawRegistration({ registration: current, event }, clock.now())) {
-      throw new RegistrationError('not_withdrawable', 'registration cannot be withdrawn');
-    }
+    const decision = decideRegistration(
+      tx,
+      eventRows[0],
+      { kind: current.status },
+      { type: 'cancel' },
+      clock
+    );
     const updatedRows = tx
       .update(registrations)
       .set({ status: 'cancelled', updatedAt: clock.now() })
@@ -155,8 +158,9 @@ export async function withdrawRegistration(
       .returning()
       .all();
     const withdrawn = parseRegistration(updatedRows[0]);
-    appendAudit(
+    applyRegistrationEffects(
       tx,
+      decision,
       {
         actorUserId: input.userId,
         eventId: current.eventId,
@@ -170,7 +174,6 @@ export async function withdrawRegistration(
       clock
     );
     cancelPaymentRequestsForRegistration(tx, current.id, clock);
-    enqueueRoleSync(tx, current.eventId, current.id, clock);
     let promotedRegistrationId: string | null = null;
     if (current.status === 'confirmed' && event.registrationMode === 'auto_confirm') {
       promotedRegistrationId = promoteOldestWaitlisted(

@@ -3,6 +3,15 @@ import { z } from 'zod';
 // Released om1 strings are a wire contract; retain this decoder when adding versions.
 export const actionSchemas = {
   web: z.tuple([]),
+  join: z.tuple([z.uuid()]),
+  status: z.tuple([z.uuid()]),
+  cancel: z.tuple([z.uuid()]),
+  cancel_confirm: z.tuple([z.uuid()]),
+  edit: z.tuple([z.uuid()]),
+  join_submit: z.tuple([z.uuid()]),
+  edit_submit: z.tuple([z.uuid()]),
+  retry_join: z.tuple([z.uuid()]),
+  retry_edit: z.tuple([z.uuid()]),
   soon: z.tuple([z.enum(['panel', 'status', 'remind', 'checkin'])])
 };
 export type CustomAction = {
@@ -23,6 +32,18 @@ export function decodeCustomId(value: string): DecodeResult {
     }
     case 'soon': {
       const parsed = actionSchemas.soon.safeParse(args);
+      return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
+    }
+    case 'join':
+    case 'status':
+    case 'cancel':
+    case 'cancel_confirm':
+    case 'edit':
+    case 'join_submit':
+    case 'edit_submit':
+    case 'retry_join':
+    case 'retry_edit': {
+      const parsed = actionSchemas[action].safeParse(args);
       return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
     }
     default:

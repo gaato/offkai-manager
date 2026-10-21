@@ -7,6 +7,15 @@ import {
 } from '$lib/server/interactions/custom-id';
 
 const arbitraries = {
+  join: fc.uuid().map((id): CustomAction => ({ action: 'join', args: [id] })),
+  status: fc.uuid().map((id): CustomAction => ({ action: 'status', args: [id] })),
+  cancel: fc.uuid().map((id): CustomAction => ({ action: 'cancel', args: [id] })),
+  cancel_confirm: fc.uuid().map((id): CustomAction => ({ action: 'cancel_confirm', args: [id] })),
+  edit: fc.uuid().map((id): CustomAction => ({ action: 'edit', args: [id] })),
+  join_submit: fc.uuid().map((id): CustomAction => ({ action: 'join_submit', args: [id] })),
+  edit_submit: fc.uuid().map((id): CustomAction => ({ action: 'edit_submit', args: [id] })),
+  retry_join: fc.uuid().map((id): CustomAction => ({ action: 'retry_join', args: [id] })),
+  retry_edit: fc.uuid().map((id): CustomAction => ({ action: 'retry_edit', args: [id] })),
   web: fc.constant<CustomAction>({ action: 'web', args: [] }),
   soon: fc.constantFrom('panel', 'status', 'remind', 'checkin').map(
     (feature) =>

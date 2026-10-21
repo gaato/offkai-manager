@@ -8,6 +8,8 @@ import { populateRequestSession } from '$lib/server/auth/request-session';
 import { getDatabaseClient } from '$lib/server/db/client';
 import { runMigrations } from '$lib/server/db/migrate';
 import { createDiscordGateway } from '$lib/server/gateways/discord/rest';
+import { getInteractionRest } from '$lib/server/interactions/rest';
+import { systemClock } from '$lib/server/clock';
 import { RoleSyncWorker } from '$lib/server/worker/role-sync';
 import { normalizeLocale, resolveLocale, translator } from '$lib/i18n';
 
@@ -36,11 +38,17 @@ export async function init(): Promise<void> {
         'Discord role sync worker is disabled because database or bot-token configuration is incomplete'
       );
     } else if (!roleSyncWorker) {
+      const discordRest = getInteractionRest(
+        config.discord.botToken,
+        config.tuning.OFFKAI_DISCORD_REQUEST_TIMEOUT_MS
+      );
       roleSyncWorker = new RoleSyncWorker(
         getDatabaseClient(config),
-        createDiscordGateway(config.discord.botToken, { tuning: config.tuning }),
+        createDiscordGateway(config.discord.botToken, { tuning: config.tuning, rest: discordRest }),
         logger,
-        config.tuning
+        config.tuning,
+        systemClock,
+        discordRest
       );
       roleSyncWorker.start();
       logger.info('Discord role sync worker started');

@@ -4,9 +4,11 @@ import type { APIInteraction } from 'discord-api-types/v10';
 import { getConfig } from '$lib/server/config';
 import { getDatabaseClient } from '$lib/server/db/client';
 import { verifyInteraction } from '$lib/server/interactions/verify';
+import { getLogger } from '$lib/server/logger';
+import { getInteractionRest } from '$lib/server/interactions/rest';
 import { dispatchInteraction } from '$lib/server/interactions/router';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
   const config = getConfig();
   if (!config.discord.publicKey) return new Response(null, { status: 503 });
   const rawBody = await request.text();
@@ -33,7 +35,26 @@ export const POST: RequestHandler = async ({ request }) => {
   return json(
     await dispatchInteraction(interaction, {
       database: () => getDatabaseClient(config),
-      publicBaseUrl: config.auth.publicBaseUrl
+      publicBaseUrl: config.auth.publicBaseUrl,
+      tuning: config.tuning,
+      get rest() {
+        return config.discord.botToken
+          ? getInteractionRest(
+              config.discord.botToken,
+              config.tuning.OFFKAI_DISCORD_REQUEST_TIMEOUT_MS
+            )
+          : undefined;
+      },
+      defer: (work) => {
+        setImmediate(() => {
+          void work().catch((err: unknown) =>
+            (locals?.logger ?? getLogger(config)).error(
+              { error_name: err instanceof Error ? err.name : 'UnknownError' },
+              'Deferred Discord interaction failed'
+            )
+          );
+        });
+      }
     })
   );
 };

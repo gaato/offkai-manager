@@ -1,3 +1,4 @@
+import { REST } from '@discordjs/rest';
 import { defaultTuning, type Tuning } from '$lib/server/config';
 import { z } from 'zod';
 import type { DiscordGateway } from '$lib/server/domain/discord/gateway';
@@ -53,6 +54,7 @@ export class DiscordRateLimitError extends DiscordGatewayError {
 
 interface DiscordRestOptions {
   tuning?: Tuning;
+  rest?: REST;
   fetch?: typeof fetch;
   baseUrl?: string;
 }
@@ -63,6 +65,7 @@ export class DiscordRestGateway implements DiscordGateway {
   private readonly fetchImplementation: typeof fetch;
   private readonly baseUrl: string;
   private readonly tuning: Tuning;
+  private readonly roleRest: REST | undefined;
 
   constructor(
     private readonly botToken: string,
@@ -70,6 +73,15 @@ export class DiscordRestGateway implements DiscordGateway {
   ) {
     if (!botToken.trim()) throw new Error('Discord bot token is required');
     this.fetchImplementation = options.fetch ?? fetch;
+    this.roleRest =
+      options.rest ??
+      (options.fetch
+        ? undefined
+        : new REST({
+            version: '10',
+            rejectOnRateLimit: () => true,
+            timeout: (options.tuning ?? defaultTuning).OFFKAI_DISCORD_REQUEST_TIMEOUT_MS
+          }).setToken(botToken));
     this.tuning = options.tuning ?? defaultTuning;
     this.baseUrl = (options.baseUrl ?? discordApiBaseUrl).replace(/\/$/, '');
   }
@@ -89,6 +101,10 @@ export class DiscordRestGateway implements DiscordGateway {
   }
 
   async addGuildMemberRole(guildId: string, discordUserId: string, roleId: string): Promise<void> {
+    if (this.roleRest) {
+      await this.roleRest.put(`/guilds/${guildId}/members/${discordUserId}/roles/${roleId}`);
+      return;
+    }
     const response = await this.request(
       'add guild member role',
       'PUT',
@@ -102,6 +118,10 @@ export class DiscordRestGateway implements DiscordGateway {
     discordUserId: string,
     roleId: string
   ): Promise<void> {
+    if (this.roleRest) {
+      await this.roleRest.delete(`/guilds/${guildId}/members/${discordUserId}/roles/${roleId}`);
+      return;
+    }
     const response = await this.request(
       'remove guild member role',
       'DELETE',

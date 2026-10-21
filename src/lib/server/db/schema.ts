@@ -187,6 +187,8 @@ export const eventDiscordIntegrations = sqliteTable(
     inviteUrl: text('invite_url').notNull().default(''),
     announcementChannelId: text('announcement_channel_id').notNull().default(''),
     staffChannelId: text('staff_channel_id').notNull().default(''),
+    staffRoleId: text('staff_role_id').notNull().default(''),
+    notificationChannelId: text('notification_channel_id').notNull().default(''),
     roleId: text('role_id').notNull().default(''),
     createdAt: createdAt(),
     updatedAt: updatedAt()
@@ -258,6 +260,7 @@ export const registrations = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id),
+    number: integer('number').notNull().default(0),
     status: text('status').notNull(),
     displayNameSnapshot: text('display_name_snapshot').notNull(),
     searchText: text('search_text').notNull().default(''),
@@ -265,6 +268,8 @@ export const registrations = sqliteTable(
     updatedAt: updatedAt()
   },
   (table) => [
+    uniqueIndex('registrations_event_number_key').on(table.eventId, table.number),
+    check('registrations_number_check', sql`${table.number} >= 0`),
     unique('registrations_event_id_id_key').on(table.eventId, table.id),
     uniqueIndex('registrations_one_active_per_user_event')
       .on(table.eventId, table.userId)
@@ -693,6 +698,7 @@ export const outboxEvents = sqliteTable(
   {
     id: id(),
     type: text('type').notNull(),
+    dedupeKey: text('dedupe_key'),
     payloadJson: text('payload_json', { mode: 'json' }).$type<unknown>().notNull(),
     status: text('status').notNull(),
     attempts: integer('attempts').notNull().default(0),
@@ -702,8 +708,14 @@ export const outboxEvents = sqliteTable(
     createdAt: createdAt()
   },
   (table) => [
+    uniqueIndex('outbox_events_pending_dedupe_key')
+      .on(table.dedupeKey)
+      .where(sql`${table.status} = 'pending' and ${table.dedupeKey} is not null`),
     check('outbox_events_payload_json_check', sql`json_valid(${table.payloadJson})`),
-    check('outbox_events_type_check', sql`${table.type} in ('discord.role_sync_requested')`),
+    check(
+      'outbox_events_type_check',
+      sql`${table.type} in ('discord.role_sync_requested', 'panel.refresh')`
+    ),
     check(
       'outbox_events_status_check',
       sql`${table.status} in ('pending', 'processing', 'processed', 'failed')`
@@ -715,5 +727,55 @@ export const outboxEvents = sqliteTable(
     index('outbox_events_claimable_idx')
       .on(table.type, table.createdAt)
       .where(sql`${table.status} = 'pending'`)
+  ]
+);
+
+export const discordPanels = sqliteTable(
+  'discord_panels',
+  {
+    id: id(),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id').notNull(),
+    locale: text('locale', { enum: ['ja', 'en'] }).notNull(),
+    createdAt: createdAt(),
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' })
+  },
+  (table) => [
+    check('discord_panels_locale_check', sql`${table.locale} in ('ja', 'en')`),
+    uniqueIndex('discord_panels_message_key').on(table.channelId, table.messageId),
+    uniqueIndex('discord_panels_active_locale_key')
+      .on(table.eventId, table.locale)
+      .where(sql`${table.deletedAt} is null`),
+    index('discord_panels_event_idx').on(table.eventId)
+  ]
+);
+
+export const interactionDrafts = sqliteTable(
+  'interaction_drafts',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['join', 'edit'] }).notNull(),
+    payloadJson: text('payload_json', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
+  },
+  (table) => [
+    uniqueIndex('interaction_drafts_actor_event_kind_key').on(
+      table.userId,
+      table.eventId,
+      table.kind
+    ),
+    check('interaction_drafts_kind_check', sql`${table.kind} in ('join', 'edit')`),
+    check('interaction_drafts_payload_check', sql`json_valid(${table.payloadJson})`),
+    index('interaction_drafts_expiry_idx').on(table.expiresAt)
   ]
 );

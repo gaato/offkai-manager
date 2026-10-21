@@ -1,11 +1,11 @@
 import type { APIInteraction } from 'discord-api-types/v10';
-import { normalizeLocale, translator } from '$lib/i18n';
+import { translator } from '$lib/i18n';
 import type { DatabaseClient } from '$lib/server/db/client';
 import { upsertDiscordIdentity } from '$lib/server/domain/auth/discord';
 
 export function interactionContext(interaction: Exclude<APIInteraction, { type: 1 }>) {
   const actor = interaction.member?.user ?? interaction.user;
-  const locale = normalizeLocale(interaction.locale) ?? 'en';
+  const locale: 'ja' | 'en' = interaction.locale?.toLowerCase().startsWith('ja') ? 'ja' : 'en';
   return {
     actor,
     locale,

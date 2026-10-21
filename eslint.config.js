@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
+import functional from 'eslint-plugin-functional';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -85,6 +86,15 @@ export default tseslint.config(
           message: 'Inject time and randomness so domain behavior is reproducible.'
         }
       ]
+    }
+  },
+  {
+    files: ['src/lib/server/domain/**/core/**/*.ts'],
+    plugins: { functional },
+    rules: {
+      'functional/no-let': 'error',
+      'functional/immutable-data': 'error',
+      'functional/no-loop-statements': 'error'
     }
   },
   prettier

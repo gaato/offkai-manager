@@ -7,11 +7,13 @@ const expectedTables = [
   'checkin_records',
   'collection_payment_methods',
   'collections',
+  'discord_panels',
   'event_discord_integrations',
   'event_form_field_options',
   'event_form_fields',
   'events',
   'external_accounts',
+  'interaction_drafts',
   'organization_memberships',
   'organizations',
   'outbox_events',
@@ -35,6 +37,9 @@ const expectedUniqueConstraints = [
   ['event_form_fields', ['event_id', 'id']],
   ['event_form_field_options', ['field_id', 'option_key']],
   ['event_form_field_options', ['field_id', 'id']],
+  ['registrations', ['event_id', 'number']],
+  ['discord_panels', ['channel_id', 'message_id']],
+  ['interaction_drafts', ['user_id', 'event_id', 'kind']],
   ['registrations', ['event_id', 'id']],
   ['stripe_connect_accounts', ['organization_id']],
   ['stripe_connect_accounts', ['stripe_account_id']],
@@ -52,7 +57,9 @@ const expectedUniqueConstraints = [
 ] as const;
 
 const expectedPartialUniqueIndexes = [
+  ['discord_panels', ['event_id', 'locale'], 'deleted_at is null'],
   ['organizations', ['personal_owner_user_id'], 'personal_owner_user_id is not null'],
+  ['outbox_events', ['dedupe_key'], "status = 'pending' and dedupe_key is not null"],
   ['registrations', ['event_id', 'user_id'], "status <> 'cancelled'"],
   ['payment_records', ['idempotency_key'], "idempotency_key <> ''"],
   ['payment_requests', ['checkout_session_id'], "checkout_session_id <> ''"],
@@ -219,7 +226,11 @@ const checkFragments: Readonly<Record<string, readonly string[]>> = {
   checkin_records_method_check: ['method', 'manual', 'search', 'qr'],
   audit_logs_action_check: ['length(action)>0'],
   audit_logs_target_type_check: ['length(target_type)>0'],
-  outbox_events_type_check: ['type', 'discord.role_sync_requested'],
+  outbox_events_type_check: ['type', 'discord.role_sync_requested', 'panel.refresh'],
+  registrations_number_check: ['number>=0'],
+  discord_panels_locale_check: ['locale', 'ja', 'en'],
+  interaction_drafts_kind_check: ['kind', 'join', 'edit'],
+  interaction_drafts_payload_check: ['json_valid', 'payload_json'],
   outbox_events_status_check: ['status', 'pending', 'processing', 'processed', 'failed'],
   outbox_events_attempts_check: ['attempts>=0']
 };
@@ -249,7 +260,7 @@ describe('database schema parity', () => {
     client.db.$client.close();
   });
 
-  it('creates all 20 application tables as STRICT tables', () => {
+  it('creates all 22 application tables as STRICT tables', () => {
     const tables = client.db.$client
       .prepare(
         "select name from sqlite_schema where type = 'table' and name not like 'sqlite_%' and name <> '__drizzle_migrations' order by name"

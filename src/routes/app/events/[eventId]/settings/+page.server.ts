@@ -59,6 +59,18 @@ function discordSettingsSchema(t: App.Locals['t']) {
         .refine((value) => !value || /^https?:\/\//.test(value), {
           message: t('discord_settings.validation_invite_url')
         }),
+      staffRoleId: z
+        .string()
+        .trim()
+        .regex(/^(?:|\d{17,20})$/, t('discord_settings.validation_id')),
+      logChannelId: z
+        .string()
+        .trim()
+        .regex(/^(?:|\d{17,20})$/, t('discord_settings.validation_id')),
+      notificationChannelId: z
+        .string()
+        .trim()
+        .regex(/^(?:|\d{17,20})$/, t('discord_settings.validation_id')),
       roleId: z
         .string()
         .trim()
@@ -111,7 +123,10 @@ export const load: PageServerLoad = async (event) => {
         policy: discordSettings.policy,
         guildId: discordSettings.integration?.guildId ?? '',
         inviteUrl: discordSettings.integration?.inviteUrl ?? '',
-        roleId: discordSettings.integration?.roleId ?? ''
+        roleId: discordSettings.integration?.roleId ?? '',
+        staffRoleId: discordSettings.integration?.staffRoleId ?? '',
+        logChannelId: discordSettings.integration?.logChannelId ?? '',
+        notificationChannelId: discordSettings.integration?.notificationChannelId ?? ''
       },
       zod4(discordSettingsSchema(locals.t))
     ),

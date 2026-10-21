@@ -1,8 +1,16 @@
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne, isNull } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
-import { eventDiscordIntegrations, events, externalAccounts } from '$lib/server/db/schema';
+import {
+  discordPanels,
+  eventDiscordIntegrations,
+  events,
+  externalAccounts
+} from '$lib/server/db/schema';
+import { discordLimits } from '$lib/shared/discord-limits';
+import { loadActiveFormFields } from '$lib/server/domain/events/forms';
+import { enqueueExistingPanelRefresh } from './outbox';
 import { appendAudit } from '$lib/server/domain/audit';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
 import type { DiscordGateway } from './gateway';
@@ -17,6 +25,9 @@ export interface EventDiscordIntegration {
   guildNameSnapshot: string;
   inviteUrl: string;
   roleId: string;
+  staffRoleId: string;
+  logChannelId: string;
+  notificationChannelId: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +44,9 @@ export interface UpdateDiscordSettingsInput {
   guildId: string;
   inviteUrl: string;
   roleId: string;
+  staffRoleId?: string;
+  logChannelId?: string;
+  notificationChannelId?: string;
 }
 
 export type DiscordSettingsErrorCode =
@@ -124,6 +138,18 @@ export async function updateEventDiscordSettings(
       throw new DiscordSettingsError('forbidden', 'archived events cannot be changed');
     }
     const beforeIntegration = loadIntegration(tx, input.eventId);
+    if (input.guildId) {
+      const fields = loadActiveFormFields(tx, input.eventId);
+      if (
+        fields.length > discordLimits.modalComponents ||
+        fields.some(
+          (field) =>
+            (field.type === 'select' && field.options.length > discordLimits.selectOptions) ||
+            (field.type === 'multiselect' && field.options.length > discordLimits.checkboxOptions)
+        )
+      )
+        throw new DiscordSettingsError('validation', 'form exceeds Discord modal limits');
+    }
     tx.update(events)
       .set({ discordPolicy: input.policy, updatedAt: clock.now() })
       .where(eq(events.id, input.eventId))
@@ -137,6 +163,10 @@ export async function updateEventDiscordSettings(
         guildId: input.guildId,
         guildNameSnapshot,
         inviteUrl: input.inviteUrl,
+        staffRoleId: input.staffRoleId ?? beforeIntegration?.staffRoleId ?? '',
+        staffChannelId: input.logChannelId ?? beforeIntegration?.staffChannelId ?? '',
+        notificationChannelId:
+          input.notificationChannelId ?? beforeIntegration?.notificationChannelId ?? '',
         roleId: input.roleId
       })
       .onConflictDoUpdate({
@@ -145,12 +175,28 @@ export async function updateEventDiscordSettings(
           guildId: input.guildId,
           guildNameSnapshot,
           inviteUrl: input.inviteUrl,
+          staffRoleId: input.staffRoleId ?? beforeIntegration?.staffRoleId ?? '',
+          staffChannelId: input.logChannelId ?? beforeIntegration?.staffChannelId ?? '',
+          notificationChannelId:
+            input.notificationChannelId ?? beforeIntegration?.notificationChannelId ?? '',
           roleId: input.roleId,
           updatedAt: clock.now()
         }
       })
       .returning()
       .all();
+    if (beforeIntegration?.guildId !== input.guildId) {
+      tx.update(discordPanels)
+        .set({ deletedAt: clock.now() })
+        .where(
+          and(
+            eq(discordPanels.eventId, input.eventId),
+            ne(discordPanels.guildId, input.guildId),
+            isNull(discordPanels.deletedAt)
+          )
+        )
+        .run();
+    }
     const integration = parseIntegration(rows[0]);
     appendAudit(
       tx,
@@ -171,6 +217,7 @@ export async function updateEventDiscordSettings(
       },
       clock
     );
+    enqueueExistingPanelRefresh(tx, input.eventId, clock);
     return { policy: input.policy, integration };
   });
 }
@@ -183,6 +230,10 @@ function validateInput(input: UpdateDiscordSettingsInput): UpdateDiscordSettings
   const guildId = input.guildId.trim();
   const roleId = input.roleId.trim();
   const inviteUrl = input.inviteUrl.trim();
+  for (const value of [input.staffRoleId, input.logChannelId, input.notificationChannelId]) {
+    if (value?.trim() && !snowflake.test(value.trim()))
+      throw new DiscordSettingsError('validation', 'Discord role or channel ID is invalid');
+  }
   if (guildId && !snowflake.test(guildId)) {
     throw new DiscordSettingsError('validation', 'Discord guild ID is invalid');
   }
@@ -206,7 +257,16 @@ function validateInput(input: UpdateDiscordSettingsInput): UpdateDiscordSettings
       'guild membership policy requires a guild and invite URL'
     );
   }
-  return { ...input, policy: policy.data, guildId, roleId, inviteUrl };
+  return {
+    ...input,
+    policy: policy.data,
+    guildId,
+    roleId,
+    inviteUrl,
+    staffRoleId: input.staffRoleId?.trim(),
+    logChannelId: input.logChannelId?.trim(),
+    notificationChannelId: input.notificationChannelId?.trim()
+  };
 }
 
 function loadEvent(tx: DatabaseTransaction, eventId: string) {
@@ -245,6 +305,9 @@ function parseIntegration(
     guildNameSnapshot: row.guildNameSnapshot,
     inviteUrl: row.inviteUrl,
     roleId: row.roleId,
+    staffRoleId: row.staffRoleId,
+    logChannelId: row.staffChannelId,
+    notificationChannelId: row.notificationChannelId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   };
@@ -256,7 +319,10 @@ function integrationAuditSnapshot(row: typeof eventDiscordIntegrations.$inferSel
         guildId: row.guildId,
         guildNameSnapshot: row.guildNameSnapshot,
         inviteUrl: row.inviteUrl,
-        roleId: row.roleId
+        roleId: row.roleId,
+        staffRoleId: row.staffRoleId,
+        logChannelId: row.staffChannelId,
+        notificationChannelId: row.notificationChannelId
       }
     : null;
 }

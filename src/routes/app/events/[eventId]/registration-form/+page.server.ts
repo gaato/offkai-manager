@@ -10,6 +10,7 @@ import {
   addFormPreset,
   archiveField,
   EventError,
+  DiscordFormLimitError,
   formPresetKeys,
   formPresets,
   listFormFields,
@@ -209,6 +210,12 @@ function mutationStatus(cause: unknown): 400 | 403 | 404 | 409 | 500 {
 }
 
 function mutationMessage(event: RequestEvent, cause: unknown) {
+  if (cause instanceof DiscordFormLimitError)
+    return event.locals.t(
+      cause.limit === 'questions'
+        ? 'registration_form.discord_limit'
+        : 'registration_form.discord_options_limit'
+    );
   if (cause instanceof EventError) {
     if (cause.code === 'validation') return event.locals.t('registration_form.error_validation');
     if (cause.code === 'not_found') return event.locals.t('registration_form.error_not_found');

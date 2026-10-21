@@ -1,6 +1,6 @@
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
-import { and, count, eq, ne } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
 import {
   events,
@@ -11,11 +11,9 @@ import {
   registrations,
   users
 } from '$lib/server/db/schema';
-import { appendAudit } from '$lib/server/domain/audit';
-import { enqueueRoleSync } from '$lib/server/domain/discord';
+import { decideRegistration, applyRegistrationEffects } from './lifecycle';
 import { loadActiveFormFields, type RegistrationFormField } from '$lib/server/domain/events';
 import { ensurePaymentRequestsForRegistration } from '$lib/server/domain/payments';
-import { registrationModeSchema } from '$lib/shared/event';
 import { registrationStatusSchema, type RegistrationStatus } from '$lib/shared/registration';
 import { RegistrationError } from './errors';
 import { validateRegistrationAnswers, type RegistrationAnswerInput } from './runtime-schema';
@@ -32,6 +30,7 @@ export interface RegistrationSummary {
   id: string;
   eventId: string;
   userId: string;
+  number: number;
   status: RegistrationStatus;
   displayNameSnapshot: string;
   searchText: string;
@@ -63,12 +62,7 @@ export async function createRegistration(
       if (!userRows[0] || userRows[0].suspendedAt) {
         throw new RegistrationError('forbidden', 'user is suspended');
       }
-      const event = loadRegistrableEventForUpdate(
-        tx,
-        input.organizationSlug,
-        input.eventSlug,
-        clock
-      );
+      const event = loadRegistrableEventForUpdate(tx, input.organizationSlug, input.eventSlug);
       const fields = loadActiveFormFields(tx, event.id);
       try {
         validateRegistrationAnswers(fields, input.answers);
@@ -76,7 +70,7 @@ export async function createRegistration(
         throw new RegistrationError('validation', 'registration answers are invalid', { cause });
       }
       const active = tx
-        .select({ id: registrations.id })
+        .select({ status: registrations.status })
         .from(registrations)
         .where(
           and(
@@ -87,20 +81,19 @@ export async function createRegistration(
         )
         .limit(1)
         .all();
-      if (active[0]) {
-        throw new RegistrationError('duplicate', 'user already has an active registration');
-      }
-      let status: RegistrationStatus = 'applied';
-      if (registrationModeSchema.parse(event.registrationMode) === 'auto_confirm') {
-        const confirmedRows = tx
-          .select({ value: count(registrations.id) })
-          .from(registrations)
-          .where(and(eq(registrations.eventId, event.id), eq(registrations.status, 'confirmed')))
-          .all();
-        const confirmedCount = confirmedRows[0]?.value ?? 0;
-        status =
-          event.capacity !== null && confirmedCount >= event.capacity ? 'waitlisted' : 'confirmed';
-      }
+      const decision = decideRegistration(
+        tx,
+        event,
+        { kind: active[0] ? registrationStatusSchema.parse(active[0].status) : 'none' },
+        { type: 'join' },
+        clock
+      );
+      const status = registrationStatusSchema.parse(decision.next.kind);
+      const number = tx
+        .select({ n: sql<number>`coalesce(max(${registrations.number}), 0) + 1` })
+        .from(registrations)
+        .where(eq(registrations.eventId, event.id))
+        .get()!.n;
       const account = tx
         .select({ username: externalAccounts.username })
         .from(externalAccounts)
@@ -122,6 +115,7 @@ export async function createRegistration(
           eventId: event.id,
           userId: input.userId,
           status,
+          number,
           displayNameSnapshot: displayName,
           searchText
         })
@@ -129,8 +123,9 @@ export async function createRegistration(
         .all();
       const registration = parseRegistration(createdRows[0]);
       saveAnswers(tx, registration.id, event.id, fields, input.answers, clock);
-      appendAudit(
+      applyRegistrationEffects(
         tx,
+        decision,
         {
           actorUserId: input.userId,
           eventId: event.id,
@@ -143,7 +138,6 @@ export async function createRegistration(
       );
       if (registration.status === 'confirmed') {
         ensurePaymentRequestsForRegistration(tx, event.id, registration.id, clock);
-        enqueueRoleSync(tx, event.id, registration.id, clock);
       }
       return registration;
     });
@@ -161,8 +155,7 @@ export async function createRegistration(
 function loadRegistrableEventForUpdate(
   tx: DatabaseTransaction,
   organizationSlug: string,
-  eventSlug: string,
-  clock: Clock = systemClock
+  eventSlug: string
 ) {
   const rows = tx
     .select({ event: events, organizationSuspendedAt: organizations.suspendedAt })
@@ -180,18 +173,10 @@ function loadRegistrableEventForUpdate(
   ) {
     throw new RegistrationError('not_found', 'public event not found');
   }
-  const now = clock.now();
-  if (
-    row.event.cancelledAt ||
-    now < row.event.registrationOpensAt ||
-    now > row.event.registrationClosesAt
-  ) {
-    throw new RegistrationError('not_registrable', 'event is not accepting registrations');
-  }
   return row.event;
 }
 
-function saveAnswers(
+export function saveAnswers(
   tx: DatabaseTransaction,
   registrationId: string,
   eventId: string,

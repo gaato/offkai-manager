@@ -5,18 +5,33 @@ import type { DatabaseClient } from '$lib/server/db/client';
 import { ensurePersonalOrganization } from '$lib/server/domain/orgs';
 import { interactionContext, resolveInteractionUser } from './context';
 import { decodeCustomId, type CustomAction } from './custom-id';
+import type { REST } from '@discordjs/rest';
+import type { Clock } from '$lib/server/clock';
+import type { Tuning } from '$lib/server/config';
+import { autocompletePanelEvents } from '$lib/server/domain/discord/panels';
+import { postPanel } from './panel-command';
+import { participantAction } from './participants';
 import { ephemeralReply } from './respond';
 
 type Context = ReturnType<typeof interactionContext>;
 export interface RouterDependencies {
   database: () => DatabaseClient;
   publicBaseUrl: string;
+  rest?: REST;
+  clock?: Clock;
+  tuning?: Tuning;
+  defer?: (work: () => Promise<void>) => void;
 }
 const offkaiOptions = z.tuple([
   z.object({
     type: z.literal(1),
     name: z.enum(['web', 'panel', 'status', 'remind']),
-    options: z.tuple([]).optional()
+    options: z
+      .array(
+        z.object({ type: z.literal(3), name: z.enum(['event', 'language']), value: z.string() })
+      )
+      .max(2)
+      .optional()
   })
 ]);
 const checkinOptions = z
@@ -39,10 +54,32 @@ export async function dispatchInteraction(
           const options = offkaiOptions.safeParse(interaction.data.options);
           if (!options.success) return unknown();
           const action = options.data[0].name;
+          if (action !== 'panel' && options.data[0].options?.length) return unknown();
           switch (action) {
             case 'web':
               return openWeb(context, dependencies);
-            case 'panel':
+            case 'panel': {
+              const values = options.data[0].options ?? [];
+              const event = z.uuid().safeParse(values.find((o) => o.name === 'event')?.value);
+              const language = z
+                .enum(['ja', 'en'])
+                .safeParse(values.find((o) => o.name === 'language')?.value);
+              if (
+                !event.success ||
+                !language.success ||
+                values.length !== 2 ||
+                new Set(values.map((o) => o.name)).size !== 2
+              )
+                return unknown();
+              return postPanel(
+                context,
+                dependencies,
+                event.data,
+                language.data,
+                interaction.application_id,
+                interaction.token
+              );
+            }
             case 'status':
             case 'remind':
               return ephemeralReply(context.t('interaction.soon'));
@@ -62,9 +99,34 @@ export async function dispatchInteraction(
     case 5: {
       const decoded = decodeCustomId(interaction.data.custom_id);
       if (!decoded.ok) return unknown();
+      if (decoded.value.action !== 'web' && decoded.value.action !== 'soon')
+        return participantAction(
+          decoded.value,
+          context,
+          dependencies,
+          interaction.type === 5 ? interaction : undefined
+        );
       return dispatchAction(decoded.value, context, dependencies);
     }
     case 4:
+      if (interaction.data.name === 'offkai' && context.actor && context.guildId) {
+        const options = interaction.data.options;
+        const panel = options?.[0];
+        if (panel?.type !== 1 || panel.name !== 'panel') return { type: 8, data: { choices: [] } };
+        const focused = panel.options?.find((option) => 'focused' in option && option.focused);
+        if (focused?.type !== 3 || focused.name !== 'event')
+          return { type: 8, data: { choices: [] } };
+        const client = dependencies.database();
+        const user = await resolveInteractionUser(client, context.actor);
+        return {
+          type: 8,
+          data: {
+            choices: user.suspended
+              ? []
+              : autocompletePanelEvents(client, user.userId, focused.value, context.guildId)
+          }
+        };
+      }
       switch (interaction.data.name) {
         // Event lookup will be added with check-in; never expose unrelated identities here.
         case 'checkin':
@@ -79,7 +141,7 @@ export async function dispatchInteraction(
 }
 
 function dispatchAction(
-  action: CustomAction,
+  action: Extract<CustomAction, { action: 'web' | 'soon' }>,
   context: Context,
   dependencies: RouterDependencies
 ): Promise<APIInteractionResponse> | APIInteractionResponse {
