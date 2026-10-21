@@ -22,4 +22,24 @@ describe('error response sanitization', () => {
       'request error'
     );
   });
+
+  it('logs unknown paths below error level', async () => {
+    const logError = vi.fn();
+    const logDebug = vi.fn();
+    await handleError({
+      error: new Error('Not found: /favicon.ico'),
+      status: 404,
+      message: 'Not Found',
+      event: {
+        locals: { requestId: '0123456789abcdef', logger: { error: logError, debug: logDebug } },
+        request: new Request('https://example.test/favicon.ico'),
+        url: new URL('https://example.test/favicon.ico')
+      }
+    } as never);
+    expect(logError).not.toHaveBeenCalled();
+    expect(logDebug).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 404, path: '/favicon.ico' }),
+      'request error'
+    );
+  });
 });

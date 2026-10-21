@@ -261,9 +261,10 @@ export const handle = sequence(
 
 export const handleError: HandleServerError = ({ error: cause, event, status }) => {
   const requestId = event.locals.requestId ?? randomBytes(8).toString('hex');
-  event.locals.logger?.error(
-    { err: cause, status, method: event.request.method, path: event.url.pathname },
-    'request error'
-  );
+  const details = { err: cause, status, method: event.request.method, path: event.url.pathname };
+  // An unknown path (browsers asking for /favicon.ico, scanners) is not a server fault; the
+  // request log already records the 404, so it stays out of error-level alerts.
+  if (status === 404) event.locals.logger?.debug(details, 'request error');
+  else event.locals.logger?.error(details, 'request error');
   return { message: 'request failed', requestId };
 };
