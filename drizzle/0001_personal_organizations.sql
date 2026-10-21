@@ -1,2 +1,0 @@
-ALTER TABLE `organizations` ADD `personal_owner_user_id` text REFERENCES users(id);--> statement-breakpoint
-CREATE UNIQUE INDEX `organizations_personal_owner_key` ON `organizations` (`personal_owner_user_id`) WHERE "organizations"."personal_owner_user_id" is not null;

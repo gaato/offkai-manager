@@ -5,50 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1792539897673,
-      "tag": "0000_shiny_stick",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1792545094840,
-      "tag": "0001_personal_organizations",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1792545094841,
-      "tag": "0002_discord_registration",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1792545094842,
-      "tag": "0003_discord_organizer_setup",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1792545094843,
-      "tag": "0004_paid_registration",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1792545094844,
-      "tag": "0005_registration_locale",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1792545094845,
-      "tag": "0006_reception",
+      "when": 1792571563591,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]

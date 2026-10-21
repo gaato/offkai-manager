@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d0cd5e19-a4e1-434e-97a5-914393fd6960",
+  "id": "1d876210-9318-4949-9194-547e997bc568",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audit_logs": {
@@ -504,6 +504,189 @@
         }
       }
     },
+    "discord_layout_resources": {
+      "name": "discord_layout_resources",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_id": {
+          "name": "discord_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "creation_name": {
+          "name": "creation_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        },
+        "retired_at": {
+          "name": "retired_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "discord_layout_resources_active_kind_key": {
+          "name": "discord_layout_resources_active_kind_key",
+          "columns": ["event_id", "guild_id", "kind"],
+          "isUnique": true,
+          "where": "\"discord_layout_resources\".\"retired_at\" is null"
+        }
+      },
+      "foreignKeys": {
+        "discord_layout_resources_event_id_events_id_fk": {
+          "name": "discord_layout_resources_event_id_events_id_fk",
+          "tableFrom": "discord_layout_resources",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "discord_panels": {
+      "name": "discord_panels",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "discord_panels_message_key": {
+          "name": "discord_panels_message_key",
+          "columns": ["channel_id", "message_id"],
+          "isUnique": true
+        },
+        "discord_panels_active_locale_key": {
+          "name": "discord_panels_active_locale_key",
+          "columns": ["event_id", "locale"],
+          "isUnique": true,
+          "where": "\"discord_panels\".\"deleted_at\" is null"
+        },
+        "discord_panels_event_idx": {
+          "name": "discord_panels_event_idx",
+          "columns": ["event_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "discord_panels_event_id_events_id_fk": {
+          "name": "discord_panels_event_id_events_id_fk",
+          "tableFrom": "discord_panels",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "discord_panels_locale_check": {
+          "name": "discord_panels_locale_check",
+          "value": "\"discord_panels\".\"locale\" in ('ja', 'en')"
+        }
+      }
+    },
     "event_discord_integrations": {
       "name": "event_discord_integrations",
       "columns": {
@@ -561,6 +744,22 @@
           "autoincrement": false,
           "default": "''"
         },
+        "staff_role_id": {
+          "name": "staff_role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "notification_channel_id": {
+          "name": "notification_channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
         "role_id": {
           "name": "role_id",
           "type": "text",
@@ -568,6 +767,52 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
+        },
+        "paid_role_id": {
+          "name": "paid_role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "questions_channel_id": {
+          "name": "questions_channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "scheduled_enabled": {
+          "name": "scheduled_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "scheduled_state_json": {
+          "name": "scheduled_state_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "layout_claim": {
+          "name": "layout_claim",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "layout_claimed_at": {
+          "name": "layout_claimed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
@@ -983,6 +1228,69 @@
           "autoincrement": false,
           "default": "'auto_confirm'"
         },
+        "payment_requirement": {
+          "name": "payment_requirement",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'none'"
+        },
+        "platform_fee_bps": {
+          "name": "platform_fee_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "amount_to_collect_minor": {
+          "name": "amount_to_collect_minor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "0"
+        },
+        "rounding_unit": {
+          "name": "rounding_unit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "hold_minutes": {
+          "name": "hold_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 30
+        },
+        "panel_template_ja": {
+          "name": "panel_template_ja",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "panel_template_en": {
+          "name": "panel_template_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "panel_template_reviewed_at": {
+          "name": "panel_template_reviewed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "cancelled_at": {
           "name": "cancelled_at",
           "type": "integer",
@@ -1040,6 +1348,26 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "events_payment_requirement_check": {
+          "name": "events_payment_requirement_check",
+          "value": "\"events\".\"payment_requirement\" in ('none', 'pay_to_confirm', 'pay_later')"
+        },
+        "events_platform_fee_bps_check": {
+          "name": "events_platform_fee_bps_check",
+          "value": "\"events\".\"platform_fee_bps\" >= 0 and \"events\".\"platform_fee_bps\" < 10000"
+        },
+        "events_amount_to_collect_minor_check": {
+          "name": "events_amount_to_collect_minor_check",
+          "value": "\"events\".\"amount_to_collect_minor\" >= 0"
+        },
+        "events_rounding_unit_check": {
+          "name": "events_rounding_unit_check",
+          "value": "\"events\".\"rounding_unit\" > 0"
+        },
+        "events_hold_minutes_check": {
+          "name": "events_hold_minutes_check",
+          "value": "\"events\".\"hold_minutes\" >= 30 and \"events\".\"hold_minutes\" <= 1440"
+        },
         "events_title_check": {
           "name": "events_title_check",
           "value": "length(\"events\".\"title\") > 0"
@@ -1164,6 +1492,217 @@
           "value": "\"external_accounts\".\"provider\" in ('discord')"
         }
       }
+    },
+    "interaction_drafts": {
+      "name": "interaction_drafts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "interaction_drafts_actor_event_kind_key": {
+          "name": "interaction_drafts_actor_event_kind_key",
+          "columns": ["user_id", "event_id", "kind"],
+          "isUnique": true
+        },
+        "interaction_drafts_expiry_idx": {
+          "name": "interaction_drafts_expiry_idx",
+          "columns": ["expires_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "interaction_drafts_user_id_users_id_fk": {
+          "name": "interaction_drafts_user_id_users_id_fk",
+          "tableFrom": "interaction_drafts",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "interaction_drafts_event_id_events_id_fk": {
+          "name": "interaction_drafts_event_id_events_id_fk",
+          "tableFrom": "interaction_drafts",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "interaction_drafts_kind_check": {
+          "name": "interaction_drafts_kind_check",
+          "value": "\"interaction_drafts\".\"kind\" in ('join', 'edit')"
+        },
+        "interaction_drafts_payload_check": {
+          "name": "interaction_drafts_payload_check",
+          "value": "json_valid(\"interaction_drafts\".\"payload_json\")"
+        }
+      }
+    },
+    "notification_deliveries": {
+      "name": "notification_deliveries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "registration_id": {
+          "name": "registration_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "result": {
+          "name": "result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_deliveries_registration_id_registrations_id_fk": {
+          "name": "notification_deliveries_registration_id_registrations_id_fk",
+          "tableFrom": "notification_deliveries",
+          "tableTo": "registrations",
+          "columnsFrom": ["registration_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "notification_threads": {
+      "name": "notification_threads",
+      "columns": {
+        "registration_id": {
+          "name": "registration_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_threads_registration_id_registrations_id_fk": {
+          "name": "notification_threads_registration_id_registrations_id_fk",
+          "tableFrom": "notification_threads",
+          "tableTo": "registrations",
+          "columnsFrom": ["registration_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "organization_memberships": {
       "name": "organization_memberships",
@@ -1305,6 +1844,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "disclosure_json": {
+          "name": "disclosure_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "personal_owner_user_id": {
+          "name": "personal_owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -1344,6 +1897,12 @@
         }
       },
       "indexes": {
+        "organizations_personal_owner_key": {
+          "name": "organizations_personal_owner_key",
+          "columns": ["personal_owner_user_id"],
+          "isUnique": true,
+          "where": "\"organizations\".\"personal_owner_user_id\" is not null"
+        },
         "organizations_suspended_at_idx": {
           "name": "organizations_suspended_at_idx",
           "columns": ["suspended_at"],
@@ -1356,7 +1915,17 @@
           "isUnique": true
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "organizations_personal_owner_user_id_users_id_fk": {
+          "name": "organizations_personal_owner_user_id_users_id_fk",
+          "tableFrom": "organizations",
+          "tableTo": "users",
+          "columnsFrom": ["personal_owner_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -1385,6 +1954,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "dedupe_key": {
+          "name": "dedupe_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "payload_json": {
@@ -1441,6 +2017,12 @@
         }
       },
       "indexes": {
+        "outbox_events_pending_dedupe_key": {
+          "name": "outbox_events_pending_dedupe_key",
+          "columns": ["dedupe_key"],
+          "isUnique": true,
+          "where": "\"outbox_events\".\"status\" = 'pending' and \"outbox_events\".\"dedupe_key\" is not null"
+        },
         "outbox_events_pending_idx": {
           "name": "outbox_events_pending_idx",
           "columns": ["created_at"],
@@ -1464,7 +2046,7 @@
         },
         "outbox_events_type_check": {
           "name": "outbox_events_type_check",
-          "value": "\"outbox_events\".\"type\" in ('discord.role_sync_requested')"
+          "value": "\"outbox_events\".\"type\" in ('discord.role_sync_requested', 'panel.refresh', 'notify')"
         },
         "outbox_events_status_check": {
           "name": "outbox_events_status_check",
@@ -1475,6 +2057,61 @@
           "value": "\"outbox_events\".\"attempts\" >= 0"
         }
       }
+    },
+    "payment_checkout_sessions": {
+      "name": "payment_checkout_sessions",
+      "columns": {
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payment_request_id": {
+          "name": "payment_request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempt": {
+          "name": "attempt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "payment_checkout_sessions_payment_request_id_payment_requests_id_fk": {
+          "name": "payment_checkout_sessions_payment_request_id_payment_requests_id_fk",
+          "tableFrom": "payment_checkout_sessions",
+          "tableTo": "payment_requests",
+          "columnsFrom": ["payment_request_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "payment_records": {
       "name": "payment_records",
@@ -1529,6 +2166,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
+        },
+        "application_fee_amount": {
+          "name": "application_fee_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "0"
         },
         "amount_minor": {
           "name": "amount_minor",
@@ -1684,6 +2329,10 @@
           "name": "payment_records_raw_payload_json_check",
           "value": "json_valid(\"payment_records\".\"raw_payload_json\")"
         },
+        "payment_records_fee_check": {
+          "name": "payment_records_fee_check",
+          "value": "\"payment_records\".\"application_fee_amount\" >= 0 and \"payment_records\".\"application_fee_amount\" <= \"payment_records\".\"amount_minor\""
+        },
         "payment_records_amount_minor_check": {
           "name": "payment_records_amount_minor_check",
           "value": "\"payment_records\".\"amount_minor\" >= 0"
@@ -1766,6 +2415,37 @@
         },
         "stripe_account_id": {
           "name": "stripe_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "application_fee_amount": {
+          "name": "application_fee_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "0"
+        },
+        "checkout_attempt": {
+          "name": "checkout_attempt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "checkout_expires_at": {
+          "name": "checkout_expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkout_url": {
+          "name": "checkout_url",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1925,6 +2605,14 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "payment_requests_fee_check": {
+          "name": "payment_requests_fee_check",
+          "value": "\"payment_requests\".\"application_fee_amount\" >= 0 and \"payment_requests\".\"application_fee_amount\" <= \"payment_requests\".\"amount_minor\""
+        },
+        "payment_requests_attempt_check": {
+          "name": "payment_requests_attempt_check",
+          "value": "\"payment_requests\".\"checkout_attempt\" >= 0"
+        },
         "payment_requests_amount_minor_check": {
           "name": "payment_requests_amount_minor_check",
           "value": "\"payment_requests\".\"amount_minor\" >= 0"
@@ -1935,7 +2623,7 @@
         },
         "payment_requests_status_check": {
           "name": "payment_requests_status_check",
-          "value": "\"payment_requests\".\"status\" in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled')"
+          "value": "\"payment_requests\".\"status\" in ('pending', 'payment_pending', 'paid', 'waived', 'cancelled', 'refund_due')"
         },
         "payment_requests_charge_type_check": {
           "name": "payment_requests_charge_type_check",
@@ -2239,12 +2927,50 @@
           "notNull": true,
           "autoincrement": false
         },
+        "number": {
+          "name": "number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "status": {
           "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "hold_expires_at": {
+          "name": "hold_expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hold_warned_at": {
+          "name": "hold_warned_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'en'"
+        },
+        "hold_released": {
+          "name": "hold_released",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "display_name_snapshot": {
           "name": "display_name_snapshot",
@@ -2279,6 +3005,11 @@
         }
       },
       "indexes": {
+        "registrations_event_number_key": {
+          "name": "registrations_event_number_key",
+          "columns": ["event_id", "number"],
+          "isUnique": true
+        },
         "registrations_one_active_per_user_event": {
           "name": "registrations_one_active_per_user_event",
           "columns": ["event_id", "user_id"],
@@ -2319,9 +3050,25 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "registrations_held_deadline_check": {
+          "name": "registrations_held_deadline_check",
+          "value": "\"registrations\".\"status\" <> 'held' or \"registrations\".\"hold_expires_at\" is not null"
+        },
+        "registrations_locale_check": {
+          "name": "registrations_locale_check",
+          "value": "\"registrations\".\"locale\" in ('ja', 'en')"
+        },
+        "registrations_hold_released_check": {
+          "name": "registrations_hold_released_check",
+          "value": "\"registrations\".\"hold_released\" in (0, 1)"
+        },
+        "registrations_number_check": {
+          "name": "registrations_number_check",
+          "value": "\"registrations\".\"number\" >= 0"
+        },
         "registrations_status_check": {
           "name": "registrations_status_check",
-          "value": "\"registrations\".\"status\" in ('applied', 'confirmed', 'waitlisted', 'cancelled')"
+          "value": "\"registrations\".\"status\" in ('applied', 'held', 'confirmed', 'waitlisted', 'cancelled')"
         },
         "registrations_display_name_snapshot_check": {
           "name": "registrations_display_name_snapshot_check",

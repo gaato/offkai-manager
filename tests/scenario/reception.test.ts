@@ -73,13 +73,13 @@ function command(name: 'checkin' | 'status' | 'remind', eventId?: string, who?: 
 async function twoEvents() {
   const f = await paidEvent(client, 'pay_to_confirm', 180);
   const r = await f.join();
-  client.db.update(events).set({ title: 'P4 有料イベント' }).where(eq(events.id, f.event.id)).run();
+  client.db.update(events).set({ title: '有料イベント' }).where(eq(events.id, f.event.id)).run();
   const other = await createEvent(
     client,
     {
       actorUserId: f.owner.userId,
       organizationId: f.org.id,
-      title: 'P3 無料イベント',
+      title: '無料イベント',
       startsAt: '2027-01-02T12:00',
       timeZone: 'Asia/Tokyo',
       capacity: 180,
@@ -118,7 +118,7 @@ it.each(['checkin', 'status', 'remind'] as const)(
   async (name) => {
     const { f, r, other } = await twoEvents();
     if (name === 'checkin') {
-      // Match the live report: a paid P4 participant and a Japanese owner.
+      // Match the live report: a paid participant and a Japanese owner.
       await call(makeComponent(`om1:door_cash:${r.id}`));
       await call(makeComponent(`om1:door_undo:${r.id}`));
       client.db
@@ -166,7 +166,7 @@ it.each(['checkin', 'status', 'remind'] as const)(
 it('searches authorized events together, preserves state labels and resolves the selected registration event', async () => {
   const { f, r, other, otherJoin } = await twoEvents();
   const second = await discordEvent(client);
-  // Another organization is visible to its owner, but not a staff actor for P4 only.
+  // Another organization is visible to its owner, but not a staff actor for the paid event only.
   const secondRegistration = await otherJoin();
   client.db
     .update(registrations)
@@ -177,11 +177,11 @@ it('searches authorized events together, preserves state labels and resolves the
   expect(auto.data.choices).toEqual([
     expect.objectContaining({
       value: r.id,
-      name: expect.stringContaining('P4 有料イベント · 001 Participant — Unpaid')
+      name: expect.stringContaining('有料イベント · 001 Participant — Unpaid')
     }),
     expect.objectContaining({
       value: secondRegistration.id,
-      name: expect.stringContaining('P3 無料イベント · 042 Other Guest — No payment required')
+      name: expect.stringContaining('無料イベント · 042 Other Guest — No payment required')
     })
   ]);
   for (const query of ['1', '001', 'tici']) {
@@ -225,7 +225,7 @@ it('caps cross-event autocomplete at 25, ranks exact numbers first and keeps lon
   const { f, r, otherJoin } = await twoEvents();
   client.db
     .update(events)
-    .set({ title: 'P4 ' + '有料イベント'.repeat(30) })
+    .set({ title: '有料イベント'.repeat(30) })
     .where(eq(events.id, f.event.id))
     .run();
   client.db
@@ -246,7 +246,7 @@ it('caps cross-event autocomplete at 25, ranks exact numbers first and keeps lon
   }
   const choices = (await call(makeAutocomplete('42'))).data.choices;
   expect(choices).toHaveLength(25);
-  expect(choices[0].name).toContain('P3 無料イベント · 042');
+  expect(choices[0].name).toContain('無料イベント · 042');
   expect(choices[1].value).toBe(r.id);
   expect(
     choices.every(

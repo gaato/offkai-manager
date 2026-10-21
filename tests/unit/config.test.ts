@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyAdapterAddress, loadConfig, parseHttpAddress } from '$lib/server/config';
 
@@ -167,4 +168,13 @@ it('validates fee, rounding and hold bounds together', () => {
     { OFFKAI_PRICE_ROUNDING_UNITS: '1,0' }
   ])
     expect(() => loadConfig({ ...base, ...values })).toThrow();
+});
+
+it('documents every application environment key declared in config.ts', () => {
+  const source = readFileSync('src/lib/server/config.ts', 'utf8');
+  const documentation = readFileSync('docs/configuration.md', 'utf8');
+  const keys = [...new Set(source.match(/\bOFFKAI_[A-Z0-9_]+\b/g))].sort();
+  expect(keys.length).toBeGreaterThan(0);
+  const documented = new Set(documentation.match(/\bOFFKAI_[A-Z0-9_]+\b/g));
+  expect(keys.filter((key) => !documented.has(key))).toEqual([]);
 });

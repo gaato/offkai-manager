@@ -34,8 +34,7 @@ plans require another preview. A database claim serializes double submissions. T
 renewable lease exceeds the configured REST timeout maximum (two minutes) and permits
 recovery after process termination. No database transaction spans an await.
 
-Template defaults are paraphrased from the JA/EN embeds supplied in
-`outputs/old-panel-content.json`. They retain important rules, event details, joining,
+Template defaults retain important rules, event details, joining,
 cancellation, and conduct sections, including age/refund rules, dietary needs, smoking,
 photography/streaming, belongings/waste/lost property, language consideration, and private
 trades. Event details use the eight allowed variables; venue-specific arrangements, dates,
@@ -58,8 +57,7 @@ Review starts incomplete so organizers check event-specific rules before posting
 
 The e2e harness seeds a dedicated event and starts a loopback fake Discord REST transport.
 OFFKAI_DISCORD_SETUP_API_URL may be overridden only for loopback HTTP with dev bypass, so
-production setup calls cannot accidentally send bot credentials to another host. Playwright
-execution remains with the caller.
+production setup calls cannot accidentally send bot credentials to another host. Headless Playwright verifies the setup workflow.
 
 References: [Discord permissions](https://docs.discord.com/developers/topics/permissions),
 [Guild REST resources](https://docs.discord.com/developers/resources/guild).

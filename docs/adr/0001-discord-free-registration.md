@@ -1,6 +1,6 @@
 # Discord FREE registration lifecycle and panels
 
-Status: accepted implementation decisions for the FREE Discord participation milestone.
+Status: accepted.
 
 The registration core models one registration attempt as `none | applied | waitlisted |
 confirmed | cancelled`. Commands are `join`, `editAnswers`, `cancel`, `promote`, plus
@@ -14,7 +14,7 @@ after the registration window closes; cancelled/archived event forms are frozen.
 
 The core emits `audit`, `syncRoles`, and `refreshPanels` data. The shell executes these in
 the synchronous write transaction that changes the registration. Payment request creation
-and cancellation retain their existing shell behavior; this milestone adds no payment flow.
+and cancellation retain their existing shell behavior; paid registration is covered by ADR 0004.
 The existing `discord.role_sync_requested` wire type is retained for role reconciliation
 rather than renaming outstanding rows. New `panel.refresh` jobs deduplicate only while
 pending, so changes during a PATCH can enqueue a successor. Claiming serializes jobs with
@@ -27,8 +27,7 @@ against the injected clock instead of sleeping inside a batch.
 
 `staff_channel_id` previously had no consumer. It now stores the log channel ID, exposed
 as `logChannelId` in the service and form, to avoid two columns for the same destination.
-`role_id` remains the participant role; new staff role and notification channel IDs are
-stored but unused. No channel or role name is assumed. The runtime uses the existing
+`role_id` remains the participant role; staff role and notification channel IDs support reception and notification delivery. No channel or role name is assumed. The runtime uses the existing
 `@discordjs/rest` client with rejected rate limits for panel messages and participant roles;
 the legacy injected-fetch path remains available to existing guild gateway tests.
 
@@ -40,7 +39,7 @@ retires the old stored panels; their buttons still reject the mismatched guild. 
 creation/autocomplete use published, non-cancelled, non-archived events in the current guild
 and independently check active organizer/owner organization membership. A positive amount
 on any non-archived collection (including a draft collection) keeps an event outside this
-FREE-only interaction flow, avoiding accidental unpaid admission to a planned paid event.
+free registration flow, avoiding accidental unpaid admission to a planned paid event.
 
 Modal mapping follows the installed Discord builders and
 [Discord's component reference](https://github.com/discord/discord-api-docs/blob/main/developers/components/reference.mdx):

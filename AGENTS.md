@@ -1,134 +1,53 @@
-# AGENTS.md — offkai-manager (TypeScript / SvelteKit)
+# offkai-manager — agent guide
 
-This branch (`ts-rewrite`) is a full TypeScript rewrite of the Go app. Product direction:
-`docs/design/platform-roadmap.md` (authoritative). Milestone plan and constraints are
-specified per delegation prompt. Legacy Go code lives in git history (`git show main:...`).
+Discord participants use the bot; the SvelteKit web UI serves organizers and operators.
+Use this guide with [configuration](docs/configuration.md), [operations](docs/operations.md)
+and [ADRs](docs/adr/README.md) so changes follow the current public contracts.
 
-## Stack
-
-SvelteKit 2 + Svelte 5 (**runes mode enforced**, `compilerOptions.runes: true`) ·
-adapter-node · Tailwind CSS 4 + DaisyUI 5 (built-in light/default and dark/prefersdark themes) ·
-Drizzle ORM + better-sqlite3 (SQLite) · Zod 4 + sveltekit-superforms 2 · stripe 23 (API `2026-09-30.endive`, server SDK only,
-hosted Checkout — never render card inputs) · vitest + in-memory SQLite ·
-Playwright + axe · dependency-cruiser · pnpm · node 26.12.0 via mise.
-
-## UI
-
-Use DaisyUI component classes and Tailwind layout utilities only, with semantic theme colors;
-`app.css` contains only Tailwind/DaisyUI setup. Every page uses one of the five snippet layouts
-in `src/lib/components/page/`: list (table + existing filters), detail, form, settings, dashboard
-(stats + steps + existing recent activity). Shells use a desktop `<nav>` sidebar and a mobile
-`<details>/<summary>` dropdown inside `<header>`, so navigation works without JS and all
-controls stay within landmarks. Use `menu menu-horizontal` page navigation, because inactive
-tabs dim link text below AA. Confirmation pages render
-inline; native dialogs open only from explicit user actions, with a no-JS fallback, so page loads
-do not dim or block the app. Built-in components and themes avoid maintaining visual design
-and vendored UI sources.
-
-## Svelte 5 — runes only (legacy syntax is a build error)
-
-```svelte
-<script lang="ts">
-  let { title, onconfirm } = $props(); // NOT `export let`
-  let count = $state(0); // NOT top-level `let` reactivity
-  const doubled = $derived(count * 2); // NOT `$:`
-  $effect(() => {
-    /* side effects only */
-  });
-</script>
-
-<button onclick={() => count++}>{title}</button> <!-- NOT on:click -->
-```
-
-- Events: plain attributes (`onclick`, `onsubmit`); component callbacks are props
-  (`onconfirm`), **not** `createEventDispatcher`.
-- Composition: snippets + `{@render ...}`, **not** slots.
-- No svelte/store for new code; use runes. `$app/stores` → use `$app/state`.
-
-## Architecture layers (enforced by dependency-cruiser — CI fails on violation)
-
-```
-src/lib/shared/    client-safe: zod schemas, money, enums+label-key mappers. Imports nothing server-side.
-src/lib/i18n/      typed catalog. No server imports.
-src/lib/server/domain/**   framework-free business logic. May import db/, shared/, other domain
-                           modules, gateway *interfaces*. MUST NOT import $app/*, @sveltejs/kit,
-                           routes, components, or gateway implementations.
-src/lib/server/gateways/   external effects (stripe real/dev, discord). Implement domain ports.
-src/routes/**      thin: parse (zod) → call domain service → render/redirect. Never imports
-                   `stripe` or `better-sqlite3` directly.
-```
-
-Every domain mutation runs inside one synchronous `write` transaction and appends its audit
-row in the same tx. `write` uses BEGIN IMMEDIATE; `read` supplies multi-statement snapshots.
-Callbacks cannot return promises, because better-sqlite3 commits at the first await.
-SQLite partial unique indexes and composite FKs preserve concurrency and money invariants.
-
-## Forms & progressive enhancement
-
-- Real forms (multiple fields): sveltekit-superforms 2 + zod4 adapter, `use:enhance`.
-- One-button state transitions (publish, confirm, check-in, …): plain named form actions.
-- Every mutation is a `<form method="POST">` that works **without JS**. JS only enhances.
-- Destructive/irreversible actions get a confirm step (page or dialog with no-JS fallback).
-
-## i18n (EN + JA, both mandatory)
-
-- Catalog: `src/lib/i18n/messages/en.ts` + `ja.ts`, `ja satisfies Record<keyof typeof en, ...>`
-  — a missing key is a **compile error**. No hardcoded user-facing strings in components,
-  routes, CSV headers, or emails. `t(locale, key, params)` from `event.locals`.
-- Locale resolution (hooks): `?lang=` query (persist cookie) → `offkai_lang` cookie →
-  `Accept-Language` → `en`. Every page emits `<html lang>`.
-- Participant-facing web pages have been removed because participant interactions are moving to
-  Discord; registration and payment services remain for the bot. Statuses use label-key mappers.
-- The brand name appears only via the single brand token in the catalog (rename must stay
-  a one-line change).
-
-## Money & payments
-
-- Amounts: `bigint` minor units + 3-letter lowercase-insensitive currency; snapshot
-  semantics (payment request rows copy amount+currency; composite FK pins currency).
-- Direct charges on the organizer's connected account. The platform never holds funds.
-- Settlement happens ONLY in the unified settle service (webhook / dev-pay / manual
-  confirm / waive). **Never mark anything paid from a Stripe return URL.**
-- Webhook parsing tolerates Stripe API-version mismatch (read only long-stable fields);
-  idempotency via the `stripe_webhook_events` ledger + record idempotency keys.
-
-## Time & environment
-
-- Wall-clock parse/format only through `src/lib/server/time/` using `OFFKAI_TIMEZONE`
-  (default Asia/Tokyo). Never system TZ; never ad-hoc `toLocaleString`/`Intl` outside the
-  util (dependency-cruiser enforces).
-- All config via `OFFKAI_*` env vars parsed in `src/lib/server/config.ts`; fail fast on
-  invalid/missing prod config. No silent fallbacks. Dev bypass (`OFFKAI_AUTH_DEV_BYPASS`)
-  is the only mode that relaxes requirements and must log a loud warning.
-
-## Testing & commands
-
-```
-pnpm check        # svelte-check
-pnpm lint         # eslint + prettier check
-pnpm depcruise    # boundary lint
-pnpm test         # vitest unit
-pnpm test:integration   # vitest + isolated in-memory SQLite
-pnpm test:e2e     # Playwright against built app (dev bypass + stripedev)
-```
-
-- Domain logic with DB effects → integration tests against an isolated in-memory SQLite
-  database cloned from a migrated template. Keep concurrent-call outcome assertions to
-  verify invariants under serialized synchronous writes; inject a fixed Clock for reproducibility.
-- Every GET route must have a sweep fixture (route sweep renders all routes in ja+en and
-  scans for raw enums/`undefined`/`NaN`/`[object Object]`). New route without fixture =
-  test failure.
-- Security regressions (cross-site POST rejected, rate limit 429, security headers,
-  request-id) are pinned tests — keep them green.
-
-## Conventions
-
-- TypeScript `strict`; no `any` unless interfacing with untyped webhook payloads (then
-  narrow immediately with zod).
-- Errors: domain services throw typed errors; routes map them to localized user messages.
-  Never leak stack traces or internal identifiers to responses.
-- Logging: pino via the request-scoped logger (request-id child). No `console.log`.
-- Commits: small, imperative subject, English. Never `git push --force` (use
-  `--force-with-lease`). Do not commit secrets.
-- ADRs in `docs/adr/` (see `.agents/skills/documentation-and-adrs/`): record any decision
-  that deviates from the delegation spec, in the same PR.
+- Use Node/pnpm pinned in `mise.toml`, TypeScript strict, Svelte 5 runes, callback props,
+  snippets and `$app/state`, because legacy Svelte reactivity is disabled by the compiler.
+  Avoid `any` and narrow untyped webhook payloads immediately so validation cannot bypass types.
+- Keep routes thin (Zod parse → domain service → response). Domain code must stay framework-free
+  and import gateway interfaces, while implementations own external effects; dependency-cruiser
+  enforces these boundaries to keep business logic independently testable. Keep shared schemas
+  and i18n client-safe so server code and secrets cannot enter browser bundles.
+- Make each domain mutation and its audit row one synchronous `write` transaction
+  (`BEGIN IMMEDIATE`); use `read` for snapshots. Never return promises or await in transaction
+  callbacks, because better-sqlite3 commits before asynchronous work finishes. Preserve SQLite
+  STRICT tables, partial unique indexes, composite FKs and the manual migration objects because
+  they enforce money, history and concurrency invariants beyond TypeScript.
+- Use bigint minor units and snapshot amount/currency/fees. Direct Stripe charges belong to the
+  organizer's account; route settlement through the unified service and signed webhook ledger,
+  never a return URL, because redirects are not payment evidence. Keep card inputs in hosted
+  Checkout so the app never handles card data.
+- Use DaisyUI components, semantic theme colors and Tailwind layout utilities with the built-in
+  light/dark themes; keep `app.css` to setup only, because shared primitives avoid custom design
+  maintenance. Use the five page snippets in `src/lib/components/page/` for consistent structure.
+- Keep desktop navigation in `<nav>` and mobile `<details>/<summary>` inside `<header>`;
+  use `menu menu-horizontal` for page navigation because dimmed inactive tabs fail AA contrast.
+  Require explicit actions to open dialogs, with inline/no-JS fallbacks, so page loads stay usable.
+- Use superforms + zod4 + `use:enhance` for multi-field forms and named POST actions for single
+  transitions. All mutations need working no-JS forms and irreversible actions need confirmation,
+  because enhancement must preserve access and deliberate consent.
+- Put user-facing text in both typed EN/JA catalogs, statuses in label-key mappers and the brand
+  in its single catalog token, so translation completeness and renaming remain enforceable.
+- Parse environment settings only in `config.ts` and document them in `docs/configuration.md`;
+  format/parse wall-clock time only through `server/time/`, because host TZ and scattered defaults
+  make behavior deployment-dependent. Never expose dev login bypass because it grants arbitrary
+  sessions. Use request-scoped pino and localized typed errors so logs correlate without leaking
+  secrets, stack traces or internal IDs to users.
+- Test DB effects with isolated migrated in-memory SQLite and fixed clocks, retaining concurrent
+  outcome assertions because writes serialize synchronously. Keep schema parity checks because
+  generated migrations omit manual SQLite details. Every GET needs a JA/EN route-sweep fixture
+  to catch missing translations and raw values; preserve security regressions for CSRF, rate
+  limits, headers and request IDs.
+- Run `pnpm test` (unit), `pnpm test:integration` (SQLite), `pnpm test:scenario` (signed HTTP),
+  `pnpm check`, `pnpm lint`, `pnpm depcruise`, `pnpm build` and `pnpm test:e2e` (headless
+  Playwright + axe). Use fake Discord/Stripe transports because tests must be repeatable without
+  external accounts or money movement. Keep build output stable while E2E serves it to avoid
+  invalidating assets mid-run.
+- Read existing code/docs before changing contracts and record new design decisions with reasons
+  in an indexed ADR, because implementation and tests alone do not establish intended behavior.
+  Keep changes scoped to the request and external publication explicit, because local tool access
+  does not imply permission to publish. Never infer public identity; verify configured identity
+  before external actions because this workspace uses different identities for different purposes.

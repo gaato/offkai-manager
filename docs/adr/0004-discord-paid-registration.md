@@ -1,6 +1,6 @@
 # Discord payments, seat holds, embedded payouts and delivery
 
-Status: accepted implementation decisions for the paid Discord milestone.
+Status: accepted.
 
 An event selects `none`, `pay_to_confirm`, or `pay_later`. The event's primary
 `collections` row holds its participant price and currency. Its card, cash, PayPay,
@@ -56,7 +56,7 @@ Checkout reserves a durable intent in `write`, calls Stripe outside the transact
 then re-reads attendance, event and organization state before attaching. The
 request/generation pair supplies the idempotency key and Checkout reference.
 `payment_checkout_sessions` retains previous sessions so replacement sessions do
-not hide late money. A webhook can resolve the reserved reference before phase 2.
+not hide late money. A webhook can resolve the reserved reference before the response is attached.
 Timeouts retain the same intent/key: deleting an ambiguous intent could create a
 second collectible Checkout after Stripe accepted the first call. Session expiry
 permits a new generation. Paid, waived, cancelled or released requests never
@@ -94,8 +94,7 @@ The following small ambiguities are resolved explicitly:
 
 `tickOnce(client, now)` releases expired holds and queues panel refresh, role sync,
 notifications and waitlist admission atomically. A recursive `setTimeout` worker
-calls it using injected time. One-off hold-expiry notices are included; scheduled
-reminders and check-in remain outside this milestone.
+calls it using injected time. One-off hold-expiry notices are included; periodic reminders are not scheduled; reception is described in ADR 0005.
 
 Notification jobs use DM first. Only HTTP 403 with Discord 50007/50278 permits a
 private-thread fallback. The worker stores the thread, adds the participant,

@@ -1,6 +1,3 @@
-import { mkdtempSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openDatabase } from '$lib/server/db/client';
 import { runMigrations } from '$lib/server/db/migrate';
@@ -14,22 +11,15 @@ import {
   registrationFormAnswers
 } from '$lib/server/db/schema';
 
-it('upgrades populated databases without losing registration history, roles, or pending outbox retries', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'offkai-discord-migration-'));
+it('initializes the baseline and safely reruns it without changing history or pending retries', () => {
   const client = openDatabase(':memory:');
   try {
-    mkdirSync(join(directory, 'meta'));
-    const journal = JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8'));
-    journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx < 2);
-    writeFileSync(join(directory, 'meta/_journal.json'), JSON.stringify(journal));
-    for (const entry of journal.entries)
-      copyFileSync(`drizzle/${entry.tag}.sql`, join(directory, `${entry.tag}.sql`));
-    runMigrations(client, directory);
+    runMigrations(client);
     client.db.$client.exec(`
       INSERT INTO users (id) VALUES ('user-a'), ('user-b');
       INSERT INTO organizations (id, name, slug) VALUES ('org', 'Organization', 'organization');
-      INSERT INTO events (id, organization_id, title, slug, starts_at, ends_at, visibility, discord_policy, registration_opens_at, registration_closes_at)
-      VALUES ('event-a', 'org', 'A', 'a', 100, 200, 'public', 'optional', 1, 90), ('event-b', 'org', 'B', 'b', 100, 200, 'public', 'optional', 1, 90);
+      INSERT INTO events (id, organization_id, title, slug, starts_at, ends_at, visibility, discord_policy, registration_opens_at, registration_closes_at, payment_requirement)
+      VALUES ('event-a', 'org', 'A', 'a', 100, 200, 'public', 'optional', 1, 90, 'pay_later'), ('event-b', 'org', 'B', 'b', 100, 200, 'public', 'optional', 1, 90, 'none');
       INSERT INTO registrations (id, event_id, user_id, status, display_name_snapshot, created_at)
       VALUES ('a', 'event-a', 'user-a', 'cancelled', 'A', 10), ('b', 'event-a', 'user-b', 'confirmed', 'B', 20), ('c', 'event-b', 'user-a', 'confirmed', 'A', 10);
       INSERT INTO event_discord_integrations (id, event_id, guild_id, staff_channel_id, role_id)
@@ -49,7 +39,11 @@ it('upgrades populated databases without losing registration history, roles, or 
       INSERT INTO outbox_events (id, type, payload_json, status, attempts, last_error, next_attempt_at)
       VALUES ('task', 'discord.role_sync_requested', '{"event_id":"event-a","registration_id":"b"}', 'pending', 3, 'Previously unavailable', 123456);
     `);
+    // Startup migration checks must leave existing application rows untouched.
     runMigrations(client);
+    expect(
+      client.db.$client.prepare('select count(*) as count from __drizzle_migrations').get()
+    ).toEqual({ count: 1 });
     expect(
       client.db
         .select()
@@ -113,6 +107,5 @@ it('upgrades populated databases without losing registration history, roles, or 
     expect(client.db.$client.pragma('foreign_key_check')).toEqual([]);
   } finally {
     client.db.$client.close();
-    rmSync(directory, { recursive: true, force: true });
   }
 });
