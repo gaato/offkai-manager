@@ -196,6 +196,7 @@ for (const locale of ['ja', 'en'] as const) {
         .getAttribute('href');
       expect(participantEventHref).toMatch(/^\/app\/events\/[0-9a-f-]+$/);
       const path = route.path
+        .replace('/legal/[fixture]', organizationHref!.replace('/app/organizations/', '/legal/'))
         .replace('/app/organizations/[fixture]', organizationHref!)
         .replace('/app/events/[event]', eventHref!)
         .replace('/app/events/[participant-event]', participantEventHref!)

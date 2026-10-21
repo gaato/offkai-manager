@@ -57,11 +57,12 @@ export const actions: Actions = {
     const { actor, orgId, config, client, gateway } = context(event);
     if (!gateway) return fail(503, { problem: event.locals.t('stripe.not_configured') });
     try {
-      await ensureConnectedAccount(
-        client,
-        gateway,
-        onboardingInput(orgId, actor, config.auth.publicBaseUrl)
-      );
+      await ensureConnectedAccount(client, gateway, {
+        ...onboardingInput(orgId, actor, config.auth.publicBaseUrl),
+        publicBaseUrl: config.auth.publicBaseUrl,
+        locale: event.locals.locale,
+        merchantMcc: config.stripe.merchantMcc
+      });
     } catch (cause) {
       if (cause instanceof ConnectError && cause.code === 'forbidden') throw error(403);
       event.locals.logger.error({ err: cause }, 'create payout account failed');
@@ -72,11 +73,12 @@ export const actions: Actions = {
   hosted: async (event) => {
     const { actor, orgId, config, client, gateway } = context(event);
     if (!gateway) return fail(503, { problem: event.locals.t('stripe.not_configured') });
-    const url = await startOnboarding(
-      client,
-      gateway,
-      onboardingInput(orgId, actor, config.auth.publicBaseUrl)
-    );
+    const url = await startOnboarding(client, gateway, {
+      ...onboardingInput(orgId, actor, config.auth.publicBaseUrl),
+      publicBaseUrl: config.auth.publicBaseUrl,
+      locale: event.locals.locale,
+      merchantMcc: config.stripe.merchantMcc
+    });
     throw redirect(303, url);
   }
 };

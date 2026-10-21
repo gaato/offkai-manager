@@ -375,7 +375,7 @@ describe('Discord organizer setup persistence', () => {
       getEventDashboard(client, owner.userId, event.id).steps.map((step) => step.done)
     ).toEqual([true, true, true, true]);
   });
-  it('copies only same-organization configuration, shifting dates and clearing review/lifecycle/participation', async () => {
+  it('copies only same-organization configuration, resets reception and clears review/lifecycle/participation', async () => {
     const { owner, event, org } = await fixture();
     const joined = await createRegistration(
       client,
@@ -465,10 +465,8 @@ describe('Discord organizer setup persistence', () => {
     expect(copy.endsAt.getTime() - copy.startsAt.getTime()).toBe(
       event.endsAt.getTime() - event.startsAt.getTime()
     );
-    const original = client.db.select().from(events).where(eq(events.id, event.id)).get()!;
-    expect(copy.registrationClosesAt.getTime() - copy.startsAt.getTime()).toBe(
-      original.registrationClosesAt.getTime() - original.startsAt.getTime()
-    );
+    expect(copy.registrationOpensAt).toEqual(fixedClock.now());
+    expect(copy.registrationClosesAt).toEqual(copy.startsAt);
     const copiedFields = client.db
       .select()
       .from(eventFormFields)

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { connectAppearance, followConnectTheme } from '$lib/client/stripe-appearance';
   import SettingsPage from '$lib/components/page/settings-page.svelte';
   import { translator } from '$lib/i18n';
   import { stripeOnboardingStatusLabelKey } from '$lib/shared/payment';
@@ -28,25 +29,49 @@
       return;
     }
     let disposed = false;
+    const abort = new AbortController();
     let cleanup: (() => void) | undefined;
+    const stop = () => {
+      abort.abort();
+      const remove = cleanup;
+      cleanup = undefined;
+      remove?.();
+    };
+    const fail = () => {
+      if (disposed || failed) return;
+      failed = true;
+      stop();
+    };
     void (async () => {
       try {
-        // /pure keeps script injection inside this mounted, authenticated screen only.
-        const { loadConnectAndInitialize } = await import('@stripe/connect-js/pure');
+        const { initializeConnect } = await import('$lib/client/stripe-connect');
         if (disposed) return;
-        const connect = loadConnectAndInitialize({
-          publishableKey: data.publishableKey,
-          locale: data.locale,
-          fetchClientSecret: async () => {
-            const response = await fetch(data.sessionEndpoint, { method: 'POST' });
-            if (!response.ok) throw new Error('Account Session unavailable');
-            const session: { clientSecret: string } = await response.json();
-            return session.clientSecret;
-          }
-        });
+        const connect = await initializeConnect(
+          {
+            publishableKey: data.publishableKey,
+            locale: data.locale,
+            appearance: connectAppearance(host!),
+            fetchClientSecret: async () => {
+              const response = await fetch(data.sessionEndpoint, {
+                method: 'POST',
+                signal: abort.signal
+              });
+              if (!response.ok) throw new Error('Account Session unavailable');
+              const session: { clientSecret: string } = await response.json();
+              return session.clientSecret;
+            }
+          },
+          abort.signal
+        );
+        if (disposed) {
+          void connect.logout().catch(() => {});
+          return;
+        }
+        const stopTheme = followConnectTheme(connect, host!);
         // Stripe owns this empty mount node; Svelte never renders children into it.
         cleanup = () => {
-          void connect.logout();
+          stopTheme();
+          void connect.logout().catch(() => {});
           // eslint-disable-next-line svelte/no-dom-manipulating -- This host has no Svelte-rendered children.
           host?.replaceChildren();
         };
@@ -59,20 +84,19 @@
           'payments'
         ] as const;
         for (const name of names) {
+          if (failed) break;
           const element = connect.create(name);
-          element.setOnLoadError(() => {
-            failed = true;
-          });
+          element.setOnLoadError(fail);
           // eslint-disable-next-line svelte/no-dom-manipulating -- Stripe custom elements require imperative mounting into their dedicated host.
           host?.appendChild(element);
         }
       } catch {
-        if (!disposed) failed = true;
+        fail();
       }
     })();
     return () => {
       disposed = true;
-      cleanup?.();
+      stop();
     };
   });
 </script>

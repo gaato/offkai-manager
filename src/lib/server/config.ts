@@ -116,6 +116,10 @@ const rawSchema = z.object({
   OFFKAI_STRIPE_WEBHOOK_SECRET: z.string().default(''),
   OFFKAI_STRIPE_V2_WEBHOOK_SECRET: z.string().default(''),
   OFFKAI_STRIPE_PUBLISHABLE_KEY: z.string().default(''),
+  OFFKAI_STRIPE_MERCHANT_MCC: z
+    .string()
+    .regex(/^\d{4}$/)
+    .default('7299'),
   OFFKAI_PRICE_ROUNDING_UNITS: z
     .string()
     .regex(/^\d+(,\d+)*$/)
@@ -159,6 +163,7 @@ export interface Config {
     webhookSecret: string;
     v2WebhookSecret: string;
     publishableKey: string;
+    merchantMcc: string;
   };
   priceRoundingUnits: number[];
   platform: { adminDiscordIds: string[] };
@@ -359,6 +364,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       secretKey: raw.OFFKAI_STRIPE_SECRET_KEY,
       webhookSecret: raw.OFFKAI_STRIPE_WEBHOOK_SECRET,
       v2WebhookSecret: raw.OFFKAI_STRIPE_V2_WEBHOOK_SECRET,
+      merchantMcc: raw.OFFKAI_STRIPE_MERCHANT_MCC,
       publishableKey: raw.OFFKAI_STRIPE_PUBLISHABLE_KEY
     },
     platform: {

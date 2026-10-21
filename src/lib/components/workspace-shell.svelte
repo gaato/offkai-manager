@@ -51,7 +51,11 @@
   </ul>
 {/snippet}
 
-<div class="flex min-h-dvh flex-col">
+<!-- CSP belongs to the document. Leaving payouts must restore the stricter policy. -->
+<div
+  class="flex min-h-dvh flex-col"
+  data-sveltekit-reload={page.route.id === '/app/organizations/[orgId]/payouts'}
+>
   <header class="navbar bg-base-200 flex-wrap gap-3 px-4">
     <details class="dropdown lg:hidden">
       <summary class="btn">{navigationLabel}</summary>

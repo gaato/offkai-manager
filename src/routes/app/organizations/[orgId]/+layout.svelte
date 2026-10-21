@@ -51,7 +51,8 @@
 
           {#if data.capabilities.canManageStripe}
             <li>
-              <a href={`/app/organizations/${data.organization.id}/payouts`}>{t('payouts.title')}</a
+              <a data-sveltekit-reload href={`/app/organizations/${data.organization.id}/payouts`}
+                >{t('payouts.title')}</a
               >
             </li>
           {/if}

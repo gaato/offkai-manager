@@ -7,6 +7,7 @@ export {
   syncAccount,
   type ConnectAccountRecord,
   type ConnectActor,
+  type AccountCreationInput,
   type OnboardingInput
 } from './connect';
 

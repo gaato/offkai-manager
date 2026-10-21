@@ -1,4 +1,5 @@
 import { attendanceState } from './core';
+import type { Locale } from '$lib/i18n';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { and, eq, ne, sql } from 'drizzle-orm';
@@ -25,6 +26,7 @@ export interface CreateRegistrationInput {
   userId: string;
   displayName: string;
   answers: RegistrationAnswerInput[];
+  locale?: Locale;
 }
 
 export interface RegistrationSummary {
@@ -121,6 +123,7 @@ export async function createRegistration(
           holdExpiresAt: decision.next.kind === 'held' ? decision.next.holdExpiresAt : null,
           number,
           displayNameSnapshot: displayName,
+          locale: input.locale ?? 'en',
           searchText
         })
         .returning()

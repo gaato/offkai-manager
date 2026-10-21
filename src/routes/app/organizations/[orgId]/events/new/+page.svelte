@@ -120,13 +120,16 @@
                 >
                   <input
                     id={`field-registrationMode-${mode}`}
+                    aria-labelledby={`label-registrationMode-${mode}`}
                     type="radio"
                     name="registrationMode"
                     value={mode}
                     bind:group={$form.registrationMode}
                     class="radio"
                   />
-                  <span>{t(registrationModeLabelKey(mode))}</span>
+                  <span id={`label-registrationMode-${mode}`}
+                    >{t(registrationModeLabelKey(mode))}</span
+                  >
                 </label>
               {/each}
             </fieldset>

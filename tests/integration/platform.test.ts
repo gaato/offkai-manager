@@ -126,6 +126,9 @@ describe('platform suspension domain', () => {
         {
           organizationId: organization.id,
           actor: { userId: adminUserId },
+          publicBaseUrl: 'https://example.test',
+          locale: 'en',
+          merchantMcc: '7299',
           returnUrl: 'https://example.test/return',
           refreshUrl: 'https://example.test/refresh'
         },

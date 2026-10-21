@@ -314,6 +314,46 @@ describe('signed FREE event Discord journeys', () => {
     expect(JSON.stringify(await call(modal))).toContain('# 001');
     expect(client.db.select().from(registrations).all()).toHaveLength(1);
   });
+  it.each(['en-US', 'ja'] as const)(
+    'does not claim to save answers when Join rejects before the modal (%s)',
+    async (locale) => {
+      const { event } = await discordEvent(client, { fields: [{ label: 'Name' }] });
+      client.db
+        .update(events)
+        .set({ registrationOpensAt: new Date('2026-12-01T00:00:00Z') })
+        .where(eq(events.id, event.id))
+        .run();
+      const interaction = button('join', event.id);
+      interaction.locale = locale as Locale;
+      const response = await call(interaction);
+      expect(response).toMatchObject({ type: 4 });
+      expect(JSON.stringify(response)).toContain(
+        locale === 'ja' ? '現在は受付時間外です。' : 'Registration is not open.'
+      );
+      expect(JSON.stringify(response)).not.toMatch(/saved|保存/);
+      expect(client.db.select().from(interactionDrafts).all()).toHaveLength(0);
+    }
+  );
+
+  it.each(['ja', 'en-US', 'fr'] as const)(
+    'persists Discord locale on join and changes it on answer edit (%s)',
+    async (locale) => {
+      const { event, fields } = await discordEvent(client, { fields: [{ label: 'Name' }] });
+      const joining = submit(event.id, { [fields[0].key]: 'Participant' });
+      joining.locale = locale as Locale;
+      await call(joining);
+      expect(client.db.select().from(registrations).get()!.locale).toBe(
+        locale === 'ja' ? 'ja' : 'en'
+      );
+      const editing = submit(event.id, { [fields[0].key]: 'Edited' }, 'edit');
+      editing.locale = (locale === 'ja' ? 'en-US' : 'ja') as Locale;
+      await call(editing);
+      expect(client.db.select().from(registrations).get()!.locale).toBe(
+        locale === 'ja' ? 'en' : 'ja'
+      );
+    }
+  );
+
   it('preserves answers when the registration window closes between opening and submitting', async () => {
     const { event, fields } = await discordEvent(client, { fields: [{ label: 'Name' }] });
     await call(button('join', event.id));
@@ -323,7 +363,7 @@ describe('signed FREE event Discord journeys', () => {
       .where(eq(events.id, event.id))
       .run();
     const response = await call(submit(event.id, { [fields[0].key]: 'Still saved' }));
-    expect(JSON.stringify(response)).toContain('not open');
+    expect(JSON.stringify(response)).toContain('Your submitted answers are saved');
     expect(client.db.select().from(interactionDrafts).get()!.payloadJson[fields[0].key]).toBe(
       'Still saved'
     );

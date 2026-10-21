@@ -16,6 +16,7 @@ export const ja = {
   'payment.requirement.pay_later': '先に参加確定・後で支払い',
   'payment.requirement': '支払い条件',
   'payment.amount_to_collect': '1人あたりの受取希望額（円）',
+  'payment.rounding_unit': '{unit}円単位',
   'payment.rounding': '参加費の切り上げ単位（円）',
   'payment.override': '参加費の上書き（円・任意）',
   'payment.hold_minutes': '席の保留時間（分）',
@@ -41,6 +42,10 @@ export const ja = {
   'participant.held': '支払い中の席を確保しています。',
   'registration.status.held': '席を保留中',
   'payments.request_status.refund_due': '要返金',
+  'stripe.product_description': '主催者が開催するファン交流オフ会の参加費です。',
+  'legal.organizer.title': '主催者の特定商取引法に基づく表記',
+  'legal.organizer.intro':
+    'この主催者はファン交流オフ会の参加費を徴収します。連絡先と取引条件の詳細は主催者が案内します。',
   'payouts.title': '入金口座',
   'payouts.create': '入金口座を作成',
   'payouts.intro':
@@ -123,7 +128,7 @@ export const ja = {
   'event.copy_from': '前回のイベントからコピー',
   'event.copy_none': '初期設定から作成',
   'event.copy_help':
-    '設定・有効なフォーム項目・テンプレート・Discordの送信先をコピーします。日付は新しい開始日時に合わせて移動します。定員と登録方式を空欄にすると引き継ぎます。新しいイベントでテンプレートを確認してください。',
+    '設定・有効なフォーム項目・テンプレート・Discordの送信先をコピーします。開催時間の長さを引き継ぎ、受付は作成時から新しい開始日時までに設定します。定員と登録方式を空欄にすると引き継ぎます。新しいイベントでテンプレートを確認してください。',
   'event.copy_inherit': '前回の設定・初期値を使用',
   'event.setup_linked': 'Discordを連携',
   'event.setup_reviewed': 'パネル本文を確認',
@@ -203,7 +208,8 @@ export const ja = {
   'participant.invalid':
     '回答を受け付けられませんでした。回答は{minutes}分間保存されます。「もう一度入力」から修正してください。',
   'participant.expired': '保存した回答の有効期限が切れました。フォームを開き直してください。',
-  'participant.closed':
+  'participant.closed': '現在は受付時間外です。',
+  'participant.closed_saved':
     '現在は受付時間外です。送信した回答は保存されています。受付開始後に再度お試しください。',
   'participant.not_withdrawable': 'イベント開始後、または参加取消済みの場合は取り消せません。',
   'participant.error': '操作を完了できませんでした。参加状況を更新してから再度お試しください。',

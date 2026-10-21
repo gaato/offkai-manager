@@ -81,6 +81,9 @@ function actionContext(event: RequestEvent) {
     input: {
       organizationId: organizationId.data,
       actor: session,
+      publicBaseUrl: config.auth.publicBaseUrl,
+      locale: event.locals.locale,
+      merchantMcc: config.stripe.merchantMcc,
       returnUrl: new URL(`${base}/return`, config.auth.publicBaseUrl).toString(),
       refreshUrl: new URL(`${base}/refresh`, config.auth.publicBaseUrl).toString()
     }

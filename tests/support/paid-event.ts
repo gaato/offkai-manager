@@ -1,3 +1,4 @@
+import type { Locale } from '$lib/i18n';
 import { eq } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
 import { events, stripeConnectAccounts } from '$lib/server/db/schema';
@@ -54,7 +55,7 @@ export async function paidEvent(
       defaultTuning
     );
   });
-  const join = async (id = '200000000000000002') => {
+  const join = async (id = '200000000000000002', locale: Locale = 'en') => {
     const user = await upsertDiscordIdentity(
       client,
       {
@@ -72,6 +73,7 @@ export async function paidEvent(
         eventSlug: base.event.slug,
         userId: user.userId,
         displayName: 'Participant',
+        locale,
         answers: []
       },
       fixedClock

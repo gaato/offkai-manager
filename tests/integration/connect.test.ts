@@ -1,5 +1,6 @@
+import { translate } from '$lib/i18n';
 import { testDatabase, fixedClock } from '../database';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { asc, count, eq } from 'drizzle-orm';
 import { closeDatabase, type DatabaseClient } from '$lib/server/db/client';
 import { auditLogs, stripeConnectAccounts, organizations } from '$lib/server/db/schema';
@@ -9,7 +10,7 @@ import {
   ConnectError,
   startOnboarding,
   syncAccount,
-  type OnboardingInput
+  type AccountCreationInput
 } from '$lib/server/domain/payments';
 import { createOrganization, inviteMember } from '$lib/server/domain/orgs';
 
@@ -101,14 +102,41 @@ describe('Stripe Connect domain', () => {
   afterEach(async () => {
     if (client) await closeDatabase(client);
   });
-  function input(organizationId: string, actorId = ownerId): OnboardingInput {
+  function input(organizationId: string, actorId = ownerId): AccountCreationInput {
     return {
       organizationId,
+      publicBaseUrl: 'https://example.test',
+      locale: 'ja',
+      merchantMcc: '7299',
       actor: { userId: actorId },
       returnUrl: `https://example.test/app/organizations/${organizationId}/stripe/return`,
       refreshUrl: `https://example.test/app/organizations/${organizationId}/stripe/refresh`
     };
   }
+  it.each(['ja', 'en'] as const)(
+    'prefills only on creation, never on later links or status refresh (%s)',
+    async (locale) => {
+      const organization = await createOrganization(
+        client,
+        { actorUserId: ownerId, name: 'Prefill organizer' },
+        fixedClock
+      );
+      const gateway = new FakeConnectGateway();
+      const create = vi.spyOn(gateway, 'createAccount');
+      const creation = { ...input(organization.id), locale, merchantMcc: '7999' };
+      await startOnboarding(client, gateway, creation, fixedClock);
+      expect(create).toHaveBeenCalledWith({
+        organizationId: organization.id,
+        businessUrl: `https://example.test/legal/${organization.id}`,
+        productDescription: translate(locale, 'stripe.product_description'),
+        merchantMcc: '7999'
+      });
+      await startOnboarding(client, gateway, creation, fixedClock);
+      await syncAccount(client, gateway, organization.id, { userId: ownerId }, fixedClock);
+      expect(create).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it('persists one account when two onboarding starts race', async () => {
     const organization = await createOrganization(
       client,

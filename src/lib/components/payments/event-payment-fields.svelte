@@ -52,18 +52,22 @@
       </p>{/if}{/each}
   {#if !ready}<p>
       {t('payment.finish_payouts')}
-      <a class="link" href={payoutsHref}>{t('payment.manage_payouts')}</a>
+      <a class="link" data-sveltekit-reload href={payoutsHref}>{t('payment.manage_payouts')}</a>
     </p>{/if}
   {#each paymentRequirements as requirement (requirement)}
-    <label class="label min-h-12 gap-3"
+    <label for={`paymentRequirement-${requirement}`} class="label min-h-12 gap-3"
       ><input
+        id={`paymentRequirement-${requirement}`}
+        aria-labelledby={`paymentRequirement-label-${requirement}`}
         class="radio"
         type="radio"
         name="paymentRequirement"
         value={requirement}
         bind:group={values.paymentRequirement}
         disabled={!ready && requirement !== 'none' && values.paymentRequirement !== requirement}
-      />{t(paymentRequirementLabelKey(requirement))}</label
+      /><span id={`paymentRequirement-label-${requirement}`}
+        >{t(paymentRequirementLabelKey(requirement))}</span
+      ></label
     >
   {/each}
   <label class="label" for="amountToCollect">{t('payment.amount_to_collect')}</label>
@@ -78,14 +82,17 @@
   />
   <fieldset class="fieldset">
     <legend class="fieldset-legend">{t('payment.rounding')}</legend>
-    {#each units as unit (unit)}<label class="label min-h-12 gap-3"
+    {#each units as unit (unit)}<label for={`roundingUnit-${unit}`} class="label min-h-12 gap-3"
         ><input
           class="radio"
           type="radio"
+          id={`roundingUnit-${unit}`}
+          aria-labelledby={`roundingUnit-label-${unit}`}
           name="roundingUnit"
           value={unit}
           bind:group={values.roundingUnit}
-        />{unit}</label
+        /><span id={`roundingUnit-label-${unit}`}>{t('payment.rounding_unit', { unit })}</span
+        ></label
       >{/each}
   </fieldset>
   <label class="label" for="priceOverride">{t('payment.override')}</label>

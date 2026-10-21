@@ -1,3 +1,4 @@
+import { translate, type Locale } from '$lib/i18n';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { eq } from 'drizzle-orm';
@@ -29,16 +30,27 @@ export interface OnboardingInput {
   refreshUrl: string;
 }
 
-/** Ensures one persisted v2 account and returns a fresh single-use onboarding link. */
+export interface AccountCreationInput extends OnboardingInput {
+  publicBaseUrl: string;
+  locale: Locale;
+  merchantMcc: string;
+}
+
+/** Creates the organization’s v2 account once, including creation-only business prefill. */
 export async function ensureConnectedAccount(
   client: DatabaseClient,
   gateway: ConnectGateway,
-  input: OnboardingInput,
+  input: AccountCreationInput,
   clock: Clock = systemClock
 ): Promise<ConnectAccountRecord> {
   let account = await findAuthorizedAccount(client, input.organizationId, input.actor, 'owner');
   if (!account) {
-    const created = await gateway.createAccount({ organizationId: input.organizationId });
+    const created = await gateway.createAccount({
+      organizationId: input.organizationId,
+      businessUrl: new URL(`/legal/${input.organizationId}`, input.publicBaseUrl).href,
+      productDescription: translate(input.locale, 'stripe.product_description'),
+      merchantMcc: input.merchantMcc
+    });
     try {
       account = write(client, (tx) => {
         authorizeOwner(tx, input.organizationId, input.actor);
@@ -82,7 +94,7 @@ export async function ensureConnectedAccount(
 export async function startOnboarding(
   client: DatabaseClient,
   gateway: ConnectGateway,
-  input: OnboardingInput,
+  input: AccountCreationInput,
   clock: Clock = systemClock
 ): Promise<string> {
   const account = await ensureConnectedAccount(client, gateway, input, clock);

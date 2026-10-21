@@ -14,6 +14,7 @@ export const en = {
   'payment.requirement.pay_later': 'Confirm now, pay later',
   'payment.requirement': 'Payment requirement',
   'payment.amount_to_collect': 'Amount to collect per person (JPY)',
+  'payment.rounding_unit': 'Multiples of ¥{unit}',
   'payment.rounding': 'Round price up to (JPY)',
   'payment.override': 'Override participant price (JPY, optional)',
   'payment.hold_minutes': 'Seat hold (minutes)',
@@ -39,6 +40,10 @@ export const en = {
   'participant.held': 'Your seat is held while you pay.',
   'registration.status.held': 'Seat held',
   'payments.request_status.refund_due': 'Refund required',
+  'stripe.product_description': 'Participation fees for fan meetups organized by this organizer.',
+  'legal.organizer.title': 'Organizer legal disclosure',
+  'legal.organizer.intro':
+    'This organizer collects participation fees for fan meetups. Contact and transaction details will be provided by the organizer.',
   'payouts.title': 'Payout account',
   'payouts.create': 'Create payout account',
   'payouts.intro':
@@ -121,7 +126,7 @@ export const en = {
   'event.copy_from': 'Copy from a previous event',
   'event.copy_none': 'Start with defaults',
   'event.copy_help':
-    'Copies settings, active form fields, templates, and Discord destinations. Dates shift with the new start. Leave capacity and registration mode blank to inherit. Review templates for this new event.',
+    'Copies settings, active form fields, templates, and Discord destinations. Duration is preserved; registration opens now and closes at the new start. Leave capacity and registration mode blank to inherit. Review templates for this new event.',
   'event.copy_inherit': 'Use previous event / default',
   'event.setup_linked': 'Link Discord',
   'event.setup_reviewed': 'Review panel templates',
@@ -202,7 +207,8 @@ export const en = {
   'participant.invalid':
     'Some answers could not be accepted. Your answers are saved for {minutes} minutes; try again to correct them.',
   'participant.expired': 'Your saved answers expired. Open the form again to continue.',
-  'participant.closed':
+  'participant.closed': 'Registration is not open.',
+  'participant.closed_saved':
     'Registration is not open. Your submitted answers are saved; try again when registration opens.',
   'participant.not_withdrawable':
     'Cancellation is unavailable after the event starts or after registration is cancelled.',

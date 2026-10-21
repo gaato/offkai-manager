@@ -51,7 +51,7 @@ behavior.
 
 Copying is restricted to the same organization and includes active fields/options with fresh
 IDs, event settings, both templates, and Discord destinations. The new title and start are
-explicit; duration and registration-window offsets shift relative to the new start. Blank
+explicit; duration is preserved relative to the new start. Registration opens at creation time and closes at the new start, matching a fresh event so a copied event does not accidentally defer reception. Blank
 capacity/mode inherit; explicit values override. Archived fields/options, registrations,
 panels, lifecycle state, review completion, leases, and resource ownership are not copied.
 Review starts incomplete so organizers check event-specific rules before posting again.

@@ -44,8 +44,15 @@ describe('configuration', () => {
       migrate: true
     });
     expect(config.workerEnabled).toBe(true);
+    expect(config.stripe.merchantMcc).toBe('7299');
+    expect(loadConfig({ ...dev, OFFKAI_STRIPE_MERCHANT_MCC: '7999' }).stripe.merchantMcc).toBe(
+      '7999'
+    );
   });
   it.each([
+    ['OFFKAI_STRIPE_MERCHANT_MCC', '729'],
+    ['OFFKAI_STRIPE_MERCHANT_MCC', 'abcd'],
+    ['OFFKAI_STRIPE_MERCHANT_MCC', ''],
     ['OFFKAI_OUTBOX_POLL_INTERVAL_MS', '0'],
     ['OFFKAI_OUTBOX_BATCH_SIZE', '1001'],
     ['OFFKAI_OUTBOX_MAX_ATTEMPTS', '1.5'],

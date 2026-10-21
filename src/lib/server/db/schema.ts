@@ -290,6 +290,9 @@ export const registrations = sqliteTable(
     status: text('status').notNull(),
     holdExpiresAt: integer('hold_expires_at', { mode: 'timestamp_ms' }),
     holdWarnedAt: integer('hold_warned_at', { mode: 'timestamp_ms' }),
+    locale: text('locale', { enum: ['ja', 'en'] })
+      .notNull()
+      .default('en'),
     holdReleased: integer('hold_released', { mode: 'boolean' }).notNull().default(false),
     displayNameSnapshot: text('display_name_snapshot').notNull(),
     searchText: text('search_text').notNull().default(''),
@@ -302,6 +305,7 @@ export const registrations = sqliteTable(
       'registrations_held_deadline_check',
       sql`${table.status} <> 'held' or ${table.holdExpiresAt} is not null`
     ),
+    check('registrations_locale_check', sql`${table.locale} in ('ja', 'en')`),
     check('registrations_hold_released_check', sql`${table.holdReleased} in (0, 1)`),
     check('registrations_number_check', sql`${table.number} >= 0`),
     unique('registrations_event_id_id_key').on(table.eventId, table.id),

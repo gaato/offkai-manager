@@ -18,6 +18,7 @@ function eventFor(path: string) {
   const url = new URL(`https://example.test${path}?lang=ja`);
   return {
     url,
+    route: { id: null },
     request: new Request(url, {
       method: 'POST',
       body: '{}',

@@ -55,6 +55,13 @@ it('upgrades populated databases without losing registration history, roles, or 
         .select()
         .from(registrations)
         .all()
+        .every((row) => row.locale === 'en')
+    ).toBe(true);
+    expect(
+      client.db
+        .select()
+        .from(registrations)
+        .all()
         .map((row) => [row.id, row.number, row.status])
     ).toEqual([
       ['a', 1, 'cancelled'],

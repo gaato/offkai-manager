@@ -46,6 +46,7 @@
       <li class:step-primary={step.done} class="step" data-content={step.done ? '✓' : '○'}>
         <a
           class="link"
+          data-sveltekit-reload={step.anchor === 'payouts'}
           href={step.anchor === 'payouts'
             ? `/app/organizations/${data.event.organizationId}/payouts`
             : `${discordHref}#${step.anchor}`}>{t(step.key)}</a

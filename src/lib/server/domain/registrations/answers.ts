@@ -1,4 +1,5 @@
 import { attendanceState } from './core';
+import type { Locale } from '$lib/i18n';
 import { and, eq, inArray } from 'drizzle-orm';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { read, write, type DatabaseClient, type DatabaseTransaction } from '$lib/server/db/client';
@@ -77,6 +78,7 @@ export function editRegistrationAnswers(
     userId: string;
     registrationId: string;
     answers: RegistrationAnswerInput[];
+    locale?: Locale;
   },
   clock: Clock = systemClock
 ): void {
@@ -119,7 +121,7 @@ export function editRegistrationAnswers(
         .run();
     saveAnswers(tx, current.id, event.id, fields, input.answers, clock);
     tx.update(registrations)
-      .set({ updatedAt: clock.now() })
+      .set({ updatedAt: clock.now(), ...(input.locale ? { locale: input.locale } : {}) })
       .where(eq(registrations.id, current.id))
       .run();
     applyRegistrationEffects(

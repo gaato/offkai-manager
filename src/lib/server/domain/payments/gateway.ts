@@ -9,9 +9,16 @@ export interface ConnectAccount {
   dashboardType: StripeDashboardType;
 }
 
+export interface CreateConnectedAccountInput {
+  organizationId: string;
+  businessUrl: string;
+  productDescription: string;
+  merchantMcc: string;
+}
+
 /** Stripe Connect account management without coupling the domain to Stripe's SDK. */
 export interface ConnectGateway {
-  createAccount(input: { organizationId: string }): Promise<{
+  createAccount(input: CreateConnectedAccountInput): Promise<{
     accountId: string;
   }>;
   createAccountLink(input: { accountId: string; returnUrl: string; refreshUrl: string }): Promise<{

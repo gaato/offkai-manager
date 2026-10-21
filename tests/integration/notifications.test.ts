@@ -1,9 +1,12 @@
+import { translate } from '$lib/i18n';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { RateLimitError } from '@discordjs/rest';
 import { type DatabaseClient, write } from '$lib/server/db/client';
 import {
   events,
+  registrations,
+  eventDiscordIntegrations,
   notificationDeliveries,
   notificationThreads,
   outboxEvents
@@ -146,3 +149,52 @@ it('serializes notification claimers so DM spacing and private-thread creation c
   expect(claimRoleSyncEvents(client, 1, fixedClock)).toHaveLength(1);
   expect(claimRoleSyncEvents(client, 1, fixedClock)).toEqual([]);
 });
+
+it.each([
+  { locale: 'ja', fallback: false },
+  { locale: 'en', fallback: false },
+  { locale: 'ja', fallback: true },
+  { locale: 'en', fallback: true }
+] as const)(
+  'delivers each notification in the stored $locale locale only (thread fallback: $fallback)',
+  async ({ locale, fallback }) => {
+    const fixture = await paidEvent(client);
+    const registration = await fixture.join(undefined, locale);
+    client.db
+      .update(eventDiscordIntegrations)
+      .set({ notificationChannelId: 'notifications' })
+      .where(eq(eventDiscordIntegrations.eventId, fixture.event.id))
+      .run();
+    const { rest, calls } = recordingRest((call) =>
+      fallback && call.url.endsWith('/users/@me/channels')
+        ? responseLike({ code: 50007, message: 'No DMs' }, 403)
+        : responseLike({ id: 'thread-message' })
+    );
+    for (const kind of [
+      'payment_confirmed',
+      'hold_expiring',
+      'hold_expired',
+      'waitlist_confirmed'
+    ] as const) {
+      // Keep the expiry warning current; the others are immutable outbox facts.
+      if (kind === 'hold_expiring')
+        client.db
+          .update(registrations)
+          .set({ status: 'held', holdExpiresAt: new Date(fixedClock.now().getTime() + 60000) })
+          .where(eq(registrations.id, registration.id))
+          .run();
+      await deliverNotification(
+        client,
+        rest,
+        { registration_id: registration.id, kind },
+        fixedClock,
+        { ...defaultTuning, OFFKAI_NOTIFICATION_DM_INTERVAL_MS: 0 }
+      );
+      const body = JSON.stringify(
+        calls.filter((call) => call.url.endsWith('/messages')).at(-1)!.body
+      );
+      expect(body).toContain(translate(locale, `notify.${kind}`));
+      expect(body).not.toContain(translate(locale === 'ja' ? 'en' : 'ja', `notify.${kind}`));
+    }
+  }
+);

@@ -40,6 +40,18 @@ public callback URLs contain no account ID. `ReadyConnectedAccount` is a branded
 argument required by the Checkout gateway. Capability refreshes happen on the
 payouts page and signed v2 account notifications.
 
+The payouts HTML response extends SvelteKit's generated CSP with only the Connect
+embedded-component sources documented by Stripe: `connect-js.stripe.com` and
+`js.stripe.com` for scripts/frames, `https://*.stripe.com` for images, and the
+documented empty-style SHA-256. Existing nonces and security directives survive.
+No custom fonts are used, so `connect-src` remains self-only. Incoming payouts
+links and all outgoing payouts navigation reload the document, because SPA data
+responses cannot replace the document's CSP. Other routes keep the strict policy.
+The client waits for one bounded script load and an initial Account Session before
+calling the SDK's pure initializer. Failure, timeout, or component load failure
+stops mounting, cleans up once, and shows a localized hosted-onboarding fallback;
+there is no automatic retry. A page reload permits a fresh attempt.
+
 Checkout reserves a durable intent in `write`, calls Stripe outside the transaction,
 then re-reads attendance, event and organization state before attaching. The
 request/generation pair supplies the idempotency key and Checkout reference.
@@ -70,9 +82,12 @@ The following small ambiguities are resolved explicitly:
   Accepted cash/PayPay methods can still change. A participant with an expired hold
   can select Pay to create a fresh attempt using still-valid saved answers; changed
   form requirements fall back to the registration form.
-- Notifications contain Japanese and English because the existing Discord identity
-  does not persist a preferred locale. This avoids silently choosing the wrong
-  language. Only registration-owned outbox jobs may initiate notifications.
+- Registrations store the participant's Discord interaction locale on successful join
+  and answer edit (`ja*` becomes `ja`, all other locales become `en`). Delivery uses
+  only that locale for DMs and private-thread fallbacks. Existing registrations default
+  to English until a successful answer edit, because no previous preference was stored.
+  This avoids bilingual messages and keeps language choices scoped to each event.
+  Only registration-owned outbox jobs may initiate notifications.
 - An unreachable badge means a failed kind without a successful delivery of that
   same kind. A successful private-thread fallback therefore clears its DM failure
   for reachability purposes while retaining both attempt records.
@@ -99,3 +114,15 @@ They never settle money.
 
 References: [Account Sessions](https://docs.stripe.com/api/account_sessions),
 [Connect embedded components](https://docs.stripe.com/connect/get-started-connect-embedded-components).
+
+Account creation alone prefills `defaults.profile.business_url` with the public
+`/legal/[orgId]` disclosure URL, localized meetup participation-fee product text,
+and `configuration.merchant.mcc` from `OFFKAI_STRIPE_MERCHANT_MCC` (default `7299`).
+The minimal disclosure exposes the organization name without inferred personal data.
+Later Account Links, Account Sessions, and readiness refreshes never update these
+fields: Stripe removes platform write permission after onboarding starts.
+
+Connect appearance resolves the active DaisyUI semantic colors to sRGB, because
+Stripe accepts hex/RGB/HSL rather than DaisyUI's OKLCH tokens. Initial appearance
+and system `prefers-color-scheme` changes use the same palette, including text,
+secondary text, surfaces and button text, so embedded content remains readable.

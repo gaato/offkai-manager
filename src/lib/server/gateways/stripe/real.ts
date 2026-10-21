@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import type {
   ConnectAccount,
+  CreateConnectedAccountInput,
   ConnectGateway,
   CreateCheckoutSessionInput,
   PaymentGateway
@@ -19,13 +20,21 @@ export class RealConnectGateway implements ConnectGateway, PaymentGateway {
       });
   }
 
-  async createAccount(input: { organizationId: string }): Promise<{ accountId: string }> {
+  async createAccount(input: CreateConnectedAccountInput): Promise<{ accountId: string }> {
     const account = await this.stripe.v2.core.accounts.create(
       {
         identity: { country: 'jp', entity_type: 'individual' },
         dashboard: 'none',
-        defaults: { responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' } },
-        configuration: { merchant: { capabilities: { card_payments: { requested: true } } } },
+        defaults: {
+          profile: {
+            business_url: input.businessUrl,
+            product_description: input.productDescription
+          },
+          responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' }
+        },
+        configuration: {
+          merchant: { mcc: input.merchantMcc, capabilities: { card_payments: { requested: true } } }
+        },
         metadata: { offkai_organization_id: input.organizationId }
       },
       { idempotencyKey: `connect-${input.organizationId}` }

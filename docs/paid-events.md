@@ -22,6 +22,7 @@ explicitly clears real Stripe credentials.
 | `OFFKAI_HOLD_EXPIRING_SOON_MINUTES` | `5` | One-off expiry warning threshold. |
 | `OFFKAI_NOTIFICATION_DM_INTERVAL_MS` | `1000` | Minimum spacing between DM attempts. |
 | `OFFKAI_NOTIFICATION_ARCHIVE_DAYS` | `7` | Archive fallback threads this many days after event end. |
+| `OFFKAI_STRIPE_MERCHANT_MCC` | `7299` | Four-digit merchant category code; copied only when creating a connected account. |
 | `OFFKAI_STRIPE_PUBLISHABLE_KEY` | empty | Public Connect.js key; `pk_test_stub` renders the e2e placeholder. |
 | `OFFKAI_STRIPE_V2_WEBHOOK_SECRET` | empty | Separate thin-event signing secret. |
 
@@ -41,6 +42,7 @@ config changes do not replace already persisted event/request fee snapshots.
 | `/app/organizations/[orgId]/events/new` | Payment requirement, amount, rounding, override, estimate breakdown, manual methods and hold setting. |
 | `/app/events/[eventId]/settings` | Same fields using the event's stored platform rate. |
 | `/app/events/[eventId]/payments` | Existing manual receipt, waiver and refund-conflict operations. |
+| `/legal/[orgId]` | Public organizer disclosure with organization name; used as the creation-time business URL. |
 | `/checkout/done` | Localized receipt acknowledgement and panel-channel link; no mutation. |
 | `/checkout/cancelled` | Localized return-to-Discord page; no mutation. |
 | `/webhooks/stripe` | Signed connected-account snapshot events. |
@@ -73,6 +75,17 @@ The headless e2e suite includes the stub Account Session, zero real Stripe JS,
 reactive price/override breakdown and pay-later manual receipt. Static return pages
 and payouts are included in the ja/en route sweep.
 
+Payouts alone extends the generated CSP according to Stripe's
+[Connect embedded-component requirements](https://docs.stripe.com/connect/get-started-connect-embedded-components?platform=web#csp-and-http-header-requirements).
+It allows the two documented script/frame origins, Stripe images, and the exact
+empty-style hash while preserving SvelteKit's nonces. `connect-src` stays self-only
+because no custom fonts are configured. Document navigation into and out of payouts
+ensures the browser actually switches policies. Headless regression tests verify
+the response headers, nonce preservation, strict policies on other pages, and one
+localized fallback after an intercepted script failure in both languages. No real
+Stripe JS is loaded. Unit tests cover loading, timeout, cancellation, initial
+session failure, and secret reuse/refresh before components are mounted.
+
 ## Gate results
 
 Verified with fake Stripe/Discord transports and headless Chromium. No live Stripe
@@ -80,11 +93,20 @@ or Discord requests, headed browser, computer-use session, or VCS operation was 
 
 | Gate | Result |
 | --- | --- |
-| `pnpm test` | PASS — 444 tests in 29 files |
+| `pnpm test` | PASS — 451 tests in 30 files |
 | `pnpm test:integration` | PASS — 125 tests in 20 files |
 | `pnpm test:scenario` | PASS — 39 tests in 4 files |
 | `pnpm check` | PASS — zero errors or warnings, including readiness type checks |
 | `pnpm lint` | PASS |
 | `pnpm depcruise` | PASS — no dependency violations |
 | `pnpm build` | PASS |
-| `pnpm test:e2e` | PASS — 142 tests per run, two consecutive complete passes |
+| `pnpm test:e2e` | PASS — 145 tests per run, two consecutive complete passes |
+
+New connected accounts prefill the legal disclosure URL, localized fan-meetup
+participation-fee description, and configured MCC. Existing accounts are never
+updated with these fields after onboarding. Personal details are not inferred.
+
+Registrations persist their Discord locale on successful join/answer edit.
+Notifications use Japanese for `ja*`, English otherwise; existing rows start in
+English. Theme colors are resolved from DaisyUI for the initial Connect.js
+appearance and updated on system light/dark preference changes.

@@ -15,7 +15,9 @@ const createHarness = () => {
         id: 'acct_v2',
         url: 'https://stripe.test/link',
         client_secret: 'fake_session',
-        configuration: { merchant: { capabilities: { card_payments: { status: 'active' } } } },
+        configuration: {
+          merchant: { mcc: '7299', capabilities: { card_payments: { status: 'active' } } }
+        },
         identity: { country: 'jp' },
         defaults: { currency: 'jpy' }
       }),
@@ -30,13 +32,26 @@ const createHarness = () => {
 };
 it('creates Managed Risk JP individual v2 accounts and v2 hosted links without configurations', async () => {
   const { gateway, calls } = createHarness();
-  await gateway.createAccount({ organizationId: 'org' });
+  await gateway.createAccount({
+    organizationId: 'org',
+    businessUrl: 'https://app.test/legal/org',
+    productDescription: 'Fan meetup participation fees.',
+    merchantMcc: '7299'
+  });
   expect(calls[0].url).toContain('/v2/core/accounts');
   expect(JSON.parse(calls[0].body)).toMatchObject({
     identity: { country: 'jp', entity_type: 'individual' },
     dashboard: 'none',
-    defaults: { responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' } },
-    configuration: { merchant: { capabilities: { card_payments: { requested: true } } } }
+    defaults: {
+      profile: {
+        business_url: 'https://app.test/legal/org',
+        product_description: 'Fan meetup participation fees.'
+      },
+      responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' }
+    },
+    configuration: {
+      merchant: { mcc: '7299', capabilities: { card_payments: { requested: true } } }
+    }
   });
   expect(calls[0].headers.get('idempotency-key')).toBe('connect-org');
   await gateway.createAccountLink({

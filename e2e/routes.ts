@@ -39,6 +39,7 @@ export const pageRouteSweepFixtures = {
   '/checkout/done': 'anonymous manifest',
   '/checkout/cancelled': 'anonymous manifest',
   '/app/organizations/[orgId]/payouts': 'authenticated manifest',
+  '/legal/[orgId]': 'public organization fixture',
   '/privacy': 'anonymous manifest',
   '/terms': 'anonymous manifest'
 } as const;
@@ -60,6 +61,7 @@ export const routeManifest = [
 
 export const authenticatedRouteManifest = [
   { path: '/app', status: 200 },
+  { path: '/legal/[fixture]', status: 200 },
   { path: '/connect/return', status: 400 },
   { path: '/connect/refresh', status: 400 },
   { path: '/app/organizations/[fixture]/payouts', status: 200 },

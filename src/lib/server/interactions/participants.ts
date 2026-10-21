@@ -174,6 +174,7 @@ export async function participantAction(
                 eventSlug: data.event.slug,
                 userId: user.userId,
                 displayName: context.actor.global_name || context.actor.username,
+                locale: context.locale,
                 answers: registrationAnswersFromData(data.fields, parsed.data)
               },
               clock
@@ -221,6 +222,7 @@ export async function participantAction(
             eventSlug: data.event.slug,
             userId: user.userId,
             displayName: context.actor.global_name || context.actor.username,
+            locale: context.locale,
             answers: []
           },
           clock
@@ -297,6 +299,7 @@ export async function participantAction(
                 eventSlug: data.event.slug,
                 userId: user.userId,
                 displayName: context.actor.global_name || context.actor.username,
+                locale: context.locale,
                 answers: input
               },
               clock
@@ -307,6 +310,7 @@ export async function participantAction(
               {
                 userId: user.userId,
                 registrationId: requireActiveRegistration(data).id,
+                locale: context.locale,
                 answers: input
               },
               clock
@@ -326,7 +330,7 @@ export async function participantAction(
             clock,
             dependencies.tuning
           );
-          const key = participantErrorKey(cause);
+          const key = participantErrorKey(cause, true);
           const issues =
             cause instanceof RegistrationError &&
             cause.cause &&
@@ -374,13 +378,15 @@ export async function participantAction(
     return ephemeralReply(t(participantErrorKey(cause), { minutes }));
   }
 }
-function participantErrorKey(cause: unknown): MessageKey {
+function participantErrorKey(cause: unknown, answersSaved = false): MessageKey {
   if (cause instanceof PanelError) return `panel.${cause.code}`;
   if (cause instanceof ModalLimitError) return 'participant.form_unavailable';
   if (cause instanceof RegistrationError) {
-    if (cause.code === 'not_registrable') return 'participant.closed';
+    if (cause.code === 'not_registrable')
+      return answersSaved ? 'participant.closed_saved' : 'participant.closed';
     if (cause.code === 'not_withdrawable') return 'participant.not_withdrawable';
-    if (cause.code === 'validation') return 'participant.invalid';
+    if (cause.code === 'validation')
+      return answersSaved ? 'participant.invalid' : 'participant.error';
     if (cause.code === 'forbidden') return 'interaction.unavailable';
   }
   return 'participant.error';

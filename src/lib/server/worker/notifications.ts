@@ -118,9 +118,8 @@ export async function deliverNotification(
     ? latest.at.getTime() + tuning.OFFKAI_NOTIFICATION_DM_INTERVAL_MS - clock.now().getTime()
     : 0;
   if (delay > 0) throw new NotificationRetry(delay);
-  const t = translator('ja');
-  // Include both supported languages because Discord identities do not persist a locale.
-  const content = `${t(`notify.${payload.kind}`)}\n${translator('en')(`notify.${payload.kind}`)}\n${row.event.title.slice(0, 200).replace(/[@*_`~|>]/g, '')}`;
+  const t = translator(row.registration.locale);
+  const content = `${t(`notify.${payload.kind}`)}\n${row.event.title.slice(0, 200).replace(/[@*_`~|>]/g, '')}`;
   const message = {
     flags: 32768,
     allowed_mentions: { parse: [] as string[] },

@@ -69,7 +69,6 @@ export async function createEvent(
           : undefined;
         if (input.copyFromEventId && !source)
           throw new EventError('validation', 'copy source must belong to this organization');
-        const delta = source ? startsAt.getTime() - source.startsAt.getTime() : 0;
         const endsAt = new Date(
           startsAt.getTime() +
             (source
@@ -102,12 +101,8 @@ export async function createEvent(
             visibility: 'draft',
             platformFeeBps: tuning.OFFKAI_PLATFORM_FEE_BPS,
             discordPolicy: source?.discordPolicy ?? 'not_used',
-            registrationOpensAt: source
-              ? new Date(source.registrationOpensAt.getTime() + delta)
-              : clock.now(),
-            registrationClosesAt: source
-              ? new Date(source.registrationClosesAt.getTime() + delta)
-              : startsAt,
+            registrationOpensAt: clock.now(),
+            registrationClosesAt: startsAt,
             venueReveal: source?.venueReveal ?? 'public',
             registrationMode: input.registrationMode ?? source?.registrationMode ?? registrationMode
           })

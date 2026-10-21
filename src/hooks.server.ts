@@ -12,6 +12,7 @@ import { getInteractionRest } from '$lib/server/interactions/rest';
 import { systemClock } from '$lib/server/clock';
 import { RoleSyncWorker } from '$lib/server/worker/role-sync';
 import { normalizeLocale, resolveLocale, translator } from '$lib/i18n';
+import { stripeConnectCsp } from '$lib/server/security/stripe-connect-csp';
 
 applyAdapterAddress();
 
@@ -101,6 +102,13 @@ const requestLog: Handle = async ({ event, resolve }) => {
 
 const securityHeaders: Handle = async ({ event, resolve }) => {
   const response = await resolve(event);
+  if (
+    event.route.id === '/app/organizations/[orgId]/payouts' &&
+    response.headers.get('content-type')?.startsWith('text/html')
+  ) {
+    const policy = response.headers.get('content-security-policy');
+    if (policy) response.headers.set('content-security-policy', stripeConnectCsp(policy));
+  }
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
