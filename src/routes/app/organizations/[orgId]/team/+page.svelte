@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Confirmation from '$lib/components/confirmation.svelte';
+  import ListPage from '$lib/components/page/list-page.svelte';
   import { untrack } from 'svelte';
   import { resolve } from '$app/paths';
   import { superForm } from 'sveltekit-superforms';
@@ -8,12 +10,6 @@
     organizationRoleLabelKey,
     type OrganizationRole
   } from '$lib/shared/organization';
-  import { Alert } from '$lib/components/ui/alert';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-  import { Input } from '$lib/components/ui/input';
-  import { Label } from '$lib/components/ui/label';
 
   type PendingAction =
     | { type: 'role'; membershipId: string; role: OrganizationRole }
@@ -54,220 +50,215 @@
   ><title>{t('team.title')} · {data.organization.name} · {t('brand.name')}</title></svelte:head
 >
 
-<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-  <div>
-    <h2 class="text-xl font-bold">{t('team.title')}</h2>
-    <p class="text-muted-foreground mt-2 max-w-2xl">{t('team.intro')}</p>
-  </div>
-  {#if !data.capabilities.canManageTeam}
-    <Badge class="bg-muted text-muted-foreground">{t('team.read_only')}</Badge>
-  {/if}
-</div>
-
-{#if actionResult?.actionError}
-  <Alert class="border-destructive text-destructive mt-6" role="alert"
-    >{actionResult.actionError}</Alert
-  >
-{:else if actionResult?.actionMessage}
-  <Alert class="border-primary/35 bg-secondary/50 mt-6" role="status"
-    >{actionResult.actionMessage}</Alert
-  >
-{/if}
-
-{#if actionResult?.pendingAction && pendingMember}
-  <Alert
-    class="border-primary/45 bg-background mt-6 p-5"
-    role="region"
-    aria-labelledby="confirm-title"
-  >
-    <h3 id="confirm-title" class="font-bold">{t('team.confirm_title')}</h3>
-    <p class="text-muted-foreground mt-2">
-      {#if actionResult.pendingAction.type === 'role'}
-        {t('team.confirm_role', {
-          name: memberName(pendingMember),
-          role: t(organizationRoleLabelKey(actionResult.pendingAction.role))
-        })}
-      {:else if actionResult.pendingAction.type === 'disable'}
-        {t('team.confirm_disable', { name: memberName(pendingMember) })}
-      {:else}
-        {t('team.confirm_enable', { name: memberName(pendingMember) })}
+<ListPage>
+  {#snippet title()}{t('team.title')}{/snippet}
+  {#snippet body()}
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="mt-2 max-w-2xl">{t('team.intro')}</p>
+      </div>
+      {#if !data.capabilities.canManageTeam}
+        <span class="badge badge-ghost">{t('team.read_only')}</span>
       {/if}
-    </p>
-    <div class="mt-5 flex flex-wrap gap-3">
-      <form
-        method="POST"
-        action={actionResult.pendingAction.type === 'role'
-          ? '?/changeRole'
-          : actionResult.pendingAction.type === 'disable'
-            ? '?/disable'
-            : '?/enable'}
-      >
-        <input type="hidden" name="membershipId" value={actionResult.pendingAction.membershipId} />
-        {#if actionResult.pendingAction.type === 'role'}
-          <input type="hidden" name="role" value={actionResult.pendingAction.role} />
-        {/if}
-        <Button
-          type="submit"
-          variant={actionResult.pendingAction.type === 'disable' ? 'destructive' : 'default'}
-          >{t('team.confirm_submit')}</Button
-        >
-      </form>
-      <a
-        class="hover:bg-accent inline-flex min-h-12 items-center rounded-md px-5 font-semibold"
-        href={teamHref}>{t('form.cancel')}</a
-      >
     </div>
-  </Alert>
-{/if}
 
-{#if data.capabilities.canManageTeam}
-  <Card class="mt-7 shadow-none">
-    <CardHeader>
-      <CardTitle>{t('team.invite_title')}</CardTitle>
-      <p class="text-muted-foreground mt-2 text-sm">{t('team.invite_intro')}</p>
-    </CardHeader>
-    <CardContent>
-      {#if $inviteMessage}
-        <Alert
-          class={$inviteMessage !== t('team.invite_success')
-            ? 'border-destructive mb-5'
-            : 'border-primary/35 bg-secondary/50 mb-5'}
-          role={$inviteMessage !== t('team.invite_success') ? 'alert' : 'status'}
-          >{$inviteMessage}</Alert
-        >
-      {/if}
-      <form
-        method="POST"
-        action="?/invite"
-        use:enhanceInvite
-        class="grid gap-5 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end"
-      >
-        <div class="grid gap-2">
-          <Label for="discordUserId">{t('team.discord_user_id')}</Label>
-          <Input
-            id="discordUserId"
-            name="discordUserId"
-            bind:value={$inviteData.discordUserId}
-            inputmode="numeric"
-            autocomplete="off"
-            required
-            pattern={'[0-9]{17,20}'}
-            aria-invalid={$inviteErrors.discordUserId ? 'true' : undefined}
-            aria-describedby={$inviteErrors.discordUserId ? 'discord-id-error' : 'discord-id-help'}
-          />
-          <p id="discord-id-help" class="text-muted-foreground text-sm">
-            {t('team.discord_user_id_help')}
-          </p>
-          {#if $inviteErrors.discordUserId}<p
-              id="discord-id-error"
-              class="text-destructive text-sm"
-              role="alert"
-            >
-              {$inviteErrors.discordUserId[0]}
-            </p>{/if}
-        </div>
-        <div class="grid gap-2">
-          <Label for="inviteRole">{t('team.role')}</Label>
-          <select
-            id="inviteRole"
-            name="role"
-            bind:value={$inviteData.role}
-            class="border-input bg-background min-h-12 rounded-md border px-3 text-base"
-            required
-            aria-invalid={$inviteErrors.role ? 'true' : undefined}
-            aria-describedby={$inviteErrors.role ? 'invite-role-error' : undefined}
-          >
-            {#each inviteRoleOptions as role (role)}
-              <option value={role}>{t(organizationRoleLabelKey(role))}</option>
-            {/each}
-          </select>
-          {#if $inviteErrors.role}
-            <p id="invite-role-error" class="text-destructive text-sm" role="alert">
-              {$inviteErrors.role[0]}
-            </p>
+    {#if actionResult?.actionError}
+      <div role="alert" class="alert alert-error mt-6">{actionResult.actionError}</div>
+    {:else if actionResult?.actionMessage}
+      <div role="status" class="alert alert-success mt-6">{actionResult.actionMessage}</div>
+    {/if}
+
+    {#if actionResult?.pendingAction && pendingMember}
+      <Confirmation label={t('team.confirm_title')} cancelLabel={t('form.cancel')}>
+        <p class="mt-2">
+          {#if actionResult.pendingAction.type === 'role'}
+            {t('team.confirm_role', {
+              name: memberName(pendingMember),
+              role: t(organizationRoleLabelKey(actionResult.pendingAction.role))
+            })}
+          {:else if actionResult.pendingAction.type === 'disable'}
+            {t('team.confirm_disable', { name: memberName(pendingMember) })}
+          {:else}
+            {t('team.confirm_enable', { name: memberName(pendingMember) })}
           {/if}
-        </div>
-        <Button type="submit">{t('team.invite_submit')}</Button>
-      </form>
-    </CardContent>
-  </Card>
-{/if}
-
-<section class="mt-8" aria-labelledby="member-list-title">
-  <h3 id="member-list-title" class="text-lg font-bold">{t('team.members_title')}</h3>
-  <div class="bg-background mt-4 overflow-x-auto rounded-xl border">
-    <table class="w-full min-w-[48rem] border-collapse text-left">
-      <caption class="sr-only">{t('team.members_caption')}</caption>
-      <thead class="bg-muted/65 text-sm">
-        <tr>
-          <th class="px-5 py-3 font-semibold" scope="col">{t('team.member')}</th>
-          <th class="px-5 py-3 font-semibold" scope="col">{t('team.role')}</th>
-          <th class="px-5 py-3 font-semibold" scope="col">{t('team.status')}</th>
-          {#if data.capabilities.canManageTeam}<th class="px-5 py-3 font-semibold" scope="col"
-              >{t('team.actions')}</th
-            >{/if}
-        </tr>
-      </thead>
-      <tbody>
-        {#each data.members as member (member.id)}
-          <tr class="border-t align-top">
-            <td class="px-5 py-4">
-              <span class="block font-semibold">{memberName(member)}</span>
-              {#if member.username}<span class="text-muted-foreground mt-1 block text-sm"
-                  >{member.username}</span
-                >{/if}
-            </td>
-            <td class="px-5 py-4">{t(organizationRoleLabelKey(member.role))}</td>
-            <td class="px-5 py-4">
-              <Badge
-                class={member.status === 'active'
-                  ? 'bg-secondary text-secondary-foreground'
-                  : 'bg-muted text-muted-foreground'}
-                >{t(membershipStatusLabelKey(member.status))}</Badge
-              >
-            </td>
-            {#if data.capabilities.canManageTeam}
-              <td class="px-5 py-3">
-                <div class="flex flex-wrap items-end gap-2">
-                  {#if member.status === 'active'}
-                    <form method="POST" action="?/prepareRole" class="flex items-end gap-2">
-                      <input type="hidden" name="membershipId" value={member.id} />
-                      <div class="grid gap-1">
-                        <Label class="sr-only" for={`role-${member.id}`}
-                          >{t('team.change_role_for', { name: memberName(member) })}</Label
-                        >
-                        <select
-                          id={`role-${member.id}`}
-                          name="role"
-                          class="border-input bg-background min-h-10 rounded-md border px-2 text-sm"
-                        >
-                          {#each roleOptions as role (role)}
-                            <option value={role} selected={role === member.role}
-                              >{t(organizationRoleLabelKey(role))}</option
-                            >
-                          {/each}
-                        </select>
-                      </div>
-                      <Button type="submit" variant="outline" size="sm"
-                        >{t('team.review_role')}</Button
-                      >
-                    </form>
-                    <form method="POST" action="?/prepareDisable">
-                      <input type="hidden" name="membershipId" value={member.id} />
-                      <Button type="submit" variant="ghost" size="sm">{t('team.disable')}</Button>
-                    </form>
-                  {:else}
-                    <form method="POST" action="?/prepareEnable">
-                      <input type="hidden" name="membershipId" value={member.id} />
-                      <Button type="submit" variant="outline" size="sm">{t('team.enable')}</Button>
-                    </form>
-                  {/if}
-                </div>
-              </td>
+        </p>
+        <div class="mt-5 flex flex-wrap gap-3">
+          <form
+            method="POST"
+            action={actionResult.pendingAction.type === 'role'
+              ? '?/changeRole'
+              : actionResult.pendingAction.type === 'disable'
+                ? '?/disable'
+                : '?/enable'}
+          >
+            <input
+              type="hidden"
+              name="membershipId"
+              value={actionResult.pendingAction.membershipId}
+            />
+            {#if actionResult.pendingAction.type === 'role'}
+              <input type="hidden" name="role" value={actionResult.pendingAction.role} />
             {/if}
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
-</section>
+            <button type="submit" class="btn btn-primary">{t('team.confirm_submit')}</button>
+          </form>
+          <a href={teamHref} class="btn inline-flex min-h-12 items-center px-5"
+            >{t('form.cancel')}</a
+          >
+        </div>
+      </Confirmation>
+    {/if}
+
+    {#if data.capabilities.canManageTeam}
+      <div class="card card-border bg-base-100 mt-7">
+        <div class="card-body gap-2 pb-0">
+          <h2 class="card-title">{t('team.invite_title')}</h2>
+          <p class="mt-2">{t('team.invite_intro')}</p>
+        </div>
+        <div class="card-body">
+          {#if $inviteMessage}
+            <div
+              role={$inviteMessage !== t('team.invite_success') ? 'alert' : 'status'}
+              class={($inviteMessage !== t('team.invite_success') ? 'alert' : 'status') === 'status'
+                ? 'alert alert-success'
+                : 'alert alert-error'}
+            >
+              {$inviteMessage}
+            </div>
+          {/if}
+          <form
+            method="POST"
+            action="?/invite"
+            use:enhanceInvite
+            class="grid gap-5 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end"
+          >
+            <div class="grid gap-2">
+              <label for="discordUserId" class="label">{t('team.discord_user_id')}</label>
+              <input
+                id="discordUserId"
+                name="discordUserId"
+                bind:value={$inviteData.discordUserId}
+                inputmode="numeric"
+                autocomplete="off"
+                required
+                pattern={'[0-9]{17,20}'}
+                aria-invalid={$inviteErrors.discordUserId ? 'true' : undefined}
+                aria-describedby={$inviteErrors.discordUserId
+                  ? 'discord-id-error'
+                  : 'discord-id-help'}
+                class="input w-full"
+              />
+              <p id="discord-id-help">
+                {t('team.discord_user_id_help')}
+              </p>
+              {#if $inviteErrors.discordUserId}<p id="discord-id-error" role="alert">
+                  {$inviteErrors.discordUserId[0]}
+                </p>{/if}
+            </div>
+            <div class="grid gap-2">
+              <label for="inviteRole" class="label">{t('team.role')}</label>
+              <select
+                id="inviteRole"
+                name="role"
+                bind:value={$inviteData.role}
+                required
+                aria-invalid={$inviteErrors.role ? 'true' : undefined}
+                aria-describedby={$inviteErrors.role ? 'invite-role-error' : undefined}
+                class="select bg-base-100 min-h-12 w-full px-3"
+              >
+                {#each inviteRoleOptions as role (role)}
+                  <option value={role}>{t(organizationRoleLabelKey(role))}</option>
+                {/each}
+              </select>
+              {#if $inviteErrors.role}
+                <p id="invite-role-error" role="alert">
+                  {$inviteErrors.role[0]}
+                </p>
+              {/if}
+            </div>
+            <button type="submit" class="btn btn-primary">{t('team.invite_submit')}</button>
+          </form>
+        </div>
+      </div>
+    {/if}
+
+    <section aria-labelledby="member-list-title" class="mt-8">
+      <h3 id="member-list-title" class="card-title">{t('team.members_title')}</h3>
+      <div class="bg-base-100 mt-4 overflow-x-auto">
+        <table class="table w-full min-w-[48rem]">
+          <caption class="sr-only">{t('team.members_caption')}</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="px-5 py-3">{t('team.member')}</th>
+              <th scope="col" class="px-5 py-3">{t('team.role')}</th>
+              <th scope="col" class="px-5 py-3">{t('team.status')}</th>
+              {#if data.capabilities.canManageTeam}<th scope="col" class="px-5 py-3"
+                  >{t('team.actions')}</th
+                >{/if}
+            </tr>
+          </thead>
+          <tbody>
+            {#each data.members as member (member.id)}
+              <tr>
+                <td class="px-5 py-4">
+                  <span class="block">{memberName(member)}</span>
+                  {#if member.username}<span class="mt-1 block">{member.username}</span>{/if}
+                </td>
+                <td class="px-5 py-4">{t(organizationRoleLabelKey(member.role))}</td>
+                <td class="px-5 py-4">
+                  <span
+                    class={member.status === 'active'
+                      ? 'badge badge-secondary'
+                      : 'badge badge-ghost'}>{t(membershipStatusLabelKey(member.status))}</span
+                  >
+                </td>
+                {#if data.capabilities.canManageTeam}
+                  <td class="px-5 py-3">
+                    <div class="flex flex-wrap items-end gap-2">
+                      {#if member.status === 'active'}
+                        <form method="POST" action="?/prepareRole" class="flex items-end gap-2">
+                          <input type="hidden" name="membershipId" value={member.id} />
+                          <div class="grid gap-1">
+                            <label for={`role-${member.id}`} class="label sr-only"
+                              >{t('team.change_role_for', { name: memberName(member) })}</label
+                            >
+                            <select
+                              id={`role-${member.id}`}
+                              name="role"
+                              class="select bg-base-100 min-h-10 w-full px-2"
+                            >
+                              {#each roleOptions as role (role)}
+                                <option value={role} selected={role === member.role}
+                                  >{t(organizationRoleLabelKey(role))}</option
+                                >
+                              {/each}
+                            </select>
+                          </div>
+                          <button type="submit" class="btn btn-outline btn-sm"
+                            >{t('team.review_role')}</button
+                          >
+                        </form>
+                        <form method="POST" action="?/prepareDisable">
+                          <input type="hidden" name="membershipId" value={member.id} />
+                          <button type="submit" class="btn btn-ghost btn-sm"
+                            >{t('team.disable')}</button
+                          >
+                        </form>
+                      {:else}
+                        <form method="POST" action="?/prepareEnable">
+                          <input type="hidden" name="membershipId" value={member.id} />
+                          <button type="submit" class="btn btn-outline btn-sm"
+                            >{t('team.enable')}</button
+                          >
+                        </form>
+                      {/if}
+                    </div>
+                  </td>
+                {/if}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {/snippet}
+</ListPage>

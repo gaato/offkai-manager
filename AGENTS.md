@@ -7,10 +7,23 @@ specified per delegation prompt. Legacy Go code lives in git history (`git show 
 ## Stack
 
 SvelteKit 2 + Svelte 5 (**runes mode enforced**, `compilerOptions.runes: true`) ·
-adapter-node · Tailwind CSS 4 + shadcn-svelte (vendored into `src/lib/components/ui/`) ·
-Drizzle ORM + better-sqlite3 (SQLite) · Zod 4 + sveltekit-superforms 2 · stripe (server SDK only,
+adapter-node · Tailwind CSS 4 + DaisyUI 5 (built-in light/default and dark/prefersdark themes) ·
+Drizzle ORM + better-sqlite3 (SQLite) · Zod 4 + sveltekit-superforms 2 · stripe 23 (API `2026-09-30.endive`, server SDK only,
 hosted Checkout — never render card inputs) · vitest + in-memory SQLite ·
-Playwright + axe · dependency-cruiser · pnpm · node 24 via mise.
+Playwright + axe · dependency-cruiser · pnpm · node 26.12.0 via mise.
+
+## UI
+
+Use DaisyUI component classes and Tailwind layout utilities only, with semantic theme colors;
+`app.css` contains only Tailwind/DaisyUI setup. Every page uses one of the five snippet layouts
+in `src/lib/components/page/`: list (table + existing filters), detail, form, settings, dashboard
+(stats + steps + existing recent activity). Shells use a desktop `<nav>` sidebar and a mobile
+`<details>/<summary>` dropdown inside `<header>`, so navigation works without JS and all
+controls stay within landmarks. Use `menu menu-horizontal` page navigation, because inactive
+tabs dim link text below AA. Confirmation pages render
+inline; native dialogs open only from explicit user actions, with a no-JS fallback, so page loads
+do not dim or block the app. Built-in components and themes avoid maintaining visual design
+and vendored UI sources.
 
 ## Svelte 5 — runes only (legacy syntax is a build error)
 

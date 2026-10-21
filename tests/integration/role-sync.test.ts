@@ -1,3 +1,4 @@
+import { defaultTuning, loadConfig } from '$lib/server/config';
 import { sql } from 'drizzle-orm';
 import { testDatabase, fixedClock } from '../database';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -187,6 +188,22 @@ describe('Discord role sync outbox', () => {
       .get()!;
   }
 
+  it('applies the configured batch size and terminal attempt limit', async () => {
+    await queuedTask();
+    await queuedTask();
+    const { tuning } = loadConfig({
+      OFFKAI_AUTH_DEV_BYPASS: 'true',
+      OFFKAI_OUTBOX_BATCH_SIZE: '1',
+      OFFKAI_OUTBOX_MAX_ATTEMPTS: '1'
+    });
+    const gateway = new RecordingGateway(new Error('retryable failure'));
+    expect(await processRoleSyncBatch(client, gateway, undefined, fixedClock, tuning)).toBe(1);
+    const rows = client.db.select().from(outboxEvents).all();
+    expect(rows.filter((row) => row.status === 'failed')).toHaveLength(1);
+    expect(rows.filter((row) => row.status === 'pending')).toHaveLength(1);
+    expect(await processRoleSyncBatch(client, gateway, undefined, fixedClock, tuning)).toBe(1);
+    expect(await processRoleSyncBatch(client, gateway, undefined, fixedClock, tuning)).toBe(0);
+  });
   it('resets crash-interrupted processing on startup without losing attempts', async () => {
     const task = await queuedTask();
     expect(claimRoleSyncEvents(client, 1, fixedClock)).toMatchObject([
@@ -200,7 +217,7 @@ describe('Discord role sync outbox', () => {
       client,
       gateway,
       pino({ enabled: false }),
-      15_000,
+      defaultTuning,
       fixedClock
     );
     worker.start();

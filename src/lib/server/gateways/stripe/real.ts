@@ -104,7 +104,9 @@ function checkoutQuantity(value: number): number {
 
 function dashboardType(account: Stripe.Account): StripeDashboardType {
   const dashboard = account.controller?.stripe_dashboard?.type;
-  if (dashboard === 'express' || dashboard === 'full' || dashboard === 'none') return dashboard;
+  if (dashboard === 'express') return 'express';
+  if (dashboard === 'full') return 'full';
+  if (dashboard === 'none') return 'none';
   if (account.type === 'express') return 'express';
   if (account.type === 'standard' || account.type === 'custom') return 'full';
   return 'none';

@@ -11,7 +11,11 @@ export const load: PageServerLoad = async (event) => {
   if (!organizationId.success) throw error(404);
   try {
     const config = getConfig();
-    const detail = await getPlatformOrganization(getDatabaseClient(config), organizationId.data);
+    const detail = await getPlatformOrganization(
+      getDatabaseClient(config),
+      organizationId.data,
+      config.tuning
+    );
     return {
       ...detail,
       organization: {

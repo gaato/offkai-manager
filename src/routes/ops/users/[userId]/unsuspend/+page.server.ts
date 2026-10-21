@@ -15,7 +15,11 @@ function requireId(value: string | undefined): string {
 export const load: PageServerLoad = async (event) => {
   const userId = requireId(event.params.userId);
   try {
-    const detail = await getPlatformUser(getDatabaseClient(getConfig()), userId);
+    const detail = await getPlatformUser(
+      getDatabaseClient(getConfig()),
+      userId,
+      getConfig().tuning
+    );
     if (!detail.user.suspendedAt) throw redirect(303, `/ops/users/${userId}`);
     return { user: detail.user };
   } catch (cause) {

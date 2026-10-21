@@ -33,7 +33,41 @@ function parseDuration(value: unknown, fallback: string, name: string): number {
   return total;
 }
 
+const positiveInteger = (fallback: number, min: number, max: number) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? NaN : value),
+    z.coerce.number().int().min(min).max(max).default(fallback)
+  );
+
+export const tuningSchema = z.object({
+  OFFKAI_RATE_LIMIT_WINDOW_MS: positiveInteger(60_000, 1_000, 3_600_000),
+  OFFKAI_RATE_LIMIT_REQUESTS: positiveInteger(60, 1, 10_000),
+  OFFKAI_RATE_LIMIT_CLEANUP_THRESHOLD: positiveInteger(10_000, 100, 1_000_000),
+  OFFKAI_WEBHOOK_MAX_BODY_BYTES: positiveInteger(1_048_576, 1_024, 16_777_216),
+  OFFKAI_OUTBOX_POLL_INTERVAL_MS: positiveInteger(15_000, 100, 3_600_000),
+  OFFKAI_OUTBOX_BATCH_SIZE: positiveInteger(10, 1, 1_000),
+  OFFKAI_OUTBOX_MAX_ATTEMPTS: positiveInteger(5, 1, 100),
+  OFFKAI_DISCORD_REQUEST_TIMEOUT_MS: positiveInteger(10_000, 100, 120_000),
+  OFFKAI_DISCORD_RETRY_AFTER_MS: positiveInteger(1_000, 1, 3_600_000),
+  OFFKAI_SESSION_TTL_SECONDS: positiveInteger(86_400, 60, 2_592_000),
+  OFFKAI_OAUTH_STATE_TTL_SECONDS: positiveInteger(600, 60, 3_600),
+  OFFKAI_LOCALE_COOKIE_TTL_SECONDS: positiveInteger(31_536_000, 60, 31_536_000),
+  OFFKAI_EVENT_DEFAULT_DURATION_MS: positiveInteger(10_800_000, 60_000, 604_800_000),
+  OFFKAI_ACTIVITY_LIMIT: positiveInteger(100, 1, 1_000),
+  OFFKAI_PARTICIPANT_LIST_LIMIT: positiveInteger(500, 1, 10_000),
+  OFFKAI_PLATFORM_ACTIVITY_PAGE_SIZE: positiveInteger(50, 1, 1_000),
+  OFFKAI_PLATFORM_DETAIL_AUDIT_LIMIT: positiveInteger(20, 1, 1_000),
+  OFFKAI_PLATFORM_USER_SEARCH_LIMIT: positiveInteger(50, 1, 1_000),
+  OFFKAI_PLATFORM_RECENT_AUDIT_LIMIT: positiveInteger(12, 1, 1_000),
+  OFFKAI_DB_BUSY_TIMEOUT_MS: positiveInteger(5_000, 0, 60_000)
+});
+
+// Pure defaults keep isolated callers usable without reading the process environment.
+export const defaultTuning = tuningSchema.parse({});
+export type Tuning = z.infer<typeof tuningSchema>;
+
 const rawSchema = z.object({
+  ...tuningSchema.shape,
   OFFKAI_HTTP_ADDR: z.string().default(':8080'),
   OFFKAI_HTTP_SHUTDOWN_TIMEOUT: z.string().optional(),
   OFFKAI_CLIENT_IP_HEADER: z.string().default(''),
@@ -59,6 +93,7 @@ const rawSchema = z.object({
 });
 
 export interface Config {
+  tuning: Tuning;
   http: {
     address: string;
     host: string;
@@ -100,7 +135,7 @@ export function parseHttpAddress(address: string): { host: string; port: number 
   return { host: match[1] || '0.0.0.0', port };
 }
 
-export function applyAdapterAddress(env: NodeJS.ProcessEnv): void {
+export function applyAdapterAddress(env: NodeJS.ProcessEnv = process.env): void {
   const { host, port } = parseHttpAddress(env.OFFKAI_HTTP_ADDR || ':8080');
   env.HOST = host;
   env.PORT = String(port);
@@ -207,6 +242,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   return {
+    tuning: tuningSchema.parse(raw),
     http: {
       address: raw.OFFKAI_HTTP_ADDR,
       host: address.host,

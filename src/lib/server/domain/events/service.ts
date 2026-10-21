@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
 import { and, asc, eq, isNull } from 'drizzle-orm';
@@ -32,7 +33,8 @@ export async function createEvent(
   client: DatabaseClient,
   input: CreateEventInput,
   slugFactory: SlugFactory = generateEventSlug,
-  clock: Clock = systemClock
+  clock: Clock = systemClock,
+  tuning: Tuning = defaultTuning
 ): Promise<EventSummary> {
   const title = validateTitle(input.title);
   const startsAt = parseInputTime(input.startsAt, input.timeZone, 'start time');
@@ -43,7 +45,7 @@ export async function createEvent(
     try {
       return write(client, (tx) => {
         authorizeOrganizationRole(tx, input.organizationId, input.actorUserId, 'organizer');
-        const endsAt = new Date(startsAt.getTime() + 3 * 60 * 60 * 1000);
+        const endsAt = new Date(startsAt.getTime() + tuning.OFFKAI_EVENT_DEFAULT_DURATION_MS);
         const created = tx
           .insert(events)
           .values({

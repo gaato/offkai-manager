@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { escapeLikePattern, ilike } from '$lib/server/db/search';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, read } from '$lib/server/db/client';
@@ -29,8 +30,6 @@ import { RegistrationError } from './errors';
 import { promoteOldestWaitlisted } from './promotion';
 import type { RegistrationSummary } from './service';
 
-const participantListLimit = 500;
-
 export type ParticipantStatusFilter = RegistrationStatus | 'all';
 
 export interface ParticipantListRow {
@@ -55,7 +54,8 @@ export async function listParticipants(
     eventId: string;
     status: ParticipantStatusFilter;
     query: string;
-  }
+  },
+  tuning: Tuning = defaultTuning
 ): Promise<ParticipantList> {
   return read(client, (tx) => {
     const eventRows = tx
@@ -106,16 +106,16 @@ export async function listParticipants(
       )
       .where(and(...conditions))
       .orderBy(asc(registrations.createdAt), asc(registrations.id))
-      .limit(participantListLimit + 1)
+      .limit(tuning.OFFKAI_PARTICIPANT_LIST_LIMIT + 1)
       .all();
     return {
-      rows: rows.slice(0, participantListLimit).map((row) => ({
+      rows: rows.slice(0, tuning.OFFKAI_PARTICIPANT_LIST_LIMIT).map((row) => ({
         ...row,
         username: row.username ?? '',
         status: registrationStatusSchema.parse(row.status)
       })),
       counts,
-      capped: rows.length > participantListLimit
+      capped: rows.length > tuning.OFFKAI_PARTICIPANT_LIST_LIMIT
     };
   });
 }

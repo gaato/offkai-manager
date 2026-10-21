@@ -578,7 +578,7 @@ export const ja = {
   'participants.filter.all': 'すべて',
   'participants.result_count': '{count}件の申込を表示中',
   'participants.result_cap':
-    '一致した申込のうち先頭500件のみ表示しています。検索条件を絞り込んでください。',
+    '一致した申込のうち先頭{limit}件のみ表示しています。検索条件を絞り込んでください。',
   'participants.empty': '条件に一致する申込はありません。',
   'participants.caption': 'イベントの申込一覧',
   'participants.display_name': '表示名',
@@ -694,5 +694,9 @@ export const ja = {
   'error.internal.title': '問題が発生しました',
   'error.internal.body': '予期しないエラーが発生しました。少し時間をおいて再度お試しください。',
   'error.request_id': 'お問い合わせの際は、この番号をお伝えください: {id}',
+  'activity.column.action': '操作',
+  'activity.column.actor': '実行者',
+  'activity.column.date': '日時',
+  'activity.column.details': '詳細',
   'error.back_home': 'トップに戻る'
 } satisfies Record<MessageKey, string>;

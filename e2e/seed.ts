@@ -404,7 +404,8 @@ export async function seedE2E(databasePath: string): Promise<void> {
       eventId: publicFormEventId
     });
     for (const [status, fixture] of Object.entries(participantFixtures)) {
-      const username = status === 'cancelled' ? 'participant-withdrawn' : `participant-${status}`;
+      // Keep synthetic usernames independent of status so enum sweeps test labels, not user data.
+      const username = `participant-${fixture.discordUserId}`;
       const participant = await upsertDiscordIdentity(client, {
         providerUserId: fixture.discordUserId,
         username,

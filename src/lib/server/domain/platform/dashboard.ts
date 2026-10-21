@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { read } from '$lib/server/db/client';
 import { count, desc, eq } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
@@ -20,9 +21,10 @@ export interface PlatformDashboard {
   recentAudits: PlatformAuditRow[];
 }
 
-const recentAuditLimit = 12;
-
-export async function getPlatformDashboard(client: DatabaseClient): Promise<PlatformDashboard> {
+export async function getPlatformDashboard(
+  client: DatabaseClient,
+  tuning: Tuning = defaultTuning
+): Promise<PlatformDashboard> {
   return read(client, (tx) => {
     const [organizationRows, userRows, eventRows, recentAudits] = [
       tx.select({ value: count() }).from(organizations).all(),
@@ -43,7 +45,7 @@ export async function getPlatformDashboard(client: DatabaseClient): Promise<Plat
         .leftJoin(externalAccounts, eq(externalAccounts.userId, auditLogs.actorUserId))
         .leftJoin(events, eq(events.id, auditLogs.eventId))
         .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-        .limit(recentAuditLimit)
+        .limit(tuning.OFFKAI_PLATFORM_RECENT_AUDIT_LIMIT)
         .all()
     ];
     return {

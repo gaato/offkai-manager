@@ -37,7 +37,7 @@ test('event settings and Discord forms save via their named actions', async ({ p
 
   await page.getByRole('link', { name: 'Create event' }).first().click();
   await page.getByLabel(/title/i).fill('Settings Regression Event');
-  await page.locator('[name=startsAt]').fill('2026-12-01T18:00');
+  await page.getByLabel('Start date and time').fill('2026-12-01T18:00');
   await page.getByRole('button', { name: 'Create event' }).click();
   await expect(page).toHaveURL(/\/app\/events\/[0-9a-f-]+$/);
 
@@ -46,11 +46,11 @@ test('event settings and Discord forms save via their named actions', async ({ p
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   const mainForm = page.locator('form[action="?/settings"]');
   await expect(mainForm).toBeVisible();
-  await mainForm.locator('button[type=submit]').click();
+  await mainForm.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.locator('main')).toContainText(/saved|保存/);
 
   const discordForm = page.locator('form[action="?/discord"]');
   await expect(discordForm).toBeVisible();
-  await discordForm.locator('button[type=submit]').click();
+  await discordForm.getByRole('button', { name: 'Save Discord settings' }).click();
   await expect(page.locator('main')).not.toContainText('500');
 });

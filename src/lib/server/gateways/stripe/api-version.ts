@@ -1,1 +1,1 @@
-export const STRIPE_API_VERSION = '2026-02-25.clover' as const;
+export const STRIPE_API_VERSION = '2026-09-30.endive' as const;

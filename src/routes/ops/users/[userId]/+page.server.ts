@@ -11,7 +11,7 @@ export const load: PageServerLoad = async (event) => {
   if (!userId.success) throw error(404);
   try {
     const config = getConfig();
-    const detail = await getPlatformUser(getDatabaseClient(config), userId.data);
+    const detail = await getPlatformUser(getDatabaseClient(config), userId.data, config.tuning);
     return {
       ...detail,
       user: {

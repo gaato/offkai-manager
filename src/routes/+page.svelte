@@ -1,8 +1,7 @@
 <script lang="ts">
+  import DetailPage from '$lib/components/page/detail-page.svelte';
   import { ArrowRight, CheckCircle2, ClipboardList, CreditCard, ScanLine } from '@lucide/svelte';
   import { translator } from '$lib/i18n';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 
   let { data } = $props();
   const t = $derived(translator(data.locale));
@@ -27,56 +26,52 @@
 
 <svelte:head><title>{t('landing.title')} · {t('brand.name')}</title></svelte:head>
 
-<section class="relative overflow-hidden border-b">
-  <div
-    class="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,var(--accent),transparent_48%)]"
-  ></div>
-  <div
-    class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:py-28"
-  >
-    <div class="max-w-3xl">
-      <Badge class="border-primary/25 bg-background/70 text-primary mb-6"
-        >{t('landing.eyebrow')}</Badge
+<DetailPage>
+  {#snippet title()}{t('landing.title')}{/snippet}
+  {#snippet body()}
+    <section class="overflow-hidden">
+      <div
+        class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:py-28"
       >
-      <h1
-        class="max-w-3xl text-5xl leading-[1.06] font-bold tracking-tight text-balance sm:text-6xl"
-      >
-        {t('landing.title')}
-      </h1>
-      <p class="text-muted-foreground mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
-        {t('landing.lead')}
-      </p>
-      <a
-        class="bg-primary text-primary-foreground mt-9 inline-flex min-h-12 items-center gap-2 rounded-md px-6 font-semibold transition hover:brightness-95"
-        href="#features"
-      >
-        {t('landing.cta')}
-        <ArrowRight aria-hidden="true" size={18} />
-      </a>
-    </div>
-    <Card class="border-primary/15 bg-card/90 shadow-primary/10 rotate-1 shadow-xl">
-      <CardHeader>
-        <CheckCircle2 class="text-primary" aria-hidden="true" size={36} />
-        <CardTitle class="pt-3">{t('landing.empty_domain')}</CardTitle>
-      </CardHeader>
-    </Card>
-  </div>
-</section>
+        <div class="max-w-3xl">
+          <span class="badge badge-primary mb-6">{t('landing.eyebrow')}</span>
 
-<section id="features" class="mx-auto max-w-6xl scroll-mt-6 px-5 py-20">
-  <h2 class="max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
-    {t('landing.features.title')}
-  </h2>
-  <div class="mt-10 grid gap-5 md:grid-cols-3">
-    {#each features as feature (feature.title)}
-      {@const Icon = feature.icon}
-      <Card class="h-full">
-        <CardHeader>
-          <Icon aria-hidden="true" class="text-primary" size={28} />
-          <CardTitle class="pt-3">{feature.title}</CardTitle>
-        </CardHeader>
-        <CardContent><p class="text-muted-foreground">{feature.body}</p></CardContent>
-      </Card>
-    {/each}
-  </div>
-</section>
+          <p class="mt-7 max-w-2xl">
+            {t('landing.lead')}
+          </p>
+          <a
+            href="#features"
+            class="btn btn-primary mt-9 inline-flex min-h-12 items-center gap-2 px-6"
+          >
+            {t('landing.cta')}
+            <ArrowRight aria-hidden="true" size={18} />
+          </a>
+        </div>
+        <div class="card card-border bg-base-100">
+          <div class="card-body gap-2 pb-0">
+            <CheckCircle2 aria-hidden="true" size={36} />
+            <h2 class="card-title pt-3">{t('landing.empty_domain')}</h2>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="mx-auto max-w-6xl px-5 py-20">
+      <h2 class="card-title max-w-2xl">
+        {t('landing.features.title')}
+      </h2>
+      <div class="mt-10 grid gap-5 md:grid-cols-3">
+        {#each features as feature (feature.title)}
+          {@const Icon = feature.icon}
+          <div class="card card-border bg-base-100 h-full">
+            <div class="card-body gap-2 pb-0">
+              <Icon aria-hidden="true" size={28} />
+              <h2 class="card-title pt-3">{feature.title}</h2>
+            </div>
+            <div class="card-body"><p>{feature.body}</p></div>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/snippet}
+</DetailPage>

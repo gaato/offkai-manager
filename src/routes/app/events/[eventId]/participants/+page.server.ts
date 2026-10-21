@@ -18,14 +18,19 @@ export const load: PageServerLoad = async (event) => {
   const query = event.url.searchParams.get('q')?.trim().slice(0, 200) ?? '';
   const status = participantStatusFilter(event.url.searchParams.get('status'));
   try {
-    const result = await listParticipants(getDatabaseClient(getConfig()), {
-      actorUserId: session.userId,
-      eventId: data.event.id,
-      status,
-      query
-    });
+    const result = await listParticipants(
+      getDatabaseClient(getConfig()),
+      {
+        actorUserId: session.userId,
+        eventId: data.event.id,
+        status,
+        query
+      },
+      getConfig().tuning
+    );
     return {
       ...result,
+      limit: getConfig().tuning.OFFKAI_PARTICIPANT_LIST_LIMIT,
       query,
       status,
       filters: participantStatusFilters,

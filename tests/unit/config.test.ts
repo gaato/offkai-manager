@@ -21,6 +21,19 @@ describe('configuration', () => {
     });
     expect(config.workerEnabled).toBe(true);
   });
+  it.each([
+    ['OFFKAI_OUTBOX_POLL_INTERVAL_MS', '0'],
+    ['OFFKAI_OUTBOX_BATCH_SIZE', '1001'],
+    ['OFFKAI_OUTBOX_MAX_ATTEMPTS', '1.5'],
+    ['OFFKAI_RATE_LIMIT_REQUESTS', ''],
+    ['OFFKAI_RATE_LIMIT_WINDOW_MS', 'Infinity'],
+    ['OFFKAI_WEBHOOK_MAX_BODY_BYTES', '16777217'],
+    ['OFFKAI_SESSION_TTL_SECONDS', '59'],
+    ['OFFKAI_DB_BUSY_TIMEOUT_MS', '-1'],
+    ['OFFKAI_PLATFORM_ACTIVITY_PAGE_SIZE', 'NaN']
+  ])('rejects invalid %s at startup', (key, value) => {
+    expect(() => loadConfig({ ...dev, [key]: value })).toThrow(/invalid OFFKAI configuration/);
+  });
   it('requires durable production configuration', () => {
     expect(() => loadConfig({})).toThrow(/OFFKAI_DATABASE_PATH is required/);
     expect(() => loadConfig({ OFFKAI_DATABASE_PATH: '/tmp/offkai.sqlite' })).toThrow(

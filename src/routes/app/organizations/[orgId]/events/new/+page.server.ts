@@ -55,15 +55,21 @@ export const actions: Actions = {
     const config = getConfig();
     let created: Awaited<ReturnType<typeof createEvent>>;
     try {
-      created = await createEvent(getDatabaseClient(config), {
-        actorUserId: session.userId,
-        organizationId: organizationId.data,
-        title: form.data.title,
-        startsAt: form.data.startsAt,
-        capacity: form.data.capacity ?? null,
-        registrationMode: form.data.registrationMode,
-        timeZone: config.time.zone
-      });
+      created = await createEvent(
+        getDatabaseClient(config),
+        {
+          actorUserId: session.userId,
+          organizationId: organizationId.data,
+          title: form.data.title,
+          startsAt: form.data.startsAt,
+          capacity: form.data.capacity ?? null,
+          registrationMode: form.data.registrationMode,
+          timeZone: config.time.zone
+        },
+        undefined,
+        undefined,
+        config.tuning
+      );
     } catch (cause) {
       event.locals.logger[
         cause instanceof EventError || cause instanceof OrganizationError ? 'warn' : 'error'

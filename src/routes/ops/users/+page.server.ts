@@ -9,7 +9,7 @@ export const load: PageServerLoad = async (event) => {
   const query = event.url.searchParams.get('q')?.trim().slice(0, 128) ?? '';
   try {
     const config = getConfig();
-    const users = await searchPlatformUsers(getDatabaseClient(config), query);
+    const users = await searchPlatformUsers(getDatabaseClient(config), query, config.tuning);
     return {
       query,
       users: users.map((user) => ({

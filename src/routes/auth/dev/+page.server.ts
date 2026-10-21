@@ -70,9 +70,16 @@ export const actions: Actions = {
         displayName: linked.displayName,
         platformAdmin: form.data.platformAdmin
       },
-      config.auth.sessionSecret
+      config.auth.sessionSecret,
+      undefined,
+      config.tuning.OFFKAI_SESSION_TTL_SECONDS
     );
-    setSessionCookie(event.cookies, value, isSecureRequest(event));
+    setSessionCookie(
+      event.cookies,
+      value,
+      isSecureRequest(event),
+      config.tuning.OFFKAI_SESSION_TTL_SECONDS
+    );
     throw redirect(303, safeReturnTo(form.data.returnTo));
   }
 };

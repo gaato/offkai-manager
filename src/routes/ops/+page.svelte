@@ -1,7 +1,7 @@
 <script lang="ts">
+  import DashboardPage from '$lib/components/page/dashboard-page.svelte';
   import { translator } from '$lib/i18n';
   import { auditActionLabelKey } from '$lib/shared/audit';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 
   let { data } = $props();
   const t = $derived(translator(data.locale));
@@ -14,49 +14,53 @@
 
 <svelte:head><title>{t('ops.dashboard_title')} · {t('brand.name')}</title></svelte:head>
 
-<div class="grid gap-8">
-  <header>
-    <p class="text-sm font-semibold text-slate-600">{t('ops.eyebrow')}</p>
-    <h1 class="mt-2 text-3xl font-bold tracking-tight">{t('ops.dashboard_title')}</h1>
-    <p class="mt-2 max-w-3xl text-slate-600">{t('ops.dashboard_intro')}</p>
-  </header>
+<DashboardPage>
+  {#snippet title()}{t('ops.dashboard_title')}{/snippet}
+  {#snippet stats()}
+    {#each metrics as metric (metric.label)}
+      <div class="stat">
+        <h2 class="stat-title">{metric.label}</h2>
+        <p class="stat-value">{metric.value}</p>
+      </div>
+    {/each}
+  {/snippet}
+  {#snippet steps()}
+    <li class="step">{t('ops.nav.organizations')}</li>
+    <li class="step">{t('ops.nav.users')}</li>
+    <li class="step">{t('ops.nav.activity')}</li>
+  {/snippet}
+  {#snippet body()}
+    <div class="grid gap-8">
+      <header>
+        <p>{t('ops.eyebrow')}</p>
 
-  <section aria-labelledby="platform-totals">
-    <h2 id="platform-totals" class="sr-only">{t('ops.totals_title')}</h2>
-    <div class="grid gap-4 sm:grid-cols-3">
-      {#each metrics as metric (metric.label)}
-        <Card class="border-slate-200 shadow-none">
-          <CardHeader
-            ><CardTitle class="text-base text-slate-600">{metric.label}</CardTitle></CardHeader
-          >
-          <CardContent><p class="text-3xl font-bold tabular-nums">{metric.value}</p></CardContent>
-        </Card>
-      {/each}
+        <p class="mt-2 max-w-3xl">{t('ops.dashboard_intro')}</p>
+      </header>
     </div>
-  </section>
-
-  <Card class="border-slate-200 shadow-none">
-    <CardHeader><CardTitle>{t('ops.recent_activity')}</CardTitle></CardHeader>
-    <CardContent>
-      {#if data.recentAudits.length === 0}
-        <p class="text-slate-600">{t('ops.activity_empty')}</p>
-      {:else}
-        <ol class="divide-y divide-slate-200">
-          {#each data.recentAudits as row (row.id)}
-            <li class="py-4 first:pt-0 last:pb-0">
-              <p class="font-semibold">{t(auditActionLabelKey(row.action))}</p>
-              <p class="mt-1 text-sm text-slate-600">
-                {row.actorName
-                  ? t('activity.actor', { name: row.actorName })
-                  : t('activity.system_actor')}
-                {#if row.eventTitle}
-                  · {row.eventTitle}{/if} · {row.createdAtLabel}
-              </p>
-              {#if row.reason}<p class="mt-1 text-sm">{row.reason}</p>{/if}
-            </li>
-          {/each}
-        </ol>
-      {/if}
-    </CardContent>
-  </Card>
-</div>
+  {/snippet}
+  {#snippet recent()}
+    <div class="card card-border bg-base-100">
+      <div class="card-body gap-2 pb-0"><h2 class="card-title">{t('ops.recent_activity')}</h2></div>
+      <div class="card-body">
+        {#if data.recentAudits.length === 0}
+          <p>{t('ops.activity_empty')}</p>
+        {:else}
+          <ol>
+            {#each data.recentAudits as row (row.id)}
+              <li class="py-4 first:pt-0 last:pb-0">
+                <p>{t(auditActionLabelKey(row.action))}</p>
+                <p class="mt-1">
+                  {row.actorName
+                    ? t('activity.actor', { name: row.actorName })
+                    : t('activity.system_actor')}
+                  {#if row.eventTitle}
+                    · {row.eventTitle}{/if} · {row.createdAtLabel}
+                </p>
+                {#if row.reason}<p class="mt-1">{row.reason}</p>{/if}
+              </li>
+            {/each}
+          </ol>
+        {/if}
+      </div>
+    </div>{/snippet}
+</DashboardPage>

@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { read } from '$lib/server/db/client';
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { DatabaseClient } from '$lib/server/db/client';
@@ -28,11 +29,10 @@ export interface PlatformActivityPage {
   hasNext: boolean;
 }
 
-const activityPageSize = 50;
-
 export async function searchPlatformActivity(
   client: DatabaseClient,
-  input: PlatformActivityQuery
+  input: PlatformActivityQuery,
+  tuning: Tuning = defaultTuning
 ): Promise<PlatformActivityPage> {
   return read(client, (tx) => {
     const page = Number.isSafeInteger(input.page) && input.page > 0 ? input.page : 1;
@@ -70,12 +70,12 @@ export async function searchPlatformActivity(
       .leftJoin(events, eq(events.id, auditLogs.eventId))
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-      .limit(activityPageSize + 1)
-      .offset((page - 1) * activityPageSize)
+      .limit(tuning.OFFKAI_PLATFORM_ACTIVITY_PAGE_SIZE + 1)
+      .offset((page - 1) * tuning.OFFKAI_PLATFORM_ACTIVITY_PAGE_SIZE)
       .all();
-    const hasNext = rows.length > activityPageSize;
+    const hasNext = rows.length > tuning.OFFKAI_PLATFORM_ACTIVITY_PAGE_SIZE;
     return {
-      rows: rows.slice(0, activityPageSize).map((row) => ({
+      rows: rows.slice(0, tuning.OFFKAI_PLATFORM_ACTIVITY_PAGE_SIZE).map((row) => ({
         id: row.id,
         action: row.action,
         actorName: row.actorDisplayName || row.actorUsername || '',

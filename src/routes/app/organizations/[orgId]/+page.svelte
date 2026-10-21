@@ -1,14 +1,11 @@
 <script lang="ts">
+  import DetailPage from '$lib/components/page/detail-page.svelte';
   import { CalendarDays, CreditCard, Users } from '@lucide/svelte';
   import { resolve } from '$app/paths';
   import { translator } from '$lib/i18n';
   import { eventVisibilityLabelKey } from '$lib/shared/event';
   import { organizationRoleLabelKey } from '$lib/shared/organization';
   import { stripeOnboardingStatusLabelKey } from '$lib/shared/payment';
-  import { Alert } from '$lib/components/ui/alert';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 
   let { data, form: rawStripeActionResult } = $props();
   const t = $derived(translator(data.locale));
@@ -27,135 +24,136 @@
 
 <svelte:head><title>{data.organization.name} · {t('brand.name')}</title></svelte:head>
 
-<section aria-labelledby="overview-title">
-  <h2 id="overview-title" class="text-xl font-bold">{t('organization.overview')}</h2>
-  <p class="text-muted-foreground mt-2">
-    {t('organization.role_summary', {
-      role: t(organizationRoleLabelKey(data.organization.actorRole))
-    })}
-  </p>
+<DetailPage titleId="overview-title">
+  {#snippet actions()}{#if data.capabilities.canManageEvent}<a
+        href={newEventHref}
+        class="btn btn-primary inline-flex min-h-12 items-center px-5">{t('event.create_cta')}</a
+      >{/if}{/snippet}
+  {#snippet title()}{t('organization.overview')}{/snippet}
+  {#snippet body()}
+    <section aria-labelledby="overview-title">
+      <p class="mt-2">
+        {t('organization.role_summary', {
+          role: t(organizationRoleLabelKey(data.organization.actorRole))
+        })}
+      </p>
 
-  {#if stripeActionResult?.stripeActionError}
-    <Alert class="border-destructive text-destructive mt-6" role="alert"
-      >{stripeActionResult.stripeActionError}</Alert
-    >
-  {:else if stripeActionResult?.stripeActionMessage || data.stripeFlash}
-    <Alert class="border-primary/35 bg-secondary/50 mt-6" role="status"
-      >{stripeActionResult?.stripeActionMessage ?? data.stripeFlash}</Alert
-    >
-  {/if}
-
-  <div class="mt-7 grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
-    <Card class="shadow-none">
-      <CardHeader class="flex-row items-center gap-3">
-        <span
-          class="bg-secondary text-secondary-foreground inline-flex size-11 items-center justify-center rounded-lg"
-          ><Users aria-hidden="true" size={21} /></span
-        >
-        <div>
-          <CardTitle>{t('organization.team_summary_title')}</CardTitle>
-          <p class="text-muted-foreground mt-1 text-sm">
-            {t(
-              activeMembers === 1
-                ? 'organization.team_summary_one'
-                : 'organization.team_summary_other',
-              { count: activeMembers }
-            )}
-          </p>
+      {#if stripeActionResult?.stripeActionError}
+        <div role="alert" class="alert alert-error mt-6">
+          {stripeActionResult.stripeActionError}
         </div>
-      </CardHeader>
-    </Card>
-    <Card class="bg-secondary/45 shadow-none">
-      <CardContent class="pt-6">
-        <p class="text-sm font-semibold">{t('organization.setup_status')}</p>
-        <p class="mt-2 text-2xl font-bold">{t('organization.setup_ready')}</p>
-      </CardContent>
-    </Card>
-  </div>
-
-  <div class="mt-4 grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
-    <Card class="shadow-none">
-      <CardHeader class="flex-row items-center justify-between gap-4">
-        <div>
-          <CalendarDays aria-hidden="true" class="text-primary" size={24} />
-          <CardTitle class="mt-4">{t('organization.events_title')}</CardTitle>
+      {:else if stripeActionResult?.stripeActionMessage || data.stripeFlash}
+        <div role="status" class="alert alert-success mt-6">
+          {stripeActionResult?.stripeActionMessage ?? data.stripeFlash}
         </div>
-        {#if data.capabilities.canManageEvent}
-          <a
-            class="bg-primary text-primary-foreground inline-flex min-h-12 items-center rounded-md px-5 text-sm font-semibold"
-            href={newEventHref}>{t('event.create_cta')}</a
-          >
-        {/if}
-      </CardHeader>
-      <CardContent>
-        {#if data.events.length === 0}
-          <p class="text-muted-foreground">{t('organization.events_empty')}</p>
-        {:else}
-          <ul class="divide-y" role="list">
-            {#each data.events as event (event.id)}
-              <li class="py-4 first:pt-0 last:pb-0">
-                <a
-                  class="hover:text-primary block font-semibold"
-                  href={resolve('/app/events/[eventId]', { eventId: event.id })}>{event.title}</a
-                >
-                <p class="text-muted-foreground mt-1 text-sm">
-                  {t('organization.event_date', { date: event.formattedStartsAt })}
-                </p>
-                <div class="mt-2 flex flex-wrap gap-2">
-                  <Badge class="bg-secondary text-secondary-foreground"
-                    >{t(eventVisibilityLabelKey(event.visibility))}</Badge
-                  >
-                  {#if event.cancelledAt}
-                    <Badge class="bg-destructive text-white">{t('event.badge_cancelled')}</Badge>
+      {/if}
+
+      <div class="mt-7 grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <div class="card card-border bg-base-100">
+          <div class="card-body flex-row items-center gap-2 gap-3 pb-0">
+            <span class="bg-secondary inline-flex size-11 items-center justify-center"
+              ><Users aria-hidden="true" size={21} /></span
+            >
+            <div>
+              <h2 class="card-title">{t('organization.team_summary_title')}</h2>
+              <p class="mt-1">
+                {t(
+                  activeMembers === 1
+                    ? 'organization.team_summary_one'
+                    : 'organization.team_summary_other',
+                  { count: activeMembers }
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="card card-border bg-base-100">
+          <div class="card-body pt-6">
+            <p>{t('organization.setup_status')}</p>
+            <p class="mt-2">{t('organization.setup_ready')}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <div class="card card-border bg-base-100">
+          <div class="card-body flex-row items-center justify-between gap-2 gap-4 pb-0">
+            <div>
+              <CalendarDays aria-hidden="true" size={24} />
+              <h2 class="card-title mt-4">{t('organization.events_title')}</h2>
+            </div>
+          </div>
+          <div class="card-body">
+            {#if data.events.length === 0}
+              <p>{t('organization.events_empty')}</p>
+            {:else}
+              <ul role="list">
+                {#each data.events as event (event.id)}
+                  <li class="py-4 first:pt-0 last:pb-0">
+                    <a
+                      href={resolve('/app/events/[eventId]', { eventId: event.id })}
+                      class="link block">{event.title}</a
+                    >
+                    <p class="mt-1">
+                      {t('organization.event_date', { date: event.formattedStartsAt })}
+                    </p>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                      <span class="badge badge-secondary"
+                        >{t(eventVisibilityLabelKey(event.visibility))}</span
+                      >
+                      {#if event.cancelledAt}
+                        <span class="badge badge-error">{t('event.badge_cancelled')}</span>
+                      {/if}
+                    </div>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+
+        <div class="card card-border bg-base-100">
+          <div class="card-body gap-2 pb-0">
+            <CreditCard aria-hidden="true" size={24} />
+            <h2 class="card-title mt-4">{t('stripe.card_title')}</h2>
+          </div>
+          <div class="card-body">
+            {#if data.stripeMode === 'disabled'}
+              <span class="badge badge-secondary">{t('stripe.not_configured')}</span>
+              <p class="mt-3">{t('stripe.not_configured_body')}</p>
+            {:else}
+              <span
+                class={data.stripeAccount?.onboardingStatus === 'ready'
+                  ? 'badge badge-primary'
+                  : 'badge badge-ghost'}
+              >
+                {t(
+                  stripeOnboardingStatusLabelKey(
+                    data.stripeAccount?.onboardingStatus ?? 'not_connected'
+                  )
+                )}
+              </span>
+              <p class="mt-3">{t('stripe.card_body')}</p>
+              {#if data.capabilities.canManageStripe}
+                <div class="mt-5 flex flex-wrap gap-3">
+                  {#if data.stripeAccount?.onboardingStatus !== 'ready'}
+                    <form method="POST" action="?/startOnboarding">
+                      <button type="submit" class="btn btn-primary">{t('stripe.start')}</button>
+                    </form>
+                  {/if}
+                  {#if data.stripeAccount}
+                    <form method="POST" action="?/syncStatus">
+                      <button type="submit" class="btn btn-outline">{t('stripe.sync')}</button>
+                    </form>
                   {/if}
                 </div>
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </CardContent>
-    </Card>
-
-    <Card class="shadow-none">
-      <CardHeader>
-        <CreditCard aria-hidden="true" class="text-primary" size={24} />
-        <CardTitle class="mt-4">{t('stripe.card_title')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {#if data.stripeMode === 'disabled'}
-          <Badge class="bg-secondary text-secondary-foreground">{t('stripe.not_configured')}</Badge>
-          <p class="text-muted-foreground mt-3 text-sm">{t('stripe.not_configured_body')}</p>
-        {:else}
-          <Badge
-            class={data.stripeAccount?.onboardingStatus === 'ready'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-secondary-foreground'}
-          >
-            {t(
-              stripeOnboardingStatusLabelKey(
-                data.stripeAccount?.onboardingStatus ?? 'not_connected'
-              )
-            )}
-          </Badge>
-          <p class="text-muted-foreground mt-3 text-sm">{t('stripe.card_body')}</p>
-          {#if data.capabilities.canManageStripe}
-            <div class="mt-5 flex flex-wrap gap-3">
-              {#if data.stripeAccount?.onboardingStatus !== 'ready'}
-                <form method="POST" action="?/startOnboarding">
-                  <Button type="submit">{t('stripe.start')}</Button>
-                </form>
+              {:else}
+                <p class="mt-4">{t('stripe.owner_only')}</p>
               {/if}
-              {#if data.stripeAccount}
-                <form method="POST" action="?/syncStatus">
-                  <Button type="submit" variant="outline">{t('stripe.sync')}</Button>
-                </form>
-              {/if}
-            </div>
-          {:else}
-            <p class="text-muted-foreground mt-4 text-sm">{t('stripe.owner_only')}</p>
-          {/if}
-        {/if}
-      </CardContent>
-    </Card>
-  </div>
-</section>
+            {/if}
+          </div>
+        </div>
+      </div>
+    </section>
+  {/snippet}
+</DetailPage>

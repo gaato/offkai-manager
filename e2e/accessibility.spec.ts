@@ -1,7 +1,32 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { signInAs } from './auth';
 import { e2eUsers } from './fixtures';
+
+async function expectAccessible(page: Page, path?: string): Promise<void> {
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    // DaisyUI animates color changes; axe must see the settled theme, not a mid-transition blend.
+    // Only running, finite animations can settle; the timeout guards against any that never do.
+    await page.evaluate(() =>
+      Promise.race([
+        Promise.allSettled(
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation.playState === 'running' &&
+                animation.effect?.getTiming().iterations !== Infinity
+            )
+            .map((animation) => animation.finished)
+        ),
+        new Promise((resolve) => setTimeout(resolve, 2_000))
+      ])
+    );
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations, `${path ?? page.url()} (${colorScheme})`).toEqual([]);
+  }
+}
 
 test.describe.configure({ mode: 'serial' });
 test.setTimeout(60_000);
@@ -10,8 +35,7 @@ for (const locale of ['ja', 'en'] as const) {
   for (const path of ['/', '/terms'] as const) {
     test(`${path} has no automated accessibility violations in ${locale}`, async ({ page }) => {
       await page.goto(`${path}?lang=${locale}`);
-      const results = await new AxeBuilder({ page }).analyze();
-      expect(results.violations).toEqual([]);
+      await expectAccessible(page);
     });
   }
 }
@@ -59,8 +83,7 @@ for (const locale of ['ja', 'en'] as const) {
     ]) {
       const separator = path.includes('?') ? '&' : '?';
       await page.goto(`${path}${separator}lang=${locale}`);
-      const results = await new AxeBuilder({ page }).analyze();
-      expect(results.violations, path).toEqual([]);
+      await expectAccessible(page, path);
     }
   });
 }
@@ -109,8 +132,7 @@ for (const locale of ['ja', 'en'] as const) {
         path = destination === 'team' ? `${organizationHref}/team` : organizationHref!;
       }
       await page.goto(`${path}?lang=${locale}`);
-      const results = await new AxeBuilder({ page }).analyze();
-      expect(results.violations).toEqual([]);
+      await expectAccessible(page);
     });
   }
 }

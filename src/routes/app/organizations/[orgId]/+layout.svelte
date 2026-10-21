@@ -16,47 +16,45 @@
 
 <div class="mx-auto max-w-5xl">
   {#if data.organization.suspendedAt}
-    <div
-      class="mb-6 rounded-md border border-amber-700 bg-amber-50 px-4 py-3 text-amber-950"
-      role="status"
-    >
+    <div role="status" class="alert alert-warning mb-6">
       <strong>{t('organization.suspended_title')}</strong>
-      <p class="mt-1 text-sm">{t('organization.suspended_read_only')}</p>
+      <p class="mt-1">{t('organization.suspended_read_only')}</p>
     </div>
   {/if}
-  <header class="border-b pb-5">
-    <p class="text-muted-foreground text-sm font-semibold">{t('organization.workspace')}</p>
+  <header class="pb-5">
+    <p>{t('organization.workspace')}</p>
     <div class="mt-1 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <h1 class="min-w-0 truncate text-2xl font-bold tracking-tight sm:text-3xl">
+      <p class="card-title min-w-0">
         {data.organization.name}
-      </h1>
+      </p>
       <nav aria-label={t('organization.navigation')}>
-        <ul class="flex list-none gap-1" role="list">
+        <ul class="menu menu-horizontal flex-wrap">
           <li>
             <a
-              class="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-4 font-semibold"
-              class:bg-accent={page.url.pathname === homeHref}
               aria-current={page.url.pathname === homeHref ? 'page' : undefined}
-              href={homeHref}>{t('organization.home_nav')}</a
+              href={homeHref}
+              class={page.url.pathname === homeHref ? 'menu-active' : ''}
+              >{t('organization.home_nav')}</a
             >
           </li>
 
           {#if data.capabilities.canViewAudit}
             <li>
               <a
-                class="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-4 font-semibold"
-                class:bg-accent={page.url.pathname === activityHref}
                 aria-current={page.url.pathname === activityHref ? 'page' : undefined}
-                href={activityHref}>{t('activity.nav')}</a
+                href={activityHref}
+                class={page.url.pathname === activityHref ? 'menu-active' : ''}
+                >{t('activity.nav')}</a
               >
             </li>
           {/if}
+
           <li>
             <a
-              class="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-4 font-semibold"
-              class:bg-accent={page.url.pathname === teamHref}
               aria-current={page.url.pathname === teamHref ? 'page' : undefined}
-              href={teamHref}>{t('organization.team_nav')}</a
+              href={teamHref}
+              class={page.url.pathname === teamHref ? 'menu-active' : ''}
+              >{t('organization.team_nav')}</a
             >
           </li>
         </ul>

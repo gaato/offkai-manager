@@ -27,7 +27,11 @@ function requireId(value: string | undefined): string {
 export const load: PageServerLoad = async (event) => {
   const organizationId = requireId(event.params.orgId);
   try {
-    const detail = await getPlatformOrganization(getDatabaseClient(getConfig()), organizationId);
+    const detail = await getPlatformOrganization(
+      getDatabaseClient(getConfig()),
+      organizationId,
+      getConfig().tuning
+    );
     if (detail.organization.suspendedAt)
       throw redirect(303, `/ops/organizations/${organizationId}`);
     return {

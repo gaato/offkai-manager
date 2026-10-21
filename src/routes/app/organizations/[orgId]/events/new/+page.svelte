@@ -1,14 +1,10 @@
 <script lang="ts">
+  import FormPage from '$lib/components/page/form-page.svelte';
   import { untrack } from 'svelte';
   import { resolve } from '$app/paths';
   import { superForm } from 'sveltekit-superforms';
   import { translator } from '$lib/i18n';
   import { registrationModeLabelKey, registrationModes } from '$lib/shared/event';
-  import { Alert } from '$lib/components/ui/alert';
-  import { Button } from '$lib/components/ui/button';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-  import { Input } from '$lib/components/ui/input';
-  import { Label } from '$lib/components/ui/label';
 
   let { data } = $props();
   const t = $derived(translator(data.locale));
@@ -19,97 +15,103 @@
 
 <svelte:head><title>{t('event.new_title')} · {t('brand.name')}</title></svelte:head>
 
-<div class="mx-auto max-w-2xl">
-  <a
-    class="text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center font-semibold"
-    href={backHref}>{t('organization.home_nav')}</a
-  >
-  <Card class="mt-4 shadow-none">
-    <CardHeader>
-      <CardTitle class="text-2xl">{t('event.new_title')}</CardTitle>
-      <p class="text-muted-foreground mt-2">{t('event.new_intro')}</p>
-    </CardHeader>
-    <CardContent>
-      {#if $message}
-        <Alert class="border-destructive text-destructive mb-6" role="alert">{$message}</Alert>
-      {/if}
-      <form method="POST" action="?/create" use:enhance class="grid gap-6">
-        <div class="grid gap-2">
-          <Label for="title">{t('event.title')}</Label>
-          <Input
-            id="title"
-            name="title"
-            bind:value={$form.title}
-            required
-            maxlength={200}
-            aria-invalid={$errors.title ? 'true' : undefined}
-            aria-describedby={$errors.title ? 'title-error' : 'title-help'}
-          />
-          <p id="title-help" class="text-muted-foreground text-sm">{t('event.title_help')}</p>
-          {#if $errors.title}<p id="title-error" class="text-destructive text-sm" role="alert">
-              {$errors.title[0]}
-            </p>{/if}
+<FormPage>
+  {#snippet title()}{t('event.new_title')}{/snippet}
+  {#snippet body()}
+    <div class="mx-auto max-w-2xl">
+      <a href={backHref} class="btn btn-ghost inline-flex min-h-11 items-center"
+        >{t('organization.home_nav')}</a
+      >
+      <div class="card card-border bg-base-100 mt-4">
+        <div class="card-body gap-2 pb-0">
+          <p class="mt-2">{t('event.new_intro')}</p>
         </div>
-        <div class="grid gap-2">
-          <Label for="startsAt">{t('event.starts_at')}</Label>
-          <Input
-            id="startsAt"
-            name="startsAt"
-            type="datetime-local"
-            bind:value={$form.startsAt}
-            required
-            aria-invalid={$errors.startsAt ? 'true' : undefined}
-          />
-          {#if $errors.startsAt}<p class="text-destructive text-sm" role="alert">
-              {$errors.startsAt[0]}
-            </p>{/if}
-        </div>
-        <div class="grid gap-2">
-          <Label for="capacity">{t('event.capacity')}</Label>
-          <Input
-            id="capacity"
-            name="capacity"
-            type="number"
-            min={1}
-            step={1}
-            bind:value={$form.capacity}
-            aria-invalid={$errors.capacity ? 'true' : undefined}
-            aria-describedby={$errors.capacity ? 'capacity-error' : 'capacity-help'}
-          />
-          <p id="capacity-help" class="text-muted-foreground text-sm">
-            {t('event.capacity_help')}
-          </p>
-          {#if $errors.capacity}<p
-              id="capacity-error"
-              class="text-destructive text-sm"
-              role="alert"
-            >
-              {$errors.capacity[0]}
-            </p>{/if}
-        </div>
-        <fieldset class="grid gap-3">
-          <legend class="font-medium">{t('event.registration_mode_label')}</legend>
-          <p class="text-muted-foreground text-sm">{t('event.registration_mode_help')}</p>
-          {#each registrationModes as mode (mode)}
-            <label class="border-input flex min-h-12 items-center gap-3 rounded-md border px-4">
+        <div class="card-body">
+          {#if $message}
+            <div role="alert" class="alert alert-error mb-6">{$message}</div>
+          {/if}
+          <form method="POST" action="?/create" use:enhance class="grid gap-6">
+            <div class="grid gap-2">
+              <label for="title" class="label">{t('event.title')}</label>
               <input
-                type="radio"
-                name="registrationMode"
-                value={mode}
-                bind:group={$form.registrationMode}
+                id="title"
+                name="title"
+                bind:value={$form.title}
+                required
+                maxlength={200}
+                aria-invalid={$errors.title ? 'true' : undefined}
+                aria-describedby={$errors.title ? 'title-error' : 'title-help'}
+                class="input w-full"
               />
-              <span>{t(registrationModeLabelKey(mode))}</span>
-            </label>
-          {/each}
-        </fieldset>
-        <div class="flex flex-wrap gap-3">
-          <Button type="submit">{t('event.create_submit')}</Button>
-          <a
-            class="hover:bg-accent inline-flex min-h-12 items-center rounded-md px-5 font-semibold"
-            href={backHref}>{t('form.cancel')}</a
-          >
+              <p id="title-help">{t('event.title_help')}</p>
+              {#if $errors.title}<p id="title-error" role="alert">
+                  {$errors.title[0]}
+                </p>{/if}
+            </div>
+            <div class="grid gap-2">
+              <label for="startsAt" class="label">{t('event.starts_at')}</label>
+              <input
+                id="startsAt"
+                name="startsAt"
+                type="datetime-local"
+                bind:value={$form.startsAt}
+                required
+                aria-invalid={$errors.startsAt ? 'true' : undefined}
+                class="input w-full"
+              />
+              {#if $errors.startsAt}<p role="alert">
+                  {$errors.startsAt[0]}
+                </p>{/if}
+            </div>
+            <div class="grid gap-2">
+              <label for="capacity" class="label">{t('event.capacity')}</label>
+              <input
+                id="capacity"
+                name="capacity"
+                type="number"
+                min={1}
+                step={1}
+                bind:value={$form.capacity}
+                aria-invalid={$errors.capacity ? 'true' : undefined}
+                aria-describedby={$errors.capacity ? 'capacity-error' : 'capacity-help'}
+                class="input w-full"
+              />
+              <p id="capacity-help">
+                {t('event.capacity_help')}
+              </p>
+              {#if $errors.capacity}<p id="capacity-error" role="alert">
+                  {$errors.capacity[0]}
+                </p>{/if}
+            </div>
+            <fieldset class="fieldset grid gap-3">
+              <legend class="fieldset-legend">{t('event.registration_mode_label')}</legend>
+              <p>{t('event.registration_mode_help')}</p>
+              {#each registrationModes as mode (mode)}
+                <label
+                  for={`field-registrationMode-${mode}`}
+                  class="label flex min-h-12 items-center gap-3 px-4"
+                >
+                  <input
+                    id={`field-registrationMode-${mode}`}
+                    type="radio"
+                    name="registrationMode"
+                    value={mode}
+                    bind:group={$form.registrationMode}
+                    class="radio"
+                  />
+                  <span>{t(registrationModeLabelKey(mode))}</span>
+                </label>
+              {/each}
+            </fieldset>
+            <div class="flex flex-wrap gap-3">
+              <button type="submit" class="btn btn-primary">{t('event.create_submit')}</button>
+              <a href={backHref} class="btn inline-flex min-h-12 items-center px-5"
+                >{t('form.cancel')}</a
+              >
+            </div>
+          </form>
         </div>
-      </form>
-    </CardContent>
-  </Card>
-</div>
+      </div>
+    </div>
+  {/snippet}
+</FormPage>

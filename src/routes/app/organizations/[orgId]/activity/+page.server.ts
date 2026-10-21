@@ -15,7 +15,8 @@ export const load: PageServerLoad = async (event) => {
     const rows = await listOrganizationActivity(
       getDatabaseClient(config),
       session.userId,
-      data.organization.id
+      data.organization.id,
+      config.tuning
     );
     return {
       rows: rows.map((row) => ({

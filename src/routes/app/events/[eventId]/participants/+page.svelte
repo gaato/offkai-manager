@@ -1,13 +1,9 @@
 <script lang="ts">
+  import ListPage from '$lib/components/page/list-page.svelte';
   import { resolve } from '$app/paths';
   import { SvelteURLSearchParams } from 'svelte/reactivity';
   import { translator } from '$lib/i18n';
   import { registrationStatusLabelKey } from '$lib/shared/registration';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-  import { Input } from '$lib/components/ui/input';
-  import { Label } from '$lib/components/ui/label';
 
   let { data } = $props();
   const t = $derived(translator(data.locale));
@@ -31,19 +27,13 @@
   ><title>{t('participants.title')} · {data.event.title} · {t('brand.name')}</title></svelte:head
 >
 
-<Card class="shadow-none">
-  <CardHeader>
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <CardTitle>{t('participants.title')}</CardTitle>
-      <a
-        class="hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 font-semibold"
-        href={exportHref}>{t('participants.export_csv')}</a
-      >
-    </div>
-    <p class="text-muted-foreground mt-2 text-sm">{t('participants.intro')}</p>
-  </CardHeader>
-  <CardContent>
-    <search>
+<ListPage>
+  {#snippet actions()}<a
+      href={exportHref}
+      class="btn btn-ghost inline-flex min-h-11 items-center px-4">{t('participants.export_csv')}</a
+    >{/snippet}
+  {#snippet title()}{t('participants.title')}{/snippet}
+  {#snippet filters()}<search>
       <form
         method="GET"
         action={participantsHref}
@@ -53,83 +43,89 @@
           <input type="hidden" name="status" value={data.status} />
         {/if}
         <div class="grid min-w-0 flex-1 gap-2">
-          <Label for="participant-search">{t('participants.search')}</Label>
-          <Input
+          <label for="participant-search" class="label">{t('participants.search')}</label>
+          <input
             id="participant-search"
             name="q"
             type="search"
             value={data.query}
             enterkeyhint="search"
+            class="input w-full"
           />
-          <p class="text-muted-foreground text-sm">{t('participants.search_help')}</p>
+          <p>{t('participants.search_help')}</p>
         </div>
-        <Button type="submit">{t('participants.search_submit')}</Button>
+        <button type="submit" class="btn btn-primary">{t('participants.search_submit')}</button>
       </form>
-    </search>
-
-    <nav class="mt-6" aria-label={t('participants.filter_navigation')}>
-      <ul class="flex list-none flex-wrap gap-2" role="list">
-        {#each data.filters as filter (filter)}
-          <li>
-            <a
-              class="hover:bg-accent inline-flex min-h-11 items-center gap-2 rounded-md border px-4 font-semibold"
-              class:bg-accent={data.status === filter}
-              aria-current={data.status === filter ? 'page' : undefined}
-              href={filterHref(filter)}
-            >
-              {filter === 'all'
-                ? t('participants.filter.all')
-                : t(registrationStatusLabelKey(filter))}
-              <span class="bg-muted rounded-full px-2 py-0.5 text-xs tabular-nums"
-                >{data.counts[filter]}</span
-              >
-            </a>
-          </li>
-        {/each}
-      </ul>
-    </nav>
-
-    <p class="text-muted-foreground mt-5 text-sm" role="status">
-      {t('participants.result_count', { count: data.rows.length })}
-    </p>
-    {#if data.capped}
-      <p class="text-muted-foreground mt-2 text-sm">{t('participants.result_cap')}</p>
-    {/if}
-
-    {#if data.rows.length === 0}
-      <p class="text-muted-foreground mt-5 rounded-lg border border-dashed p-8 text-center">
-        {t('participants.empty')}
-      </p>
-    {:else}
-      <div class="mt-4 overflow-x-auto rounded-xl border">
-        <table class="w-full min-w-[42rem] border-collapse text-left">
-          <caption class="sr-only">{t('participants.caption')}</caption>
-          <thead class="bg-muted/65 text-sm">
-            <tr>
-              <th class="px-5 py-3 font-semibold" scope="col">{t('participants.display_name')}</th>
-              <th class="px-5 py-3 font-semibold" scope="col">{t('participants.username')}</th>
-              <th class="px-5 py-3 font-semibold" scope="col">{t('participants.status')}</th>
-              <th class="px-5 py-3 font-semibold" scope="col">{t('participants.registered_at')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each data.rows as row (row.id)}
-              <tr class="border-t">
-                <th class="px-5 py-4 font-semibold" scope="row">
-                  {row.displayName}
-                </th>
-                <td class="px-5 py-4">{row.username || t('participants.username_missing')}</td>
-                <td class="px-5 py-4">
-                  <Badge class="bg-secondary text-secondary-foreground"
-                    >{t(registrationStatusLabelKey(row.status))}</Badge
-                  >
-                </td>
-                <td class="px-5 py-4">{row.registeredAtLabel}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+    </search>{/snippet}
+  {#snippet body()}
+    <div class="card card-border bg-base-100">
+      <div class="card-body gap-2 pb-0">
+        <div class="flex flex-wrap items-center justify-between gap-3"></div>
+        <p class="mt-2">{t('participants.intro')}</p>
       </div>
-    {/if}
-  </CardContent>
-</Card>
+      <div class="card-body">
+        <nav aria-label={t('participants.filter_navigation')} class="mt-6">
+          <ul role="list" class="flex flex-wrap gap-2">
+            {#each data.filters as filter (filter)}
+              <li>
+                <a
+                  aria-current={data.status === filter ? 'page' : undefined}
+                  href={filterHref(filter)}
+                  class="btn btn-ghost inline-flex min-h-11 items-center gap-2 px-4"
+                >
+                  {filter === 'all'
+                    ? t('participants.filter.all')
+                    : t(registrationStatusLabelKey(filter))}
+                  <span class="px-2 py-0.5">{data.counts[filter]}</span>
+                </a>
+              </li>
+            {/each}
+          </ul>
+        </nav>
+
+        <p role="status" class="mt-5">
+          {t('participants.result_count', { count: data.rows.length })}
+        </p>
+        {#if data.capped}
+          <p class="mt-2">{t('participants.result_cap', { limit: data.limit })}</p>
+        {/if}
+
+        {#if data.rows.length === 0}
+          <p class="mt-5 p-8">
+            {t('participants.empty')}
+          </p>
+        {:else}
+          <div class="mt-4 overflow-x-auto">
+            <table class="table w-full min-w-[42rem]">
+              <caption class="sr-only">{t('participants.caption')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="px-5 py-3">{t('participants.display_name')}</th>
+                  <th scope="col" class="px-5 py-3">{t('participants.username')}</th>
+                  <th scope="col" class="px-5 py-3">{t('participants.status')}</th>
+                  <th scope="col" class="px-5 py-3">{t('participants.registered_at')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each data.rows as row (row.id)}
+                  <tr>
+                    <th scope="row" class="px-5 py-4">
+                      {row.displayName}
+                    </th>
+                    <td class="px-5 py-4">{row.username || t('participants.username_missing')}</td>
+                    <td class="px-5 py-4">
+                      <span class="badge badge-secondary"
+                        >{t(registrationStatusLabelKey(row.status))}</span
+                      >
+                    </td>
+                    <td class="px-5 py-4">{row.registeredAtLabel}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/snippet}
+</ListPage>

@@ -20,25 +20,38 @@
 </script>
 
 {#if rows.length === 0}
-  <p class="text-muted-foreground">{t('activity.empty')}</p>
+  <p>{t('activity.empty')}</p>
 {:else}
-  <ol class="grid list-none gap-4">
-    {#each rows as row (row.id)}
-      <li class="border-b pb-4 last:border-0 last:pb-0">
-        <p class="font-semibold">{t(auditActionLabelKey(row.action))}</p>
-        {#if showEvent && row.eventTitle}
-          <p class="mt-1">{t('activity.event', { event: row.eventTitle })}</p>
-        {/if}
-        {#if row.reason}
-          <p class="mt-1 whitespace-pre-wrap">{t('activity.reason', { reason: row.reason })}</p>
-        {/if}
-        <p class="text-muted-foreground mt-1 text-sm">
-          {row.actorName
-            ? t('activity.actor', { name: row.actorName })
-            : t('activity.system_actor')}
-          · {row.createdAtLabel}
-        </p>
-      </li>
-    {/each}
-  </ol>
+  <div class="overflow-x-auto">
+    <table class="table">
+      <caption class="sr-only">{t('activity.nav')}</caption>
+      <thead
+        ><tr>
+          <th scope="col">{t('activity.column.action')}</th>
+          <th scope="col">{t('activity.column.actor')}</th>
+          <th scope="col">{t('activity.column.date')}</th>
+          <th scope="col">{t('activity.column.details')}</th>
+        </tr></thead
+      >
+      <tbody>
+        {#each rows as row (row.id)}
+          <tr>
+            <th scope="row">{t(auditActionLabelKey(row.action))}</th>
+            <td
+              >{row.actorName
+                ? t('activity.actor', { name: row.actorName })
+                : t('activity.system_actor')}</td
+            >
+            <td>{row.createdAtLabel}</td>
+            <td>
+              {#if showEvent && row.eventTitle}<p>
+                  {t('activity.event', { event: row.eventTitle })}
+                </p>{/if}
+              {#if row.reason}<p>{t('activity.reason', { reason: row.reason })}</p>{/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
 {/if}

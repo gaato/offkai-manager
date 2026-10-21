@@ -39,6 +39,24 @@ describe('Stripe webhook stable-field parser', () => {
       currency: 'JPY'
     });
   });
+  it('rejects a valid signature outside Stripe default timestamp tolerance', () => {
+    const payload = JSON.stringify({
+      id: 'evt_expired',
+      type: 'account.updated',
+      data: { object: {} }
+    });
+    const signature = Stripe.webhooks.generateTestHeaderString({
+      payload,
+      secret,
+      timestamp: Math.floor(Date.now() / 1_000) - 600
+    });
+    expect(() =>
+      new StripeWebhookVerifier(secret).parseCheckoutEvent(
+        new TextEncoder().encode(payload),
+        signature
+      )
+    ).toThrow(/Timestamp outside the tolerance zone/);
+  });
   it('rejects a bad signature and ignores unrelated signed events', () => {
     const payload = JSON.stringify({
       id: 'evt_other',

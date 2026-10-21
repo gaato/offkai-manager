@@ -26,9 +26,9 @@ test('organizer opens a collection and records a seeded participant payment', as
   expect(eventHref).toBeTruthy();
   await eventLink.click();
   await organizer.getByRole('link', { name: 'Payments', exact: true }).click();
-  await organizer.locator('input[name="title"]').fill('Journey participation fee');
-  await organizer.locator('input[name="amountYen"]').fill('5000');
-  await organizer.locator('textarea[name="instructions"]').fill('Use the hosted checkout.');
+  await organizer.getByLabel('Collection title').fill('Journey participation fee');
+  await organizer.getByLabel('Amount (yen)').fill('5000');
+  await organizer.getByLabel('General instructions').fill('Use the hosted checkout.');
   await organizer.getByRole('button', { name: 'Create collection' }).click();
   await expect(organizer.getByText('The collection was created.')).toBeVisible();
   await organizer.getByRole('button', { name: 'Open collection' }).click();
@@ -40,7 +40,7 @@ test('organizer opens a collection and records a seeded participant payment', as
   await organizer.getByRole('button', { name: 'Confirm payment', exact: true }).click();
   await expect(participantRow.getByText('Paid', { exact: true })).toBeVisible();
   const summary = organizer.locator('section[aria-labelledby="payment-summary-title"]');
-  const paidMetric = summary.getByText('Paid', { exact: true }).locator('..');
+  const paidMetric = summary.getByRole('group', { name: 'Paid', exact: true });
   await expect(paidMetric).toContainText('¥5,000');
   await expect(paidMetric).toContainText('1 people');
 

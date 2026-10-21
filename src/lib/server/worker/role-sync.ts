@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -11,10 +12,6 @@ import {
 } from '$lib/server/db/schema';
 import type { DiscordGateway } from '$lib/server/domain/discord';
 import { DiscordRateLimitError } from '$lib/server/gateways/discord/rest';
-
-export const roleSyncClaimLimit = 10;
-export const roleSyncMaxAttempts = 5;
-export const roleSyncIntervalMs = 15_000;
 
 const payloadSchema = z.object({ registration_id: z.uuid(), event_id: z.uuid() });
 
@@ -40,7 +37,7 @@ export function resetProcessingRoleSyncEvents(client: DatabaseClient): void {
 
 export function claimRoleSyncEvents(
   client: DatabaseClient,
-  limit = roleSyncClaimLimit,
+  limit = defaultTuning.OFFKAI_OUTBOX_BATCH_SIZE,
   clock: Clock = systemClock
 ): ClaimedRoleSyncEvent[] {
   return write(client, (tx) => {
@@ -84,9 +81,10 @@ export async function processRoleSyncBatch(
   client: DatabaseClient,
   gateway: DiscordGateway,
   logger?: Logger,
-  clock: Clock = systemClock
+  clock: Clock = systemClock,
+  tuning: Tuning = defaultTuning
 ): Promise<number> {
-  const claimed = claimRoleSyncEvents(client, undefined, clock);
+  const claimed = claimRoleSyncEvents(client, tuning.OFFKAI_OUTBOX_BATCH_SIZE, clock);
   for (const event of claimed) {
     try {
       const task = resolveRoleSyncTask(client, event.payloadJson);
@@ -112,7 +110,7 @@ export async function processRoleSyncBatch(
         client,
         event.id,
         cause instanceof Error ? cause.message : String(cause),
-        roleSyncMaxAttempts,
+        tuning.OFFKAI_OUTBOX_MAX_ATTEMPTS,
         cause instanceof DiscordRateLimitError ? cause.retryAfterMs : 0,
         clock
       );
@@ -125,7 +123,7 @@ export function failRoleSyncEvent(
   client: DatabaseClient,
   id: string,
   reason: string,
-  maxAttempts = roleSyncMaxAttempts,
+  maxAttempts = defaultTuning.OFFKAI_OUTBOX_MAX_ATTEMPTS,
   retryAfterMs = 0,
   clock: Clock = systemClock
 ): void {
@@ -189,14 +187,14 @@ export class RoleSyncWorker {
     private readonly client: DatabaseClient,
     private readonly gateway: DiscordGateway,
     private readonly logger: Logger,
-    private readonly intervalMs = roleSyncIntervalMs,
+    private readonly tuning: Tuning = defaultTuning,
     private readonly clock: Clock = systemClock
   ) {}
 
   start(): void {
     if (this.timer) return;
     resetProcessingRoleSyncEvents(this.client);
-    this.timer = setInterval(() => this.tick(), this.intervalMs);
+    this.timer = setInterval(() => this.tick(), this.tuning.OFFKAI_OUTBOX_POLL_INTERVAL_MS);
     this.timer.unref();
   }
 
@@ -208,7 +206,13 @@ export class RoleSyncWorker {
 
   private tick(): void {
     if (this.inFlight) return;
-    this.inFlight = processRoleSyncBatch(this.client, this.gateway, this.logger, this.clock)
+    this.inFlight = processRoleSyncBatch(
+      this.client,
+      this.gateway,
+      this.logger,
+      this.clock,
+      this.tuning
+    )
       .then(() => undefined)
       .catch((cause: unknown) => {
         this.logger.error({ err: cause }, 'Discord role sync pass failed');

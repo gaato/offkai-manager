@@ -10,12 +10,12 @@ The npm inventory below was regenerated on 2026-10-21 from the frozen
 `pnpm-lock.yaml` production graph with pnpm 11.9.0:
 
 ```fish
-pnpm install --prod --frozen-lockfile
+pnpm install --frozen-lockfile
 pnpm licenses list --prod --long --json
 ```
 
 The JSON result was normalized by package name, version, declared SPDX license,
-and upstream homepage. It contains 123 package names and 124 package releases
+and upstream homepage. It contains 122 package names and 123 package releases
 (`real-require` occurs at two versions), including production optional and
 peer packages selected by pnpm for Linux x86-64. Exact copyright notices and
 license files remain in the installed package directories under
@@ -23,11 +23,11 @@ license files remain in the installed package directories under
 
 The inventory does not treat all development dependencies as shipped runtime
 material. Build tools whose source or generated output is incorporated into the
-application, vendored UI source, and third-party skill files distributed in the
+application and third-party skill files distributed in the
 source tree are recorded separately after the pnpm inventory.
 
 The runtime image is based on
-[`node:24-slim`](https://github.com/nodejs/docker-node). Node.js license
+[`node:26.12.0-slim`](https://github.com/nodejs/docker-node). Node.js license
 material remains at `/usr/local/LICENSE`; Debian package notices remain under
 `/usr/share/doc/*/copyright` in the image.
 
@@ -91,7 +91,7 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 - [`@types/cookie` 0.6.0](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/cookie)
 - [`@types/estree` 1.0.9](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree)
 - [`@types/json-schema` 7.0.15](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/json-schema)
-- [`@types/node` 24.13.3](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node)
+- [`@types/node` 26.6.5](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node)
 - [`@types/trusted-types` 2.0.7](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/trusted-types)
 - [`@types/validator` 13.15.10](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/validator)
 - [`@typeschema/class-validator` 0.3.0](https://typeschema.com)
@@ -147,11 +147,10 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 - [`set-cookie-parser` 3.1.2](https://github.com/nfriedly/set-cookie-parser)
 - [`sirv` 3.0.2](https://github.com/lukeed/sirv#readme)
 - [`sonic-boom` 4.2.1](https://github.com/pinojs/sonic-boom#readme)
-- [`stripe` 20.4.1](https://github.com/stripe/stripe-node)
+- [`stripe` 23.0.0](https://github.com/stripe/stripe-node)
 - [`superstruct` 2.0.2](https://github.com/ianstormtaylor/superstruct#readme)
 - [`svelte` 5.56.6](https://svelte.dev)
 - [`sveltekit-superforms` 2.30.2](https://superforms.rocks)
-- [`tailwind-merge` 3.6.0](https://github.com/dcastil/tailwind-merge)
 - [`thread-stream` 4.2.0](https://github.com/mcollina/thread-stream#readme)
 - [`tiny-case` 1.0.3](https://github.com/jquense/tiny-case#readme)
 - [`tinyglobby` 0.2.17](https://superchupu.dev/tinyglobby)
@@ -160,7 +159,7 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
 - [`ts-algebra` 2.0.0](https://github.com/ThomasAribart/ts-algebra#readme)
 - [`tsx` 4.23.1](https://tsx.hirok.io)
 - [`typebox` 1.3.6](https://github.com/sinclairzx81/typebox#readme)
-- [`undici-types` 7.18.2](https://undici.nodejs.org)
+- [`undici-types` 8.9.0](https://undici.nodejs.org)
 - [`valibot` 1.4.2](https://valibot.dev)
 - [`validator` 13.15.35](https://github.com/validatorjs/validator.js)
 - [`vite` 7.3.6](https://vite.dev)
@@ -180,10 +179,8 @@ material remains at `/usr/local/LICENSE`; Debian package notices remain under
   is used at build time and contributes the production Node server wrapper.
 - [Tailwind CSS 4.3.3](https://github.com/tailwindlabs/tailwindcss) generates the
   application stylesheet.
-- [shadcn-svelte registry components](https://github.com/huntabyte/shadcn-svelte)
-  were copied into `src/lib/components/ui` and modified in this repository.
-  The registry snapshot was taken during the TypeScript rewrite and is not a
-  runtime package dependency.
+- [DaisyUI 5.7.50](https://github.com/saadeghi/daisyui) is a Tailwind build-time
+  plugin; its built-in component and light/dark theme CSS is included in the application stylesheet.
 - [samber/cc-skills-golang v1.7.0](https://github.com/samber/cc-skills-golang)
   supplied selected files under `.agents/skills`. They are distributed in the
   source tree and are not included in the runtime image.
@@ -195,10 +192,8 @@ The material in this section is licensed under the MIT License with these
 copyright notices:
 
 ```text
-Copyright (c) 2023 Hunter Johnston <https://github.com/huntabyte>
-Copyright (c) 2023 CokaKoala <https://github.com/adriangonz97>
-Copyright (c) 2023 shadcn
 Copyright (c) Tailwind Labs, Inc.
+Copyright (c) 2020 Pouya Saadeghi
 Copyright (c) 2020 [these people](https://github.com/sveltejs/kit/graphs/contributors)
 Copyright (c) 2026 Samuel Berthe
 Copyright (c) 2025 Addy Osmani

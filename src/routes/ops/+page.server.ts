@@ -8,7 +8,7 @@ import { formatWallClock } from '$lib/server/time';
 export const load: PageServerLoad = async (event) => {
   try {
     const config = getConfig();
-    const dashboard = await getPlatformDashboard(getDatabaseClient(config));
+    const dashboard = await getPlatformDashboard(getDatabaseClient(config), config.tuning);
     return {
       ...dashboard,
       recentAudits: dashboard.recentAudits.map((row) => ({

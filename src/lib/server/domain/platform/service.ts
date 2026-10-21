@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { read } from '$lib/server/db/client';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write } from '$lib/server/db/client';
@@ -105,10 +106,6 @@ export interface SetSuspensionInput {
   reason?: string;
 }
 
-const detailAuditLimit = 20;
-
-const userSearchLimit = 50;
-
 export async function listPlatformOrganizations(
   client: DatabaseClient
 ): Promise<PlatformOrganizationRow[]> {
@@ -133,7 +130,8 @@ export async function listPlatformOrganizations(
 
 export async function getPlatformOrganization(
   client: DatabaseClient,
-  organizationId: string
+  organizationId: string,
+  tuning: Tuning = defaultTuning
 ): Promise<PlatformOrganizationDetail> {
   return read(client, (tx) => {
     const organizationRows = tx
@@ -222,7 +220,7 @@ export async function getPlatformOrganization(
           )
         )
         .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-        .limit(detailAuditLimit)
+        .limit(tuning.OFFKAI_PLATFORM_DETAIL_AUDIT_LIMIT)
         .all()
     ];
     const connect = connectRows[0];
@@ -260,7 +258,8 @@ export async function getPlatformOrganization(
 
 export async function searchPlatformUsers(
   client: DatabaseClient,
-  query: string
+  query: string,
+  tuning: Tuning = defaultTuning
 ): Promise<PlatformUserRow[]> {
   return read(client, (tx) => {
     const normalized = query.trim();
@@ -290,7 +289,7 @@ export async function searchPlatformUsers(
       )
       .groupBy(users.id, externalAccounts.id)
       .orderBy(asc(externalAccounts.displayName), asc(users.id))
-      .limit(userSearchLimit)
+      .limit(tuning.OFFKAI_PLATFORM_USER_SEARCH_LIMIT)
       .all();
     return rows;
   });
@@ -298,7 +297,8 @@ export async function searchPlatformUsers(
 
 export async function getPlatformUser(
   client: DatabaseClient,
-  userId: string
+  userId: string,
+  tuning: Tuning = defaultTuning
 ): Promise<PlatformUserDetail> {
   return read(client, (tx) => {
     const userRows = tx
@@ -356,7 +356,7 @@ export async function getPlatformUser(
           )
         )
         .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-        .limit(detailAuditLimit)
+        .limit(tuning.OFFKAI_PLATFORM_DETAIL_AUDIT_LIMIT)
         .all()
     ];
     return {

@@ -23,6 +23,23 @@ describe('sessions', () => {
       platformAdmin: true
     });
   });
+  it('honors configured session and OAuth lifetimes', () => {
+    const token = signSession(
+      { userId: 'user-1', displayName: 'Test User', platformAdmin: false },
+      secret,
+      now,
+      120
+    );
+    const oauth = createOAuthState('/app', secret, now, 60);
+    expect(verifySession(token, secret, new Date(now.getTime() + 119_000))).not.toBeNull();
+    expect(verifySession(token, secret, new Date(now.getTime() + 120_000))).toBeNull();
+    expect(
+      verifyOAuthState(oauth.cookieValue, oauth.state, secret, new Date(now.getTime() + 59_000))
+    ).toBe('/app');
+    expect(
+      verifyOAuthState(oauth.cookieValue, oauth.state, secret, new Date(now.getTime() + 60_000))
+    ).toBeNull();
+  });
   it('rejects tampering and expiry', () => {
     const value = signSession(
       { userId: 'user-1', displayName: 'Test User', platformAdmin: false },

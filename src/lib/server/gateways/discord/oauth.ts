@@ -1,3 +1,4 @@
+import { defaultTuning } from '$lib/server/config';
 import { z } from 'zod';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
@@ -49,7 +50,8 @@ export function discordAuthorizationUrl(config: DiscordOAuthConfig, state: strin
 export async function exchangeDiscordCode(
   config: DiscordOAuthConfig,
   code: string,
-  fetchImplementation: typeof fetch = fetch
+  fetchImplementation: typeof fetch = fetch,
+  timeoutMs = defaultTuning.OFFKAI_DISCORD_REQUEST_TIMEOUT_MS
 ): Promise<DiscordIdentity> {
   ensureConfigured(config);
   if (!code) throw new DiscordOAuthError('Discord authorization code is required');
@@ -68,7 +70,7 @@ export async function exchangeDiscordCode(
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: tokenBody,
-      signal: AbortSignal.timeout(10_000)
+      signal: AbortSignal.timeout(timeoutMs)
     });
   } catch (cause) {
     throw new DiscordOAuthError('Discord token exchange failed', { cause });
@@ -87,7 +89,7 @@ export async function exchangeDiscordCode(
   try {
     userResponse = await fetchImplementation(`${DISCORD_API_BASE_URL}/users/@me`, {
       headers: { Authorization: `Bearer ${token.data.access_token}` },
-      signal: AbortSignal.timeout(10_000)
+      signal: AbortSignal.timeout(timeoutMs)
     });
   } catch (cause) {
     throw new DiscordOAuthError('Discord user fetch failed', { cause });

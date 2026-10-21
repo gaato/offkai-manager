@@ -1,10 +1,9 @@
+import { defaultTuning } from '$lib/server/config';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Cookies, RequestEvent } from '@sveltejs/kit';
 
 export const SESSION_COOKIE_NAME = 'offkai_session';
 export const OAUTH_STATE_COOKIE_NAME = 'offkai_oauth_state';
-const SESSION_TTL_SECONDS = 24 * 60 * 60;
-const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 
 export interface SessionData {
   userId: string;
@@ -55,7 +54,8 @@ function verifiedPayload(
 export function signSession(
   input: Pick<SessionData, 'userId' | 'displayName' | 'platformAdmin'>,
   secret: string,
-  now = new Date()
+  now = new Date(),
+  ttlSeconds = defaultTuning.OFFKAI_SESSION_TTL_SECONDS
 ): string {
   if (secret.length < 16) throw new Error('session secret must be at least 16 bytes');
   const issuedAt = Math.floor(now.getTime() / 1000);
@@ -64,7 +64,7 @@ export function signSession(
     display_name: input.displayName,
     platform_admin: input.platformAdmin,
     iat: issuedAt,
-    exp: issuedAt + SESSION_TTL_SECONDS
+    exp: issuedAt + ttlSeconds
   };
   const encoded = base64Url(JSON.stringify(payload));
   return signedValue(encoded, secret, 'session');
@@ -107,7 +107,12 @@ export interface OAuthState {
   cookieValue: string;
 }
 
-export function createOAuthState(returnTo: string, secret: string, now = new Date()): OAuthState {
+export function createOAuthState(
+  returnTo: string,
+  secret: string,
+  now = new Date(),
+  ttlSeconds = defaultTuning.OFFKAI_OAUTH_STATE_TTL_SECONDS
+): OAuthState {
   if (secret.length < 16) throw new Error('session secret must be at least 16 bytes');
   const issuedAt = Math.floor(now.getTime() / 1_000);
   const state = randomBytes(32).toString('base64url');
@@ -116,7 +121,7 @@ export function createOAuthState(returnTo: string, secret: string, now = new Dat
       state,
       return_to: returnTo,
       iat: issuedAt,
-      exp: issuedAt + OAUTH_STATE_TTL_SECONDS
+      exp: issuedAt + ttlSeconds
     })
   );
   return { state, cookieValue: signedValue(payload, secret, 'oauth-state') };
@@ -162,10 +167,15 @@ export function isSecureRequest(event: Pick<RequestEvent, 'url' | 'request'>): b
   );
 }
 
-export function setSessionCookie(cookies: Cookies, value: string, secure: boolean): void {
+export function setSessionCookie(
+  cookies: Cookies,
+  value: string,
+  secure: boolean,
+  ttlSeconds = defaultTuning.OFFKAI_SESSION_TTL_SECONDS
+): void {
   cookies.set(SESSION_COOKIE_NAME, value, {
     path: '/',
-    maxAge: SESSION_TTL_SECONDS,
+    maxAge: ttlSeconds,
     httpOnly: true,
     sameSite: 'lax',
     secure
@@ -181,10 +191,15 @@ export function clearSessionCookie(cookies: Pick<Cookies, 'delete'>, secure: boo
   });
 }
 
-export function setOAuthStateCookie(cookies: Cookies, value: string, secure: boolean): void {
+export function setOAuthStateCookie(
+  cookies: Cookies,
+  value: string,
+  secure: boolean,
+  ttlSeconds = defaultTuning.OFFKAI_OAUTH_STATE_TTL_SECONDS
+): void {
   cookies.set(OAUTH_STATE_COOKIE_NAME, value, {
     path: '/auth/discord',
-    maxAge: OAUTH_STATE_TTL_SECONDS,
+    maxAge: ttlSeconds,
     httpOnly: true,
     sameSite: 'lax',
     secure

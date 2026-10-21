@@ -12,11 +12,15 @@ export const load: PageServerLoad = async (event) => {
   const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   try {
     const config = getConfig();
-    const result = await searchPlatformActivity(getDatabaseClient(config), {
-      actionPrefix,
-      targetId,
-      page
-    });
+    const result = await searchPlatformActivity(
+      getDatabaseClient(config),
+      {
+        actionPrefix,
+        targetId,
+        page
+      },
+      config.tuning
+    );
     return {
       actionPrefix,
       targetId,

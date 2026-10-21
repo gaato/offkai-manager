@@ -53,7 +53,12 @@ export const GET: RequestHandler = async (event) => {
   const code = event.url.searchParams.get('code');
   if (!code) return localizedErrorResponse(event, 400, event.locals.t('auth.missing_code'));
   try {
-    const identity = await exchangeDiscordCode(config.discord, code);
+    const identity = await exchangeDiscordCode(
+      config.discord,
+      code,
+      undefined,
+      config.tuning.OFFKAI_DISCORD_REQUEST_TIMEOUT_MS
+    );
     const user = await upsertDiscordIdentity(getDatabaseClient(config), identity);
     if (user.suspended) {
       return localizedErrorResponse(event, 403, event.locals.t('auth.suspended'));
@@ -66,9 +71,12 @@ export const GET: RequestHandler = async (event) => {
           displayName: user.displayName,
           platformAdmin: config.platform.adminDiscordIds.includes(identity.providerUserId)
         },
-        config.auth.sessionSecret
+        config.auth.sessionSecret,
+        undefined,
+        config.tuning.OFFKAI_SESSION_TTL_SECONDS
       ),
-      secure
+      secure,
+      config.tuning.OFFKAI_SESSION_TTL_SECONDS
     );
   } catch (cause) {
     event.locals.logger.error({ err: cause }, 'discord oauth callback failed');

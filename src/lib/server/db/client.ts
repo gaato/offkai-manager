@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { registerSearchFunctions } from './search';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import type { Config } from '$lib/server/config';
+import { defaultTuning, type Config } from '$lib/server/config';
 
 export interface DatabaseClient {
   db: BetterSQLite3Database & { $client: Database.Database };
@@ -39,19 +39,22 @@ function rejectPromise<T>(value: T): T {
 
 let singleton: DatabaseClient | undefined;
 
-export function openDatabase(path: string | Buffer): DatabaseClient {
+export function openDatabase(
+  path: string | Buffer,
+  busyTimeoutMs = defaultTuning.OFFKAI_DB_BUSY_TIMEOUT_MS
+): DatabaseClient {
   const connection = new Database(path);
   connection.pragma('journal_mode = WAL');
   connection.pragma('synchronous = NORMAL');
   connection.pragma('foreign_keys = ON');
-  connection.pragma('busy_timeout = 5000');
+  connection.pragma(`busy_timeout = ${busyTimeoutMs}`);
   registerSearchFunctions(connection);
   return { db: drizzle(connection) };
 }
 
 export function createDatabaseClient(config: Config): DatabaseClient {
   if (!config.database.path) throw new Error('OFFKAI_DATABASE_PATH is not configured');
-  return openDatabase(config.database.path);
+  return openDatabase(config.database.path, config.tuning.OFFKAI_DB_BUSY_TIMEOUT_MS);
 }
 
 export function getDatabaseClient(config: Config): DatabaseClient {

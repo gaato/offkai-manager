@@ -1,5 +1,5 @@
 [tools]
-node = "24.18.0"
+node = "26.12.0"
 pnpm = "11.9.0"
 
 [tasks.dev]
@@ -27,7 +27,7 @@ description = "Run unit tests"
 run = "pnpm test"
 
 [tasks.test-integration]
-description = "Run PostgreSQL integration tests"
+description = "Run SQLite integration tests"
 run = "pnpm test:integration"
 
 [tasks.test-e2e]

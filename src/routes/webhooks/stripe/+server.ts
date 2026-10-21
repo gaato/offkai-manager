@@ -4,8 +4,6 @@ import { getConfig } from '$lib/server/config';
 import { getDatabaseClient } from '$lib/server/db/client';
 import { settleCheckout } from '$lib/server/domain/payments';
 
-const maxBodyBytes = 1 << 20;
-
 export const POST: RequestHandler = async (event) => {
   const config = getConfig();
   const verifier = getApp(config).stripe.webhook;
@@ -13,7 +11,7 @@ export const POST: RequestHandler = async (event) => {
 
   let payload: Uint8Array;
   try {
-    payload = await readLimitedBody(event.request, maxBodyBytes);
+    payload = await readLimitedBody(event.request, config.tuning.OFFKAI_WEBHOOK_MAX_BODY_BYTES);
   } catch (cause) {
     event.locals.logger.warn({ err: cause }, 'Stripe webhook body rejected');
     return textResponse(

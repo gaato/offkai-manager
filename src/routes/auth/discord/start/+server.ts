@@ -14,7 +14,17 @@ export const GET: RequestHandler = (event) => {
     throw error(503, event.locals.t('auth.unavailable'));
   }
 
-  const oauthState = createOAuthState(returnTo, config.auth.sessionSecret);
-  setOAuthStateCookie(event.cookies, oauthState.cookieValue, isSecureRequest(event));
+  const oauthState = createOAuthState(
+    returnTo,
+    config.auth.sessionSecret,
+    undefined,
+    config.tuning.OFFKAI_OAUTH_STATE_TTL_SECONDS
+  );
+  setOAuthStateCookie(
+    event.cookies,
+    oauthState.cookieValue,
+    isSecureRequest(event),
+    config.tuning.OFFKAI_OAUTH_STATE_TTL_SECONDS
+  );
   throw redirect(302, discordAuthorizationUrl(config.discord, oauthState.state));
 };

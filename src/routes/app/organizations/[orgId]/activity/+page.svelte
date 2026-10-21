@@ -1,7 +1,7 @@
 <script lang="ts">
+  import ListPage from '$lib/components/page/list-page.svelte';
   import { translator } from '$lib/i18n';
   import ActivityList from '$lib/components/activity-list.svelte';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 
   let { data } = $props();
   const t = $derived(translator(data.locale));
@@ -12,12 +12,16 @@
   ></svelte:head
 >
 
-<Card class="shadow-none">
-  <CardHeader>
-    <CardTitle>{t('activity.organization_title')}</CardTitle>
-    <p class="text-muted-foreground mt-2 text-sm">{t('activity.organization_intro')}</p>
-  </CardHeader>
-  <CardContent>
-    <ActivityList locale={data.locale} rows={data.rows} showEvent />
-  </CardContent>
-</Card>
+<ListPage>
+  {#snippet title()}{t('activity.organization_title')}{/snippet}
+  {#snippet body()}
+    <div class="card card-border bg-base-100">
+      <div class="card-body gap-2 pb-0">
+        <p class="mt-2">{t('activity.organization_intro')}</p>
+      </div>
+      <div class="card-body">
+        <ActivityList locale={data.locale} rows={data.rows} showEvent />
+      </div>
+    </div>
+  {/snippet}
+</ListPage>

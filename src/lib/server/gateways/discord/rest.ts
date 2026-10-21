@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { z } from 'zod';
 import type { DiscordGateway } from '$lib/server/domain/discord/gateway';
 
@@ -51,6 +52,7 @@ export class DiscordRateLimitError extends DiscordGatewayError {
 }
 
 interface DiscordRestOptions {
+  tuning?: Tuning;
   fetch?: typeof fetch;
   baseUrl?: string;
 }
@@ -60,6 +62,7 @@ export class DiscordRestGateway implements DiscordGateway {
   readonly enabled = true;
   private readonly fetchImplementation: typeof fetch;
   private readonly baseUrl: string;
+  private readonly tuning: Tuning;
 
   constructor(
     private readonly botToken: string,
@@ -67,6 +70,7 @@ export class DiscordRestGateway implements DiscordGateway {
   ) {
     if (!botToken.trim()) throw new Error('Discord bot token is required');
     this.fetchImplementation = options.fetch ?? fetch;
+    this.tuning = options.tuning ?? defaultTuning;
     this.baseUrl = (options.baseUrl ?? discordApiBaseUrl).replace(/\/$/, '');
   }
 
@@ -164,7 +168,7 @@ export class DiscordRestGateway implements DiscordGateway {
           Authorization: `Bot ${this.botToken}`,
           'X-Audit-Log-Reason': 'offkai-manager role sync'
         },
-        signal: AbortSignal.timeout(10_000)
+        signal: AbortSignal.timeout(this.tuning.OFFKAI_DISCORD_REQUEST_TIMEOUT_MS)
       });
     } catch (cause) {
       throw new DiscordGatewayError('request_failed', `${operation} request failed`, undefined, {
@@ -172,7 +176,10 @@ export class DiscordRestGateway implements DiscordGateway {
       });
     }
     if (response.status === 429) {
-      throw new DiscordRateLimitError(await retryAfterMs(response), operation);
+      throw new DiscordRateLimitError(
+        await retryAfterMs(response, this.tuning.OFFKAI_DISCORD_RETRY_AFTER_MS),
+        operation
+      );
     }
     return response;
   }
@@ -252,7 +259,7 @@ function statusError(operation: string, status: number): DiscordGatewayError {
   );
 }
 
-async function retryAfterMs(response: Response): Promise<number> {
+async function retryAfterMs(response: Response, fallbackMs: number): Promise<number> {
   const headerSeconds = Number(response.headers.get('Retry-After'));
   if (Number.isFinite(headerSeconds) && headerSeconds >= 0) return headerSeconds * 1_000;
   try {
@@ -261,5 +268,5 @@ async function retryAfterMs(response: Response): Promise<number> {
   } catch {
     // Discord sometimes omits the JSON body; use a conservative retry delay.
   }
-  return 1_000;
+  return fallbackMs;
 }

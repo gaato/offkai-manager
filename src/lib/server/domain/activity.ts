@@ -1,3 +1,4 @@
+import { defaultTuning, type Tuning } from '$lib/server/config';
 import { read } from '$lib/server/db/client';
 import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { DatabaseClient, DatabaseTransaction } from '$lib/server/db/client';
@@ -8,8 +9,6 @@ import {
   organizationMemberships
 } from '$lib/server/db/schema';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
-
-const activityLimit = 100;
 
 export interface ActivityRow {
   id: string;
@@ -23,7 +22,8 @@ export interface ActivityRow {
 export async function listEventActivity(
   client: DatabaseClient,
   actorUserId: string,
-  eventId: string
+  eventId: string,
+  tuning: Tuning = defaultTuning
 ): Promise<ActivityRow[]> {
   return read(client, (tx) => {
     const eventRows = tx
@@ -39,7 +39,7 @@ export async function listEventActivity(
       .from(auditLogs)
       .where(eq(auditLogs.eventId, eventId))
       .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-      .limit(activityLimit)
+      .limit(tuning.OFFKAI_ACTIVITY_LIMIT)
       .all();
     return addActorNames(
       tx,
@@ -51,7 +51,8 @@ export async function listEventActivity(
 export async function listOrganizationActivity(
   client: DatabaseClient,
   actorUserId: string,
-  organizationId: string
+  organizationId: string,
+  tuning: Tuning = defaultTuning
 ): Promise<ActivityRow[]> {
   return read(client, (tx) => {
     authorizeOrganizationRole(tx, organizationId, actorUserId, 'staff', true);
@@ -77,7 +78,7 @@ export async function listOrganizationActivity(
         )
       )
       .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-      .limit(activityLimit)
+      .limit(tuning.OFFKAI_ACTIVITY_LIMIT)
       .all();
     return addActorNames(
       tx,

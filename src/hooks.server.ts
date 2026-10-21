@@ -11,10 +11,8 @@ import { createDiscordGateway } from '$lib/server/gateways/discord/rest';
 import { RoleSyncWorker } from '$lib/server/worker/role-sync';
 import { normalizeLocale, resolveLocale, translator } from '$lib/i18n';
 
-applyAdapterAddress(process.env);
+applyAdapterAddress();
 
-const WINDOW_MS = 60_000;
-const REQUESTS_PER_WINDOW = 60;
 const buckets = new Map<string, { count: number; startedAt: number }>();
 let roleSyncWorker: RoleSyncWorker | undefined;
 let workerShutdownInstalled = false;
@@ -40,8 +38,9 @@ export async function init(): Promise<void> {
     } else if (!roleSyncWorker) {
       roleSyncWorker = new RoleSyncWorker(
         getDatabaseClient(config),
-        createDiscordGateway(config.discord.botToken),
-        logger
+        createDiscordGateway(config.discord.botToken, { tuning: config.tuning }),
+        logger,
+        config.tuning
       );
       roleSyncWorker.start();
       logger.info('Discord role sync worker started');
@@ -139,7 +138,13 @@ function rateLimitKey(event: Parameters<Handle>[0]['event']): string {
 function limitedResponse(message: string, bucket: { startedAt: number }, now: number): Response {
   return new Response(message, {
     status: 429,
-    headers: { 'Retry-After': String(Math.ceil((WINDOW_MS - (now - bucket.startedAt)) / 1_000)) }
+    headers: {
+      'Retry-After': String(
+        Math.ceil(
+          (getConfig().tuning.OFFKAI_RATE_LIMIT_WINDOW_MS - (now - bucket.startedAt)) / 1_000
+        )
+      )
+    }
   });
 }
 
@@ -150,10 +155,11 @@ function takeRateLimit(
   now: number
 ): { allowed: true } | { allowed: false; bucket: { count: number; startedAt: number } } {
   const current = store.get(key);
-  if (!current || now - current.startedAt >= WINDOW_MS) {
-    if (store.size >= 10_000) {
+  if (!current || now - current.startedAt >= getConfig().tuning.OFFKAI_RATE_LIMIT_WINDOW_MS) {
+    if (store.size >= getConfig().tuning.OFFKAI_RATE_LIMIT_CLEANUP_THRESHOLD) {
       for (const [staleKey, bucket] of store) {
-        if (now - bucket.startedAt >= WINDOW_MS) store.delete(staleKey);
+        if (now - bucket.startedAt >= getConfig().tuning.OFFKAI_RATE_LIMIT_WINDOW_MS)
+          store.delete(staleKey);
       }
     }
     store.set(key, { count: 1, startedAt: now });
@@ -171,7 +177,12 @@ const rateLimit: Handle = async ({ event, resolve }) => {
   if (!limited) return resolve(event);
 
   const now = Date.now();
-  const generalLimit = takeRateLimit(buckets, rateLimitKey(event), REQUESTS_PER_WINDOW, now);
+  const generalLimit = takeRateLimit(
+    buckets,
+    rateLimitKey(event),
+    getConfig().tuning.OFFKAI_RATE_LIMIT_REQUESTS,
+    now
+  );
   if (!generalLimit.allowed) {
     return limitedResponse('too many requests', generalLimit.bucket, now);
   }
@@ -188,7 +199,7 @@ const locale: Handle = async ({ event, resolve }) => {
   if (queryLocale) {
     event.cookies.set('offkai_lang', selected, {
       path: '/',
-      maxAge: 365 * 24 * 60 * 60,
+      maxAge: getConfig().tuning.OFFKAI_LOCALE_COOKIE_TTL_SECONDS,
       httpOnly: false,
       sameSite: 'lax',
       secure:

@@ -12,7 +12,12 @@ export const load: PageServerLoad = async (event) => {
   const session = requireSession(event);
   try {
     const config = getConfig();
-    const rows = await listEventActivity(getDatabaseClient(config), session.userId, data.event.id);
+    const rows = await listEventActivity(
+      getDatabaseClient(config),
+      session.userId,
+      data.event.id,
+      config.tuning
+    );
     return {
       rows: rows.map((row) => ({
         ...row,

@@ -585,7 +585,7 @@ export const en = {
   'participants.filter.all': 'All',
   'participants.result_count': '{count} registrations shown',
   'participants.result_cap':
-    'Only the first 500 matching registrations are shown. Narrow your search to see others.',
+    'Only the first {limit} matching registrations are shown. Narrow your search to see others.',
   'participants.empty': 'No registrations match these filters.',
   'participants.caption': 'Event registrations',
   'participants.display_name': 'Display name',
@@ -701,6 +701,10 @@ export const en = {
   'error.internal.title': 'Something went wrong',
   'error.internal.body': 'An unexpected error occurred. Please try again in a moment.',
   'error.request_id': 'If you contact support, include this reference: {id}',
+  'activity.column.action': 'Action',
+  'activity.column.actor': 'Actor',
+  'activity.column.date': 'Date',
+  'activity.column.details': 'Details',
   'error.back_home': 'Back to top'
 } as const;
 

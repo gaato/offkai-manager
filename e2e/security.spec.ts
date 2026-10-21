@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signSession } from '../src/lib/server/auth/session';
 import { suspendedUserFixture } from './fixtures';
+import { translator } from '../src/lib/i18n';
 
 const primaryOrigin = `http://127.0.0.1:${process.env.OFFKAI_E2E_PRIMARY_PORT ?? '18080'}`;
 const productionOrigin = `http://127.0.0.1:${process.env.OFFKAI_E2E_PRODUCTION_PORT ?? '18081'}`;
@@ -84,6 +85,7 @@ test('CSP form-action allows Stripe hosted redirect targets', async ({ request }
 test('preserves safe GET destinations and rejects open redirect return targets', async ({
   page
 }) => {
+  const t = translator('ja');
   await page.goto('/app/events/10000000-0000-4000-8000-000000000099?lang=ja');
   expect(new URL(page.url()).pathname).toBe('/auth/dev');
   expect(new URL(page.url()).searchParams.get('return_to')).toBe(
@@ -91,12 +93,13 @@ test('preserves safe GET destinations and rejects open redirect return targets',
   );
 
   await page.goto('/auth/dev?return_to=https://attacker.example/steal');
-  await page.locator('input[name="discordUserId"]').fill('110000000000009901');
-  await page.locator('input[name="username"]').fill('safe-return-user');
-  await page.locator('input[name="displayName"]').fill('Safe Return User');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await page.getByLabel(t('dev.discord_user_id'), { exact: true }).fill('110000000000009901');
+  await page.getByLabel(t('dev.username'), { exact: true }).fill('safe-return-user');
+  await page.getByLabel(t('dev.display_name'), { exact: true }).fill('Safe Return User');
   await Promise.all([
     page.waitForURL((url) => url.pathname === '/app'),
-    page.locator('button[type="submit"]').click()
+    page.getByRole('button', { name: t('dev.submit'), exact: true }).click()
   ]);
 });
 

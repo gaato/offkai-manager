@@ -169,7 +169,7 @@ export const actions: Actions = {
     try {
       await updateEventDiscordSettings(
         getDatabaseClient(config),
-        createDiscordGateway(config.discord.botToken),
+        createDiscordGateway(config.discord.botToken, { tuning: config.tuning }),
         {
           actorUserId: session.userId,
           eventId: eventId.data,

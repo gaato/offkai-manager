@@ -1,8 +1,7 @@
 <script lang="ts">
+  import ListPage from '$lib/components/page/list-page.svelte';
   import { resolve } from '$app/paths';
   import { translator } from '$lib/i18n';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 
   let { data } = $props();
   const t = $derived(translator(data.locale));
@@ -10,56 +9,63 @@
 
 <svelte:head><title>{t('ops.organizations.title')} · {t('brand.name')}</title></svelte:head>
 
-<div class="grid gap-6">
-  <header>
-    <h1 class="text-3xl font-bold tracking-tight">{t('ops.organizations.title')}</h1>
-    <p class="mt-2 text-slate-600">{t('ops.organizations.intro')}</p>
-  </header>
-  <Card class="border-slate-200 shadow-none">
-    <CardHeader><CardTitle>{t('ops.organizations.list_title')}</CardTitle></CardHeader>
-    <CardContent>
-      {#if data.organizations.length === 0}
-        <p class="text-slate-600">{t('ops.organizations.empty')}</p>
-      {:else}
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <caption class="sr-only">{t('ops.organizations.list_title')}</caption>
-            <thead class="border-b border-slate-200 text-slate-600">
-              <tr>
-                <th class="px-3 py-3" scope="col">{t('ops.organization.name')}</th>
-                <th class="px-3 py-3" scope="col">{t('ops.organization.events')}</th>
-                <th class="px-3 py-3" scope="col">{t('ops.status')}</th>
-                <th class="px-3 py-3" scope="col">{t('ops.created')}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              {#each data.organizations as organization (organization.id)}
-                <tr>
-                  <th class="px-3 py-4" scope="row">
-                    <a
-                      class="font-semibold underline-offset-4 hover:underline"
-                      href={resolve('/ops/organizations/[orgId]', { orgId: organization.id })}
-                      >{organization.name}</a
-                    >
-                    <p class="mt-1 font-normal text-slate-600">/{organization.slug}</p>
-                  </th>
-                  <td class="px-3 py-4 tabular-nums">{organization.eventCount}</td>
-                  <td class="px-3 py-4">
-                    <Badge
-                      class={organization.suspendedAt
-                        ? 'bg-amber-100 text-amber-950'
-                        : 'bg-emerald-100 text-emerald-950'}
-                    >
-                      {t(organization.suspendedAt ? 'ops.status.suspended' : 'ops.status.active')}
-                    </Badge>
-                  </td>
-                  <td class="px-3 py-4">{organization.createdAtLabel}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+<ListPage>
+  {#snippet title()}{t('ops.organizations.title')}{/snippet}
+  {#snippet body()}
+    <div class="grid gap-6">
+      <header>
+        <p class="mt-2">{t('ops.organizations.intro')}</p>
+      </header>
+      <div class="card card-border bg-base-100">
+        <div class="card-body gap-2 pb-0">
+          <h2 class="card-title">{t('ops.organizations.list_title')}</h2>
         </div>
-      {/if}
-    </CardContent>
-  </Card>
-</div>
+        <div class="card-body">
+          {#if data.organizations.length === 0}
+            <p>{t('ops.organizations.empty')}</p>
+          {:else}
+            <div class="overflow-x-auto">
+              <table class="table w-full">
+                <caption class="sr-only">{t('ops.organizations.list_title')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col" class="px-3 py-3">{t('ops.organization.name')}</th>
+                    <th scope="col" class="px-3 py-3">{t('ops.organization.events')}</th>
+                    <th scope="col" class="px-3 py-3">{t('ops.status')}</th>
+                    <th scope="col" class="px-3 py-3">{t('ops.created')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each data.organizations as organization (organization.id)}
+                    <tr>
+                      <th scope="row" class="px-3 py-4">
+                        <a
+                          href={resolve('/ops/organizations/[orgId]', { orgId: organization.id })}
+                          class="link">{organization.name}</a
+                        >
+                        <p class="mt-1">/{organization.slug}</p>
+                      </th>
+                      <td class="px-3 py-4">{organization.eventCount}</td>
+                      <td class="px-3 py-4">
+                        <span
+                          class={organization.suspendedAt
+                            ? 'badge badge-error'
+                            : 'badge badge-success'}
+                        >
+                          {t(
+                            organization.suspendedAt ? 'ops.status.suspended' : 'ops.status.active'
+                          )}
+                        </span>
+                      </td>
+                      <td class="px-3 py-4">{organization.createdAtLabel}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/snippet}
+</ListPage>
