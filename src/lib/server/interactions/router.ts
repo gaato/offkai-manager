@@ -16,7 +16,7 @@ import type { Tuning } from '$lib/server/config';
 import { autocompletePanelEvents } from '$lib/server/domain/discord/panels';
 import { postPanel } from './panel-command';
 import { participantAction } from './participants';
-import { deferEphemeral, ephemeralReply } from './respond';
+import { deferEphemeral, ephemeralReply, updateMessage } from './respond';
 
 type Context = ReturnType<typeof interactionContext>;
 export interface RouterDependencies {
@@ -106,12 +106,10 @@ export async function dispatchInteraction(
             new Set(options.data.map((o) => o.name)).size !== options.data.length
           )
             return unknown();
-          return receptionCommand(
-            context,
-            dependencies,
-            'checkin',
-            Object.fromEntries(options.data.map((o) => [o.name, o.value]))
-          );
+          return receptionCommand(context, dependencies, 'checkin', {
+            event: options.data.find((option) => option.name === 'event')?.value,
+            who: options.data.find((option) => option.name === 'who')?.value
+          });
         }
         default:
           return unknown();
@@ -127,10 +125,29 @@ export async function dispatchInteraction(
         case 'door_cash':
         case 'door_paypay':
         case 'remind_confirm':
-          if (interaction.type !== 3) return unknown();
-          return receptionCommand(context, dependencies, decoded.value.action, {
-            who: decoded.value.args[0]
-          });
+          if (interaction.type !== 3 || interaction.data.component_type !== 2) return unknown();
+          return updateMessage(
+            await receptionCommand(context, dependencies, decoded.value.action, {
+              who: decoded.value.args[0]
+            })
+          );
+        case 'reception_pick': {
+          if (interaction.type !== 3 || interaction.data.component_type !== 3) return unknown();
+          const selected = z.tuple([z.uuid()]).safeParse(interaction.data.values);
+          if (!selected.success) return updateMessage(unknown());
+          return updateMessage(
+            await receptionCommand(context, dependencies, decoded.value.args[0], {
+              event: selected.data[0]
+            })
+          );
+        }
+        case 'reception_page':
+          if (interaction.type !== 3 || interaction.data.component_type !== 2) return unknown();
+          return updateMessage(
+            await receptionCommand(context, dependencies, decoded.value.args[0], {
+              page: decoded.value.args[1]
+            })
+          );
       }
       if (
         dependencies.defer &&

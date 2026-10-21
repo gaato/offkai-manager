@@ -3,6 +3,8 @@ import { z } from 'zod';
 // Released om1 strings are a wire contract; retain this decoder when adding versions.
 export const actionSchemas = {
   web: z.tuple([]),
+  reception_pick: z.tuple([z.enum(['status', 'remind'])]),
+  reception_page: z.tuple([z.enum(['status', 'remind']), z.string().regex(/^(0|[1-9]\d{0,4})$/)]),
   door_check: z.tuple([z.uuid()]),
   door_undo: z.tuple([z.uuid()]),
   door_cash: z.tuple([z.uuid()]),
@@ -39,6 +41,14 @@ export function decodeCustomId(value: string): DecodeResult {
     }
     case 'soon': {
       const parsed = actionSchemas.soon.safeParse(args);
+      return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
+    }
+    case 'reception_pick': {
+      const parsed = actionSchemas.reception_pick.safeParse(args);
+      return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
+    }
+    case 'reception_page': {
+      const parsed = actionSchemas.reception_page.safeParse(args);
       return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
     }
     case 'door_check':

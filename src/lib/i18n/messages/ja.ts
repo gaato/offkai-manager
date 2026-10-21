@@ -5,8 +5,7 @@ export const ja = {
   'discord_setup.permission.createEvents': 'イベントの作成',
   'discord_setup.permission.manageEvents': 'イベントの管理',
 
-  'door.forbidden':
-    'この操作にはイベントのスタッフロールまたは主催者権限が必要です。複数のイベントがある場合はイベントを選んでください。',
+  'door.forbidden': 'この操作にはイベントのスタッフロールまたは主催者権限が必要です。',
   'door.check': '受付する',
   'door.undo': '受付を取り消す',
   'door.cash': '現金で受け取った {amount}',
@@ -15,6 +14,11 @@ export const ja = {
   'door.not_checked': '⬜ 未受付',
   'door.held': '仮押さえ中です。代金を受け取ると参加確定と受付が完了します。',
   'door.unavailable': '操作できませんでした。カードを再表示して参加・支払状況を確認してください。',
+  'door.pick_event': 'イベントを選んでください。',
+  'door.previous': '前へ',
+  'door.next': '次へ',
+  'door.event_page': '{page} / {pages} ページ',
+  'door.choose_event': 'event オプションでイベントを選んでください。',
   'door.choose': 'who オプションで参加者を選んでください。',
   'door.dashboard': 'イベント管理画面',
   'door.status':

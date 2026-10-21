@@ -4,9 +4,11 @@ import { disclosureSchema } from '$lib/shared/disclosure';
 import { translator } from '$lib/i18n';
 import {
   renderDoorCard,
+  renderReceptionEventPicker,
   renderReminderPreview,
   renderReceptionStatus
 } from '$lib/server/interactions/reception-renderers';
+import { decodeCustomId } from '$lib/server/interactions/custom-id';
 import { buildRosterCSV } from '$lib/server/exports/roster';
 
 const id = '12345678-1234-4234-8234-123456789012';
@@ -109,6 +111,15 @@ describe('reception Components V2 limits', () => {
         value: 'answer'.repeat(1000)
       }))
     } as unknown as DoorCard;
+    const headingCard = renderDoorCard(
+      { ...card, registration: { ...card.registration, number: 1 } },
+      locale
+    );
+    const container = headingCard.data.components?.[0];
+    expect(container?.type).toBe(17);
+    expect(container?.type === 17 ? container.components[0].type : undefined).toBe(10);
+    if (container?.type === 17 && container.components[0].type === 10)
+      expect(container.components[0].content).toMatch(/^# 001\n\n@everyone/);
     const variants = [
       renderDoorCard(card, locale),
       renderDoorCard({ ...card, checkin: { at: new Date(), by: 'Staff'.repeat(1000) } }, locale),
@@ -142,4 +153,45 @@ describe('reception Components V2 limits', () => {
       for (const [, label] of buttons) expect(label.length).toBeLessThanOrEqual(80);
     }
   });
+});
+
+describe('organizer event selector limits', () => {
+  it.each(['en', 'ja'] as const)(
+    'paginates every event with bounded labels and codec actions in %s',
+    (locale) => {
+      const events = Array.from({ length: 51 }, (_, i) => ({
+        id: `12345678-1234-4234-8234-${String(i).padStart(12, '0')}`,
+        title: `${i} @everyone ` + 'Event'.repeat(100)
+      }));
+      for (const page of [0, 1, 2, 99999]) {
+        const current = Math.min(page, 2);
+        const response = renderReceptionEventPicker(events, 'remind', locale, page);
+        expect(response.type).toBe(4);
+        expect(response.data.flags).toBe(64 | 32768);
+        expect(response.data.allowed_mentions).toEqual({ parse: [] });
+        expect(textLength(response.data.components)).toBeLessThanOrEqual(4000);
+        const rows = (response.data.components ?? []).filter((component) => component.type === 1);
+        const children = rows.flatMap((row) => [...row.components]);
+        const select = children.find((component) => component.type === 3)!;
+        expect(select.options.map((option) => option.value)).toEqual(
+          events.slice(current * 25, (current + 1) * 25).map((event) => event.id)
+        );
+        expect(select.min_values).toBe(1);
+        expect(select.max_values).toBe(1);
+        expect(select.options.every((option) => option.label.length <= 100)).toBe(true);
+        expect(decodeCustomId(select.custom_id)).toEqual({
+          ok: true,
+          value: { action: 'reception_pick', args: ['remind'] }
+        });
+        const buttons = children.filter((component) => component.type === 2);
+        expect(buttons).toHaveLength(current === 1 ? 2 : 1);
+        for (const button of buttons) {
+          expect('custom_id' in button && decodeCustomId(button.custom_id).ok).toBe(true);
+          expect('label' in button ? button.label?.length : undefined).toBeLessThanOrEqual(80);
+        }
+      }
+      const empty = renderReceptionEventPicker([], 'status', locale);
+      expect(empty.data.components).toHaveLength(1);
+    }
+  );
 });

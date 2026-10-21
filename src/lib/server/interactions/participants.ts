@@ -49,7 +49,7 @@ import type { RouterDependencies } from './router';
 
 type ParticipantAction = Exclude<
   CustomAction,
-  { action: 'web' | 'soon' | import('./reception').ReceptionAction }
+  { action: 'web' | 'soon' | import('./reception').ReceptionComponentAction }
 >;
 export async function participantAction(
   action: ParticipantAction,

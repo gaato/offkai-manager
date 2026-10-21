@@ -7,6 +7,18 @@ import {
 } from '$lib/server/interactions/custom-id';
 
 const arbitraries = {
+  reception_pick: fc
+    .constantFrom('status' as const, 'remind' as const)
+    .map((command): CustomAction => ({ action: 'reception_pick', args: [command] })),
+  reception_page: fc
+    .tuple(
+      fc.constantFrom('status' as const, 'remind' as const),
+      fc.integer({ min: 0, max: 99999 })
+    )
+    .map(([command, page]): CustomAction => ({
+      action: 'reception_page',
+      args: [command, String(page)]
+    })),
   door_check: fc.uuid().map((id): CustomAction => ({ action: 'door_check', args: [id] })),
   door_undo: fc.uuid().map((id): CustomAction => ({ action: 'door_undo', args: [id] })),
   door_cash: fc.uuid().map((id): CustomAction => ({ action: 'door_cash', args: [id] })),
@@ -53,6 +65,12 @@ describe('om1 wire contract', () => {
     '',
     'om2:web',
     'om1:missing',
+    'om1:reception_pick:checkin',
+    'om1:reception_pick:status:extra',
+    'om1:reception_page:status:-1',
+    'om1:reception_page:status:NaN',
+    'om1:reception_page:status:1.5',
+    'om1:reception_page:status:100000',
     'om1:web:extra',
     'om1:soon',
     'om1:soon:missing',

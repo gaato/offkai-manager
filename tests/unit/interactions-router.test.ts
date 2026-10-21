@@ -3,7 +3,7 @@ import type { Locale } from 'discord-api-types/v10';
 import { translate } from '$lib/i18n';
 import { interactionContext } from '$lib/server/interactions/context';
 import { dispatchInteraction } from '$lib/server/interactions/router';
-import { deferEphemeral, ephemeralReply } from '$lib/server/interactions/respond';
+import { deferEphemeral, ephemeralReply, updateMessage } from '$lib/server/interactions/respond';
 import { commandDefinitions } from '$lib/server/interactions/commands';
 import { makeComponent, makeModalSubmit, makeChatInput } from '../support/interactions';
 
@@ -77,8 +77,41 @@ describe('interaction router and responses', () => {
       ephemeralReply('link', { label: 'Open', url: 'https://example.test' }),
       deferEphemeral()
     ])
-      expect(response.data.allowed_mentions).toEqual({ parse: [] });
+      expect(response.data?.allowed_mentions).toEqual({ parse: [] });
     expect(deferEphemeral().data.flags).toBe(64);
+  });
+  it('edits a source message with V2 flags and cleared controls, preserving mention suppression', () => {
+    const response = updateMessage(ephemeralReply('Queued 1 reminders.'));
+    expect(response.type).toBe(7);
+    expect(response.data?.flags).toBe(32768);
+    expect(response.data?.allowed_mentions).toEqual({ parse: [] });
+    expect(response.data?.components).toEqual([{ type: 10, content: 'Queued 1 reminders.' }]);
+  });
+  it.each([
+    { values: [] },
+    { values: ['invalid'] },
+    { values: ['12345678-1234-4234-8234-123456789012', '12345678-1234-4234-8234-123456789013'] }
+  ])('rejects malformed event select values $values before database access', async ({ values }) => {
+    const interaction = makeComponent();
+    interaction.data = { component_type: 3, custom_id: 'om1:reception_pick:remind', values };
+    expect(await dispatchInteraction(interaction, dependencies)).toEqual(
+      updateMessage(ephemeralReply(translate('en', 'interaction.unknown')))
+    );
+    expect(dependencies.database).not.toHaveBeenCalled();
+  });
+  it('rejects a select disguised as a receipt button and a button disguised as an event select', async () => {
+    const receipt = makeComponent();
+    receipt.data = {
+      component_type: 3,
+      custom_id: 'om1:door_cash:12345678-1234-4234-8234-123456789012',
+      values: []
+    };
+    const picker = makeComponent('om1:reception_pick:status');
+    for (const interaction of [receipt, picker, makeModalSubmit('om1:reception_pick:status')])
+      expect(await dispatchInteraction(interaction, dependencies)).toEqual(
+        ephemeralReply(translate('en', 'interaction.unknown'))
+      );
+    expect(dependencies.database).not.toHaveBeenCalled();
   });
   it('validates the localized command JSON and permission/contexts', () => {
     const [offkai, checkin] = commandDefinitions();

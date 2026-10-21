@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, TextDisplayBuilder } from '@discordjs/builders';
 import type {
   APIInteractionResponseChannelMessageWithSource,
+  APIInteractionResponseUpdateMessage,
   APIInteractionResponseDeferredChannelMessageWithSource
 } from 'discord-api-types/v10';
 
@@ -34,4 +35,11 @@ export function deferEphemeral(): APIInteractionResponseDeferredChannelMessageWi
 } {
   // V2 is applied when editing the deferred response; Discord only permits EPHEMERAL here.
   return { type: 5, data: { flags: 64, allowed_mentions: { parse: [] } } };
+}
+
+/** Component callbacks replace the source message and preserve its ephemeral visibility. */
+export function updateMessage(
+  response: APIInteractionResponseChannelMessageWithSource
+): APIInteractionResponseUpdateMessage {
+  return { type: 7, data: { ...response.data, flags: 32768 } };
 }

@@ -3,8 +3,7 @@ export const en = {
   'discord_setup.permission.createEvents': 'Create Events',
   'discord_setup.permission.manageEvents': 'Manage Events',
 
-  'door.forbidden':
-    'This action requires the event staff role or an organizer. Choose an event if more than one is open.',
+  'door.forbidden': 'This action requires the event staff role or organizer permission.',
   'door.check': 'Check in',
   'door.undo': 'Undo check-in',
   'door.cash': 'Received {amount} in cash',
@@ -14,6 +13,11 @@ export const en = {
   'door.held': 'This seat is held. Receive payment to confirm and check in.',
   'door.unavailable':
     'Could not complete this action. Refresh the card and check attendance and payment.',
+  'door.pick_event': 'Choose an event.',
+  'door.previous': 'Previous',
+  'door.next': 'Next',
+  'door.event_page': 'Page {page} of {pages}',
+  'door.choose_event': 'Choose an event with the event option.',
   'door.choose': 'Choose a participant with the who option.',
   'door.dashboard': 'Event dashboard',
   'door.status':
