@@ -8,7 +8,8 @@ import {
   paymentRecords,
   checkinRecords,
   auditLogs,
-  outboxEvents
+  outboxEvents,
+  collections
 } from '$lib/server/db/schema';
 import { authorizeDoorStaff, type DoorActor } from '../checkin/access';
 import { appendAudit } from '../audit';
@@ -71,7 +72,15 @@ export function receptionStatus(client: DatabaseClient, eventId: string, actor: 
         .from(checkinRecords)
         .where(and(eq(checkinRecords.eventId, eventId), eq(checkinRecords.status, 'checked_in')))
         .all().length,
-      unreachable
+      unreachable,
+      pricePending:
+        event.paymentRequirement === 'pay_later' &&
+        event.paymentOpensAt !== null &&
+        !tx
+          .select({ id: collections.id })
+          .from(collections)
+          .where(and(eq(collections.eventId, eventId), sql`${collections.status} <> 'archived'`))
+          .get()
     };
   });
 }

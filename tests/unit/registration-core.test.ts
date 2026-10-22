@@ -115,6 +115,58 @@ describe('pure registration lifecycle', () => {
       decide({ kind: 'confirmed' }, { type: 'cancel' }, { ...context, accepting: false }).ok
     ).toBe(true);
   });
+  it('accepts the additional window and uses the effective payment requirement after opening', () => {
+    const betweenWindows = new Date('2027-01-01T06:00:00Z');
+    const additionalOpensAt = new Date('2027-01-01T12:00:00Z');
+    expect(
+      decide(
+        { kind: 'none' },
+        { type: 'join' },
+        { ...context, now: betweenWindows, closesAt: context.opensAt, additionalOpensAt }
+      )
+    ).toMatchObject({ ok: false, code: 'not_registrable' });
+    expect(
+      decide(
+        { kind: 'none' },
+        { type: 'join' },
+        {
+          ...context,
+          now: additionalOpensAt,
+          closesAt: context.opensAt,
+          additionalOpensAt,
+          paymentRequirement: 'pay_to_confirm'
+        }
+      )
+    ).toMatchObject({ ok: true, next: { kind: 'held' } });
+  });
+  it.each([
+    ['confirmed', 'unpaid', false, 'cancelled'],
+    ['confirmed', 'paid', false, '!illegal_transition'],
+    ['confirmed', 'waived', false, '!illegal_transition'],
+    ['waitlisted', 'unpaid', false, '!illegal_transition'],
+    ['confirmed', 'unpaid', true, '!checked_in']
+  ] as const)(
+    'paymentOverdue: %s + %s checkedIn=%s -> %s',
+    (kind, payment, checkedIn, expected) => {
+      const state = { kind } as RegistrationState;
+      const paymentState =
+        payment === 'paid'
+          ? ({ kind: 'paid', recordId: 'record' } as const)
+          : payment === 'waived'
+            ? ({ kind: 'waived' } as const)
+            : ({ kind: 'unpaid' } as const);
+      const result = decide(
+        state,
+        { type: 'paymentOverdue' },
+        {
+          ...context,
+          checkedIn,
+          payment: paymentState
+        }
+      );
+      expect(result.ok ? result.next.kind : `!${result.code}`).toBe(expected);
+    }
+  );
 
   it.each(['applied', 'waitlisted', 'confirmed'] as const)(
     'a checked-in %s attendance cannot be released, only confirmed',
@@ -208,6 +260,79 @@ describe('pure registration lifecycle', () => {
         }
       ),
       { numRuns: 300 }
+    );
+  });
+  it('model-checks time progression across payment opening and deadline', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 8 }),
+        fc.array(
+          fc.record({
+            actor: fc.integer({ min: 0, max: 7 }),
+            action: fc.constantFrom('join', 'open', 'pay', 'checkin', 'due')
+          }),
+          { minLength: 1, maxLength: 200 }
+        ),
+        (capacity, steps) => {
+          const states: RegistrationState[] = Array.from({ length: 8 }, () => ({ kind: 'none' }));
+          const paid = Array(8).fill(false) as boolean[];
+          const checkedIn = Array(8).fill(false) as boolean[];
+          let phase: 'before' | 'open' | 'due' = 'before';
+          for (const step of steps) {
+            if (step.action === 'open' && phase === 'before') phase = 'open';
+            else if (step.action === 'due') {
+              phase = 'due';
+              for (let actor = 0; actor < states.length; actor++) {
+                if (states[actor].kind !== 'confirmed' || paid[actor] || checkedIn[actor]) continue;
+                const result = decide(
+                  states[actor],
+                  { type: 'paymentOverdue' },
+                  {
+                    ...context,
+                    checkedIn: false,
+                    payment: { kind: 'unpaid' }
+                  }
+                );
+                if (!result.ok) throw new Error(result.code);
+                states[actor] = result.next;
+              }
+            } else if (step.action === 'pay' && states[step.actor].kind !== 'none')
+              paid[step.actor] = true;
+            else if (step.action === 'checkin' && states[step.actor].kind === 'confirmed')
+              checkedIn[step.actor] = true;
+            else if (step.action === 'join' && states[step.actor].kind === 'none') {
+              const occupied = states.filter((state) =>
+                ['confirmed', 'held'].includes(state.kind)
+              ).length;
+              const result = decide(
+                states[step.actor],
+                { type: 'join' },
+                {
+                  ...context,
+                  capacity,
+                  confirmedCount: occupied,
+                  paymentRequirement: phase === 'before' ? 'pay_later' : 'pay_to_confirm'
+                }
+              );
+              if (result.ok) states[step.actor] = result.next;
+            }
+            const occupied = states.filter((state) =>
+              ['confirmed', 'held'].includes(state.kind)
+            ).length;
+            expect(occupied).toBeLessThanOrEqual(capacity);
+            expect(
+              states.every((state, actor) => !checkedIn[actor] || state.kind === 'confirmed')
+            ).toBe(true);
+            if (phase === 'due')
+              expect(
+                states.every(
+                  (state, actor) => state.kind !== 'confirmed' || paid[actor] || checkedIn[actor]
+                )
+              ).toBe(true);
+          }
+        }
+      ),
+      { numRuns: 200 }
     );
   });
 });

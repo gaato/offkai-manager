@@ -2,7 +2,7 @@
 
 Status: accepted.
 
-An event selects `none`, `pay_to_confirm`, or `pay_later`. The event's primary
+An event selects `none`, `pay_to_confirm`, or `pay_later`. For unscheduled paid events the primary
 `collections` row holds its participant price and currency. Its card, cash, PayPay,
 and waiver methods remain `collection_payment_methods`. Admission creates a
 `payment_requests` snapshot for each held or confirmed participant; payment and
@@ -94,7 +94,13 @@ The following small ambiguities are resolved explicitly:
 
 `tickOnce(client, now)` releases expired holds and queues panel refresh, role sync,
 notifications and waitlist admission atomically. A recursive `setTimeout` worker
-calls it using injected time. One-off hold-expiry notices are included; periodic reminders are not scheduled; reception is described in ADR 0005.
+calls it using injected time. One-off hold-expiry notices are included. ADR 0006 adds one
+automatic reminder for explicitly scheduled deadlines; organizer-created reminder campaigns
+remain deliberate and non-periodic. Reception is described in ADR 0005.
+
+ADR 0006 also amends the primary-collection rule for scheduled `pay_later` events: no active
+collection means the price is still pending, a draft collection means the price is set but payment
+has not opened, and an open collection means obligations exist.
 
 Notification jobs use DM first. Only HTTP 403 with Discord 50007/50278 permits a
 private-thread fallback. The worker stores the thread, adds the participant,

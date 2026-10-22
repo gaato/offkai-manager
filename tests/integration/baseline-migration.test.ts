@@ -43,7 +43,7 @@ it('initializes the baseline and safely reruns it without changing history or pe
     runMigrations(client);
     expect(
       client.db.$client.prepare('select count(*) as count from __drizzle_migrations').get()
-    ).toEqual({ count: 1 });
+    ).toEqual({ count: 2 });
     expect(
       client.db
         .select()
@@ -92,11 +92,17 @@ it('initializes the baseline and safely reruns it without changing history or pe
         .all()
         .find((row) => row.id === 'event-a')?.paymentRequirement
     ).toBe('pay_later');
+    expect(client.db.select().from(events).get()).toMatchObject({
+      paymentOpensAt: null,
+      paymentDueAt: null,
+      additionalOpensAt: null
+    });
     expect(client.db.select().from(paymentRequests).get()).toMatchObject({
       id: 'request',
       status: 'paid',
       amountMinor: 1000n,
-      applicationFeeAmount: 0n
+      applicationFeeAmount: 0n,
+      remindedAt: null
     });
     expect(client.db.select().from(paymentRecords).get()).toMatchObject({
       id: 'record',

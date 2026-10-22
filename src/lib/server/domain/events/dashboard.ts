@@ -1,10 +1,11 @@
 import { organizationDisclosure } from '../orgs/disclosure';
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, ne } from 'drizzle-orm';
 import { read, type DatabaseClient } from '$lib/server/db/client';
 import {
   discordPanels,
   eventDiscordIntegrations,
   events,
+  collections,
   registrations,
   stripeConnectAccounts
 } from '$lib/server/db/schema';
@@ -17,8 +18,18 @@ export function preparationChecklist(input: {
   panelPosted: boolean;
   payoutsReady?: boolean;
   disclosureReady?: boolean;
+  priceReady?: boolean;
 }) {
   return [
+    ...(input.priceReady === undefined
+      ? []
+      : [
+          {
+            key: 'event.setup_payment_price' as const,
+            done: input.priceReady,
+            anchor: 'payment-schedule'
+          }
+        ]),
     ...(input.disclosureReady === undefined
       ? []
       : [
@@ -75,6 +86,16 @@ export function getEventDashboard(client: DatabaseClient, actorUserId: string, e
         cancelled: value('cancelled')
       },
       steps: preparationChecklist({
+        priceReady:
+          event.paymentRequirement === 'pay_later' && event.paymentOpensAt
+            ? Boolean(
+                tx
+                  .select({ id: collections.id })
+                  .from(collections)
+                  .where(and(eq(collections.eventId, eventId), ne(collections.status, 'archived')))
+                  .get()
+              )
+            : undefined,
         disclosureReady:
           event.paymentRequirement === 'none'
             ? undefined
@@ -89,7 +110,20 @@ export function getEventDashboard(client: DatabaseClient, actorUserId: string, e
         guildId: integration?.guildId ?? '',
         reviewed: event.panelTemplateReviewedAt !== null,
         panelPosted: panels.length > 0
-      })
+      }),
+      paymentSchedule: {
+        opensAt: event.paymentOpensAt,
+        dueAt: event.paymentDueAt,
+        additionalOpensAt: event.additionalOpensAt,
+        pendingPrice:
+          event.paymentRequirement === 'pay_later' &&
+          event.paymentOpensAt !== null &&
+          !tx
+            .select({ id: collections.id })
+            .from(collections)
+            .where(and(eq(collections.eventId, eventId), ne(collections.status, 'archived')))
+            .get()
+      }
     };
   });
 }

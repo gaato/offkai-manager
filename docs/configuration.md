@@ -80,6 +80,12 @@ default, and any other value is false. Durations accept nonnegative decimal part
 | `OFFKAI_HOLD_TICK_INTERVAL_MS` | `15000` | 100–3600000 (integer) | Hold-expiry polling interval bound in the shared worker loop. |
 | `OFFKAI_HOLD_EXPIRING_SOON_MINUTES` | `5` | 1–1440 (integer) | Threshold for a one-off hold-expiry warning. |
 
+## Payment schedule
+
+| Setting | Default | Allowed values / range | Meaning |
+| --- | --- | --- | --- |
+| `OFFKAI_PAYMENT_REMINDER_LEAD_HOURS` | `72` | 1–8760 (integer) | Hours before a scheduled payment deadline to send the one-off automatic reminder. |
+
 ## Notifications
 
 | Setting | Default | Allowed values / range | Meaning |

@@ -13,14 +13,32 @@ import {
 } from '$lib/server/domain/events';
 import { getEventDashboard } from '$lib/server/domain/events/dashboard';
 import { OrganizationError } from '$lib/server/domain/orgs';
+import { formatWallClock } from '$lib/server/time';
 
 export const load: PageServerLoad = async (event) => {
+  const data = await event.parent();
   const session = requireSession(event);
   const eventId = z.uuid().safeParse(event.params.eventId);
   if (!eventId.success) throw error(404);
   const config = getConfig();
+  const dashboard = getEventDashboard(getDatabaseClient(config), session.userId, eventId.data);
   return {
-    dashboard: getEventDashboard(getDatabaseClient(config), session.userId, eventId.data),
+    dashboard,
+    formattedPaymentSchedule: {
+      opensAt: dashboard.paymentSchedule.opensAt
+        ? formatWallClock(dashboard.paymentSchedule.opensAt, data.locale, config.time.zone)
+        : '',
+      dueAt: dashboard.paymentSchedule.dueAt
+        ? formatWallClock(dashboard.paymentSchedule.dueAt, data.locale, config.time.zone)
+        : '',
+      additionalOpensAt: dashboard.paymentSchedule.additionalOpensAt
+        ? formatWallClock(
+            dashboard.paymentSchedule.additionalOpensAt,
+            data.locale,
+            config.time.zone
+          )
+        : ''
+    },
     discordSettings: await getEventDiscordSettings(
       getDatabaseClient(config),
       session.userId,

@@ -49,6 +49,7 @@ export async function createEvent(
 ): Promise<EventSummary> {
   const title = validateTitle(input.title);
   const startsAt = parseInputTime(input.startsAt, input.timeZone, 'start time');
+  const paymentSchedule = parsePaymentSchedule(input, startsAt, clock.now());
   const capacity = validateCapacity(input.capacity ?? null);
   const registrationMode = parseRegistrationMode(input.registrationMode ?? 'auto_confirm');
   for (let attempt = 0; attempt < slugAttempts; attempt += 1) {
@@ -104,6 +105,7 @@ export async function createEvent(
             discordPolicy: source?.discordPolicy ?? 'not_used',
             registrationOpensAt: clock.now(),
             registrationClosesAt: startsAt,
+            ...paymentSchedule,
             venueReveal: source?.venueReveal ?? 'public',
             registrationMode: input.registrationMode ?? source?.registrationMode ?? registrationMode
           })
@@ -267,6 +269,13 @@ export async function updateSettings(
     if (current.archivedAt) {
       throw new EventError('illegal_transition', 'archived events cannot be changed');
     }
+    if (
+      values.paymentDueAt &&
+      values.paymentDueAt < clock.now() &&
+      values.paymentDueAt.getTime() !== current.paymentDueAt?.getTime()
+    ) {
+      throw new EventError('validation', 'payment due time cannot be in the past');
+    }
     if (values.capacity !== null) {
       const occupied = tx
         .select({ n: count() })
@@ -281,7 +290,6 @@ export async function updateSettings(
       if (occupied > values.capacity)
         throw new EventError('validation', 'capacity cannot be smaller than reserved seats');
     }
-    const full = tx.select().from(events).where(eq(events.id, current.id)).get()!;
     if (
       current.visibility !== 'draft' &&
       current.paymentRequirement === 'none' &&
@@ -290,14 +298,14 @@ export async function updateSettings(
       !organizationDisclosure(tx, current.organizationId)
     )
       throw new EventError('disclosure_required', 'organizer disclosure required');
-    configureEventPayment(tx, full, input, clock, tuning, roundingUnits);
     const updatedRows = tx
       .update(events)
       .set({ ...values, updatedAt: clock.now() })
       .where(eq(events.id, current.id))
       .returning()
       .all();
-    const updated = parseEvent(updatedRows[0]);
+    configureEventPayment(tx, updatedRows[0], input, clock, tuning, roundingUnits);
+    const updated = loadEvent(tx, current.id);
     appendAudit(
       tx,
       {
@@ -483,6 +491,7 @@ function validateSettings(input: UpdateEventSettingsInput) {
   if (registrationClosesAt < registrationOpensAt) {
     throw new EventError('validation', 'registration closing time must follow opening time');
   }
+  const paymentSchedule = parsePaymentSchedule(input, startsAt);
   return {
     title: validateTitle(input.title),
     description: input.description.trim(),
@@ -496,11 +505,60 @@ function validateSettings(input: UpdateEventSettingsInput) {
     cancellationPolicy: input.cancellationPolicy.trim(),
     registrationOpensAt,
     registrationClosesAt,
+    ...paymentSchedule,
     registrationMode: parseRegistrationMode(input.registrationMode),
     ...(input.discordPolicy === undefined
       ? {}
       : { discordPolicy: parseDiscordPolicy(input.discordPolicy) })
   };
+}
+
+function parsePaymentSchedule(
+  input: Pick<
+    CreateEventInput | UpdateEventSettingsInput,
+    | 'paymentOpensAt'
+    | 'paymentDueAt'
+    | 'additionalOpensAt'
+    | 'timeZone'
+    | 'paymentRequirement'
+    | 'pricePending'
+  >,
+  startsAt: Date,
+  now?: Date
+) {
+  const paymentOpensAt = input.paymentOpensAt
+    ? parseInputTime(input.paymentOpensAt, input.timeZone, 'payment opening time')
+    : null;
+  const paymentDueAt = input.paymentDueAt
+    ? parseInputTime(input.paymentDueAt, input.timeZone, 'payment due time')
+    : null;
+  const additionalOpensAt = input.additionalOpensAt
+    ? parseInputTime(
+        input.additionalOpensAt,
+        input.timeZone,
+        'additional registration opening time'
+      )
+    : null;
+  if (
+    (paymentOpensAt || paymentDueAt || additionalOpensAt) &&
+    input.paymentRequirement !== 'pay_later'
+  )
+    throw new EventError('validation', 'payment schedules require pay later');
+  if (input.pricePending && (input.paymentRequirement !== 'pay_later' || !paymentOpensAt))
+    throw new EventError('validation', 'pending price requires scheduled pay later');
+  if (paymentOpensAt && !paymentDueAt)
+    throw new EventError('validation', 'payment due time is required');
+  if (!paymentOpensAt && paymentDueAt)
+    throw new EventError('validation', 'payment opening time is required');
+  if (paymentOpensAt && paymentDueAt) {
+    if (paymentOpensAt >= paymentDueAt || paymentDueAt >= startsAt)
+      throw new EventError('validation', 'payment schedule must be before the event');
+    if (now && paymentDueAt < now)
+      throw new EventError('validation', 'payment due time cannot be in the past');
+  }
+  if (additionalOpensAt && (!paymentOpensAt || additionalOpensAt < paymentOpensAt))
+    throw new EventError('validation', 'additional registration must follow payment opening');
+  return { paymentOpensAt, paymentDueAt, additionalOpensAt };
 }
 
 function validateTitle(raw: string): string {
@@ -573,6 +631,9 @@ function settingsAuditSnapshot(event: EventSummary) {
     cancellationPolicy: event.cancellationPolicy,
     registrationOpensAt: event.registrationOpensAt.toISOString(),
     registrationClosesAt: event.registrationClosesAt.toISOString(),
+    paymentOpensAt: event.paymentOpensAt?.toISOString() ?? null,
+    paymentDueAt: event.paymentDueAt?.toISOString() ?? null,
+    additionalOpensAt: event.additionalOpensAt?.toISOString() ?? null,
     registrationMode: event.registrationMode,
     discordPolicy: event.discordPolicy
   };

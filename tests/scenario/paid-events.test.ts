@@ -14,7 +14,9 @@ import {
   eventDiscordIntegrations,
   discordPanels,
   outboxEvents,
-  collectionPaymentMethods
+  collectionPaymentMethods,
+  events,
+  collections
 } from '$lib/server/db/schema';
 import { StripeWebhookVerifier } from '$lib/server/gateways/stripe/webhook';
 import { StripeV2WebhookVerifier } from '$lib/server/gateways/stripe/v2-webhook';
@@ -32,6 +34,9 @@ import { recordingRest, responseLike } from '../support/discord-rest';
 import { signingKey } from '../support/scenario-setup';
 import { fixedClock } from '../database';
 import type { ConnectGateway } from '$lib/server/domain/payments/gateway';
+import type { CreateCheckoutSessionInput } from '$lib/server/domain/payments/gateway';
+import { write } from '$lib/server/db/client';
+import { configureEventPayment } from '$lib/server/domain/payments/event-payment';
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
 let client: DatabaseClient;
 let gateway: GatedCheckout;
@@ -55,6 +60,31 @@ const connect: ConnectGateway = {
     };
   }
 };
+class AdditionalCheckout extends GatedCheckout {
+  override async createCheckoutSession(input: CreateCheckoutSessionInput) {
+    this.calls++;
+    this.input = input;
+    return {
+      sessionId: 'cs_schedule_additional',
+      url: 'https://checkout.stripe.test/cs_schedule_additional',
+      paymentIntentId: 'pi_schedule_additional'
+    };
+  }
+  override settlement(id = 'evt_schedule_additional') {
+    return {
+      stripeEventId: id,
+      eventType: 'checkout.session.completed' as const,
+      sessionId: 'cs_schedule_additional',
+      referenceId: this.input.referenceId,
+      paymentIntentId: 'pi_schedule_additional',
+      paymentStatus: 'paid' as const,
+      amountTotal: this.input.amountMinor,
+      currency: this.input.currency,
+      stripeAccountId: this.input.readyAccount.stripeAccountId,
+      raw: { id }
+    };
+  }
+}
 beforeEach(() => {
   vi.stubEnv('OFFKAI_DISCORD_BOT_TOKEN', 'fake-test-token');
   resetConfigForTests();
@@ -76,6 +106,11 @@ afterEach(async () => {
 function participant(eventId: string) {
   const interaction = makeComponent(`om1:join:${eventId}`);
   interaction.member!.user = { ...interaction.member!.user, id: '200000000000000002' };
+  return interaction;
+}
+function participantAction(eventId: string, id: string, action: 'join' | 'status' = 'join') {
+  const interaction = makeComponent(`om1:${action}:${eventId}`);
+  interaction.member!.user = { ...interaction.member!.user, id };
   return interaction;
 }
 async function webhook(
@@ -296,4 +331,185 @@ it('pay-later Discord join confirms unpaid, then an organizer web action records
   } as Parameters<typeof paymentActions.confirmManual>[0]);
   expect(result).toHaveProperty('actionMessage');
   expect(client.db.select().from(paymentRequests).get()?.status).toBe('paid');
+});
+
+it('runs pending fee through opening, deadline cancellation, and paid additional recruitment', async () => {
+  const fixture = await paidEvent(client, 'pay_later', 20);
+  const opensAt = new Date(fixedClock.now().getTime() + 60 * 60_000);
+  const dueAt = new Date(opensAt.getTime() + 80 * 60 * 60_000);
+  write(client, (tx) => {
+    const event = tx
+      .update(events)
+      .set({
+        paymentOpensAt: opensAt,
+        paymentDueAt: dueAt,
+        additionalOpensAt: dueAt
+      })
+      .where(eq(events.id, fixture.event.id))
+      .returning()
+      .get()!;
+    configureEventPayment(
+      tx,
+      event,
+      { paymentRequirement: 'pay_later', amountToCollect: '5000', pricePending: true },
+      fixedClock,
+      defaultTuning
+    );
+  });
+  const transport = recordingRest();
+  vi.spyOn(restModule, 'getInteractionRest').mockReturnValue(transport.rest);
+  for (const id of ['200000000000000002', '200000000000000003'])
+    await callInteraction(participantAction(fixture.event.id, id), signingKey.privateKey);
+  await vi.waitFor(() => expect(client.db.select().from(registrations).all()).toHaveLength(2));
+  expect(gateway.calls).toBe(0);
+  expect(client.db.select().from(paymentRequests).all()).toEqual([]);
+  expect(
+    transport.calls.some((call) => JSON.stringify(call.body).includes('To be announced'))
+  ).toBe(true);
+
+  write(client, (tx) => {
+    const event = tx.select().from(events).where(eq(events.id, fixture.event.id)).get()!;
+    configureEventPayment(
+      tx,
+      event,
+      { paymentRequirement: 'pay_later', amountToCollect: '5000', roundingUnit: 100 },
+      fixedClock,
+      defaultTuning
+    );
+  });
+  fixedClock.advance(opensAt.getTime() - fixedClock.now().getTime());
+  vi.setSystemTime(fixedClock.now());
+  tickOnce(client, fixedClock.now());
+  expect(
+    client.db.select().from(collections).where(eq(collections.status, 'open')).get()
+  ).toBeTruthy();
+  await processRoleSyncBatch(
+    client,
+    createDiscordGateway('fake-test-token', { rest: transport.rest }),
+    undefined,
+    fixedClock,
+    {
+      ...defaultTuning,
+      OFFKAI_NOTIFICATION_DM_INTERVAL_MS: 0,
+      OFFKAI_OUTBOX_BATCH_SIZE: 100
+    },
+    transport.rest
+  );
+  expect(
+    client.db
+      .select()
+      .from(notificationDeliveries)
+      .all()
+      .some((row) => row.kind === 'payment_open')
+  ).toBe(true);
+
+  await callInteraction(
+    participantAction(fixture.event.id, '200000000000000002', 'status'),
+    signingKey.privateKey
+  );
+  await vi.waitFor(() => expect(gateway.calls).toBe(1));
+  const firstSettlement = gateway.settlement('evt_schedule_first');
+  expect(
+    (
+      await webhook(
+        snapshotPost,
+        {
+          id: firstSettlement.stripeEventId,
+          object: 'event',
+          type: 'checkout.session.completed',
+          account: 'acct_paid',
+          data: {
+            object: {
+              id: firstSettlement.sessionId,
+              client_reference_id: firstSettlement.referenceId,
+              payment_status: 'paid',
+              amount_total: Number(firstSettlement.amountTotal),
+              currency: 'jpy',
+              payment_intent: firstSettlement.paymentIntentId
+            }
+          }
+        },
+        secret
+      )
+    ).status
+  ).toBe(200);
+
+  const reminderAt = new Date(
+    dueAt.getTime() - defaultTuning.OFFKAI_PAYMENT_REMINDER_LEAD_HOURS * 3_600_000
+  );
+  fixedClock.advance(reminderAt.getTime() - fixedClock.now().getTime());
+  vi.setSystemTime(fixedClock.now());
+  tickOnce(client, fixedClock.now());
+  await processRoleSyncBatch(
+    client,
+    createDiscordGateway('fake-test-token', { rest: transport.rest }),
+    undefined,
+    fixedClock,
+    {
+      ...defaultTuning,
+      OFFKAI_NOTIFICATION_DM_INTERVAL_MS: 0,
+      OFFKAI_OUTBOX_BATCH_SIZE: 100
+    },
+    transport.rest
+  );
+  expect(
+    client.db
+      .select()
+      .from(notificationDeliveries)
+      .all()
+      .some((row) => row.kind === 'payment_due_soon')
+  ).toBe(true);
+  fixedClock.advance(dueAt.getTime() - fixedClock.now().getTime());
+  vi.setSystemTime(fixedClock.now());
+  tickOnce(client, fixedClock.now());
+  expect(
+    client.db
+      .select()
+      .from(registrations)
+      .all()
+      .map((row) => row.status)
+      .sort()
+  ).toEqual(['cancelled', 'confirmed']);
+
+  gateway = new AdditionalCheckout();
+  gateway.resume();
+  vi.mocked(appModule.getApp).mockReturnValue({
+    stripe: { mode: 'real', connect, payment: gateway, webhook: new StripeWebhookVerifier(secret) }
+  });
+  await callInteraction(
+    participantAction(fixture.event.id, '200000000000000004'),
+    signingKey.privateKey
+  );
+  await vi.waitFor(() => expect(gateway.calls).toBe(1));
+  const afterAdditional = client.db.select().from(registrations).all();
+  expect(afterAdditional.map((row) => row.status)).toContain('held');
+  const additional = afterAdditional.find((row) => row.status === 'held')!;
+  const finalSettlement = gateway.settlement('evt_schedule_additional');
+  expect(
+    (
+      await webhook(
+        snapshotPost,
+        {
+          id: finalSettlement.stripeEventId,
+          object: 'event',
+          type: 'checkout.session.completed',
+          account: 'acct_paid',
+          data: {
+            object: {
+              id: finalSettlement.sessionId,
+              client_reference_id: finalSettlement.referenceId,
+              payment_status: 'paid',
+              amount_total: Number(finalSettlement.amountTotal),
+              currency: 'jpy',
+              payment_intent: finalSettlement.paymentIntentId
+            }
+          }
+        },
+        secret
+      )
+    ).status
+  ).toBe(200);
+  expect(
+    client.db.select().from(registrations).where(eq(registrations.id, additional.id)).get()?.status
+  ).toBe('confirmed');
 });

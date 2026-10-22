@@ -193,6 +193,24 @@ panel; disabling/cancelling requires confirmation. An already-started projection
 when cancellation cannot be represented in Discord. [ADR 0005](adr/0005-discord-reception.md)
 records reception and projection decisions.
 
+## Payment schedule
+
+For register-now/pay-later events, select `pay_later`, set payment opening and deadline times, and
+optionally select "decide the participation fee later". Participants admitted before opening are
+confirmed without a payment request or Checkout. Set the fee before opening; the event dashboard
+and `/offkai status` keep the missing-fee warning visible until a draft collection exists.
+
+Keep the single application worker enabled. At opening it opens the draft collection, creates one
+request for every confirmed participant, and sends the localized payment-opening notification.
+It sends the one-off deadline reminder at `OFFKAI_PAYMENT_REMINDER_LEAD_HOURS`, then cancels unpaid,
+unchecked attendance at the deadline. Checked-in, paid, waived, and manually settled participants
+remain confirmed. A Checkout payment arriving after cancellation is retained for refund review.
+
+To run additional recruitment, set its opening time at or after payment opening and announce that
+time. The gap after normal registration closes remains closed. From the additional opening until
+the event starts, new admissions use held seats and immediate Checkout. Deadline cancellations do
+not promote the old waitlist, so those seats remain available for the announced additional round.
+
 ## Backups and restore
 
 Keep backups outside the application volume. Optional Litestream continuously replicates SQLite

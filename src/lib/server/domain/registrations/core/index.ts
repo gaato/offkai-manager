@@ -24,6 +24,7 @@ export type RegistrationCommand =
   | { readonly type: 'manualPaid'; readonly recordId: string }
   | { readonly type: 'waive' }
   | { readonly type: 'holdExpired' }
+  | { readonly type: 'paymentOverdue' }
   | { readonly type: 'editAnswers' }
   | { readonly type: 'cancel' }
   | { readonly type: 'promote' }
@@ -35,6 +36,7 @@ export interface RegistrationContext {
   readonly opensAt: Date;
   readonly closesAt: Date;
   readonly startsAt: Date;
+  readonly additionalOpensAt?: Date | null;
   readonly accepting: boolean;
   readonly capacity: number | null;
   readonly confirmedCount: number;
@@ -91,6 +93,12 @@ export function decide(
     context.capacity !== null &&
     context.confirmedCount + (context.heldCount ?? 0) >= context.capacity;
   const payment = context.payment ?? { kind: 'unpaid' };
+  const inNormalWindow = context.now >= context.opensAt && context.now <= context.closesAt;
+  const inAdditionalWindow =
+    context.additionalOpensAt !== null &&
+    context.additionalOpensAt !== undefined &&
+    context.now >= context.additionalOpensAt &&
+    context.now < context.startsAt;
   const paid = (recordId: string): Decision => {
     if (
       !recordId ||
@@ -136,7 +144,7 @@ export function decide(
   switch (command.type) {
     case 'join':
       if (state.kind !== 'none') return { ok: false, code: 'duplicate' };
-      if (!context.accepting || context.now < context.opensAt || context.now > context.closesAt)
+      if (!context.accepting || (!inNormalWindow && !inAdditionalWindow))
         return { ok: false, code: 'not_registrable' };
       return context.registrationMode === 'approval'
         ? transition('applied', false)
@@ -163,6 +171,11 @@ export function decide(
       };
     case 'holdExpired':
       if (state.kind !== 'held' || state.holdExpiresAt > context.now)
+        return { ok: false, code: 'illegal_transition' };
+      return transition('cancelled');
+    case 'paymentOverdue':
+      if (context.checkedIn) return { ok: false, code: 'checked_in' };
+      if (state.kind !== 'confirmed' || payment.kind !== 'unpaid')
         return { ok: false, code: 'illegal_transition' };
       return transition('cancelled');
     case 'waive':

@@ -207,6 +207,10 @@
                 paymentRequirement: $errors.paymentRequirement,
                 amountToCollect: $errors.amountToCollect,
                 priceOverride: $errors.priceOverride,
+                pricePending: $errors.pricePending,
+                paymentOpensAt: $errors.paymentOpensAt,
+                paymentDueAt: $errors.paymentDueAt,
+                additionalOpensAt: $errors.additionalOpensAt,
                 roundingUnit: $errors.roundingUnit,
                 holdMinutes: $errors.holdMinutes
               }}

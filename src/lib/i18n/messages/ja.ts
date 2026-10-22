@@ -23,12 +23,17 @@ export const ja = {
   'door.dashboard': 'イベント管理画面',
   'door.status':
     '参加確定: {confirmed}/{capacity}\n仮押さえ: {held}\nキャンセル待ち: {waitlisted}\n未払い: {unpaid}\n支払済合計: {total}\n受付済: {checked}\n連絡不可: {unreachable}',
+  'door.price_pending': '参加費未定：支払い開始までに参加費を決めてください。',
   'door.remind_preview':
     '支払いのご案内を送信しますか？\n仮押さえ: {held}、参加確定: {confirmed}\n日本語: {ja}、英語: {en}\n確定時・配信時にも未払いの方だけに送信します。',
   'door.remind_confirm': '案内を送信する',
   'door.remind_sent': '{count} 件の案内を送信待ちにしました。',
   'notify.payment_reminder':
     '参加費のお支払いについてのご案内です。イベントのパネルからお支払い方法をご確認ください。お支払い直後の行き違いでしたらご容赦ください。',
+  'notify.payment_open': '参加費のお支払いを開始しました。期限までに参加状況からお支払いください。',
+  'notify.payment_due_soon': '参加費のお支払い期限が近づいています。参加状況からお支払いください。',
+  'notify.payment_overdue':
+    '期限までに参加費を確認できなかったため、参加登録をキャンセルしました。',
   'roster.title': 'オフライン受付名簿',
   'roster.csv': '受付名簿CSVを保存',
   'roster.number': '受付番号',
@@ -80,6 +85,8 @@ export const ja = {
   'activity.action.discord.scheduled_synced': 'Discordイベントを同期',
   'activity.action.registration.hold_expired': '期限切れの席を解放',
   'activity.action.registration.hold_expiring': '席の保留期限のお知らせを準備',
+  'activity.action.registration.payment_overdue': '支払期限超過の参加登録をキャンセル',
+  'activity.action.payment.schedule_open': '予定された支払い受付を開始',
   'activity.action.payment.checkout_expired': '決済画面の期限切れ',
   'activity.action.payment.stripe_checkout_stale': '期限切れの決済画面を照合用に保存',
   'activity.action.payment.checkout_already_settled': '完了済みの決済を照合',
@@ -92,6 +99,22 @@ export const ja = {
   'payment.requirement.pay_to_confirm': '支払いで参加確定',
   'payment.requirement.pay_later': '先に参加確定・後で支払い',
   'payment.requirement': '支払い条件',
+  'payment.price_pending_option': '参加費を後で決める',
+  'payment.price_tba': '後日告知',
+  'payment.opens_at': '支払い開始',
+  'payment.due_at': '支払い期限',
+  'payment.additional_opens_at': '追加募集の開始（任意）',
+  'payment.schedule_before_open': 'お支払いは {opens} から（期限 {due}）。',
+  'payment.schedule_deadline': 'お支払い期限：{due}',
+  'payment.schedule_title': '支払い予定',
+  'payment.schedule_summary': '支払い開始：{opens}、期限：{due}',
+  'payment.additional_summary': '追加募集開始：{opens}',
+  'payment.validation_due_required': '支払い開始と支払い期限を両方入力してください。',
+  'payment.validation_schedule_order':
+    '支払い開始、支払い期限、イベント開始の順に設定してください。',
+  'payment.validation_additional': '追加募集は支払い開始以降に設定してください。',
+  'payment.validation_pending': '参加費未定は、支払い日程を設定した後払いでのみ選べます。',
+  'payment.validation_past': '支払い期限を過去には設定できません。',
   'payment.amount_to_collect': '1人あたりの受取希望額（円）',
   'payment.rounding_unit': '{unit}円単位',
   'payment.rounding': '参加費の切り上げ単位（円）',
@@ -142,6 +165,7 @@ export const ja = {
   'payouts.refresh_failed':
     'Stripe の状態を更新できませんでした。支払い受付の前に再度お試しください。',
   'event.setup_payouts': '入金口座の準備',
+  'event.setup_payment_price': '支払い開始までに参加費を決めてください',
   'checkout.done': '支払いを受け付けました。Discord にお戻りください',
   'checkout.done_help': 'Stripe による入金確認後、Discord の参加状況が更新されます。',
   'checkout.cancelled': '支払いを中断しました。Discord にお戻りください',
@@ -161,14 +185,14 @@ export const ja = {
   'activity.action.discord.guild_name_refresh': 'Discordサーバー名を更新',
 
   'panel_template.default':
-    '### 重要なルール\n- 申込みによりサーバーとイベントのルールを受け入れます。参加対象は、開催当日に20歳以上の方です。\n- 参加確定後の返金はできません。不明点や特別な事情は主催者に相談してください。\n\n### 参加方法\n- 「参加する」から必要事項を送信してください。\n- 「参加状況」で参加確定やキャンセル待ちなどの状態を確認し、必要に応じて回答を編集してください。送信だけで参加確定になるとは限りません。\n\n### キャンセル\n- 「参加を取り消す」を選び、次の確認画面で確定してください。操作できない場合は主催者に連絡してください。\n\n### マナー・注意事項\n- 周囲の人を尊重し、スタッフの案内や会場の喫煙ルールを守ってください。\n- 食事の制約やアレルギーへの対応は、申込み前に主催者へ確認してください。\n- 撮影時は周囲の同意とプライバシーに配慮し、動画撮影・配信には事前にスタッフの許可を得てください。\n- 荷物はコンパクトにまとめ、持ち物とゴミは各自で管理してください。忘れ物はスタッフにお問い合わせください。\n- 言語の違いに配慮してください。個人間の取引は主催者の案内に従い、当事者同士で責任を持って行ってください。',
+    '### 重要なルール\n- 申込みによりサーバーとイベントのルールを受け入れます。参加対象は、開催当日に20歳以上の方です。\n- 参加確定後の返金はできません。不明点や特別な事情は主催者に相談してください。\n\n### 参加方法\n- 「参加する」から必要事項を送信してください。\n- 「参加状況」で参加確定やキャンセル待ちなどの状態を確認し、必要に応じて回答を編集してください。送信だけで参加確定になるとは限りません。\n- 支払い期間：{payment_opens} ～ {payment_due}\n- 追加募集の開始：{additional_opens}\n\n### キャンセル\n- 「参加を取り消す」を選び、次の確認画面で確定してください。操作できない場合は主催者に連絡してください。\n\n### マナー・注意事項\n- 周囲の人を尊重し、スタッフの案内や会場の喫煙ルールを守ってください。\n- 食事の制約やアレルギーへの対応は、申込み前に主催者へ確認してください。\n- 撮影時は周囲の同意とプライバシーに配慮し、動画撮影・配信には事前にスタッフの許可を得てください。\n- 荷物はコンパクトにまとめ、持ち物とゴミは各自で管理してください。忘れ物はスタッフにお問い合わせください。\n- 言語の違いに配慮してください。個人間の取引は主催者の案内に従い、当事者同士で責任を持って行ってください。',
   'panel_template.title': 'パネル本文テンプレート',
   'panel_template.ja': '日本語のパネル本文',
   'panel_template.en': '英語のパネル本文',
   'panel_template.help':
-    'Markdownで編集できます。使用可能な変数: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}。その行の変数がすべて空欄の場合、行全体を省略します。非公開の会場情報は表示されません。保存すると両言語を確認済みにします。',
+    'Markdownで編集できます。使用可能な変数: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}、{payment_opens}、{payment_due}、{additional_opens}。その行の変数がすべて空欄の場合、行全体を省略します。非公開の会場情報は表示されません。保存すると両言語を確認済みにします。',
   'panel_template.unknown':
-    '不明なテンプレート変数です。使用可能: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}。',
+    '不明なテンプレート変数です。使用可能: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}、{payment_opens}、{payment_due}、{additional_opens}。',
   'panel_template.save': 'テンプレートを保存して確認済みにする',
   'panel_template.saved': 'パネルテンプレートを保存しました。',
   'panel_template.truncated': '本文を省略しています。ルールの全文は主催者に確認してください。',

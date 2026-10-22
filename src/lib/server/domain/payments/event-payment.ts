@@ -1,4 +1,4 @@
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import type { DatabaseTransaction } from '$lib/server/db/client';
 import type { Clock } from '$lib/server/clock';
 import { defaultTuning, type Tuning } from '$lib/server/config';
@@ -12,15 +12,30 @@ import {
 import { grossUp, feeBreakdown, effectiveHoldMinutes } from '$lib/shared/fees';
 import { paymentRequirementSchema, type PaymentRequirement } from '$lib/shared/payment';
 import { EventError } from '../events/errors';
+import { backfillPaymentRequests } from './requests';
+
+export type EventPrice =
+  { readonly kind: 'pending' } | { readonly kind: 'set'; readonly amountMinor: bigint };
 
 export interface EventPaymentInput {
   paymentRequirement?: PaymentRequirement;
   amountToCollect?: string;
   roundingUnit?: number;
   priceOverride?: string;
+  pricePending?: boolean;
   manualCash?: boolean;
   manualPayPay?: boolean;
   holdMinutes?: number;
+}
+
+/** Pending is represented by the absence of a non-archived collection, never by a sentinel amount. */
+export function eventPrice(tx: DatabaseTransaction, eventId: string): EventPrice {
+  const collection = tx
+    .select({ amountMinor: collections.amountMinor })
+    .from(collections)
+    .where(and(eq(collections.eventId, eventId), ne(collections.status, 'archived')))
+    .get();
+  return collection ? { kind: 'set', amountMinor: collection.amountMinor } : { kind: 'pending' };
 }
 
 /** The event's single primary collection is the price; requests snapshot it on admission. */
@@ -35,7 +50,12 @@ export function configureEventPayment(
   const requirement = paymentRequirementSchema.parse(
     input.paymentRequirement ?? event.paymentRequirement
   );
-  if (input.paymentRequirement === undefined && input.amountToCollect === undefined) return;
+  if (
+    input.paymentRequirement === undefined &&
+    input.amountToCollect === undefined &&
+    input.pricePending === undefined
+  )
+    return;
   const collection = tx
     .select()
     .from(collections)
@@ -54,6 +74,7 @@ export function configureEventPayment(
       net !== event.amountToCollectMinor.toString() ||
       (input.roundingUnit ?? event.roundingUnit) !== event.roundingUnit ||
       (input.priceOverride && input.priceOverride !== collection.amountMinor.toString()) ||
+      input.pricePending === true ||
       (input.holdMinutes !== undefined && input.holdMinutes !== event.holdMinutes)
     )
       throw new EventError('payment_frozen', 'payment settings are frozen after registration');
@@ -72,6 +93,19 @@ export function configureEventPayment(
           )
           .run();
     }
+    tx.update(collections)
+      .set({ dueAt: event.paymentDueAt, updatedAt: clock.now() })
+      .where(eq(collections.id, collection.id))
+      .run();
+    tx.update(paymentRequests)
+      .set({ dueAt: event.paymentDueAt, updatedAt: clock.now() })
+      .where(
+        and(
+          eq(paymentRequests.collectionId, collection.id),
+          inArray(paymentRequests.status, ['pending', 'payment_pending'])
+        )
+      )
+      .run();
     return;
   }
   try {
@@ -91,7 +125,11 @@ export function configureEventPayment(
       unit
     );
     const price = input.priceOverride ? BigInt(input.priceOverride) : calculated;
-    if (price < 0n || price > 99999999n || (requirement !== 'none' && price < 50n))
+    if (
+      price < 0n ||
+      price > 99999999n ||
+      (requirement !== 'none' && !input.pricePending && price < 50n)
+    )
       throw new Error('invalid price');
     if (requirement !== 'none') {
       const account = tx
@@ -119,11 +157,23 @@ export function configureEventPayment(
           .run();
       return;
     }
+    if (input.pricePending) {
+      if (requirement !== 'pay_later' || !event.paymentOpensAt)
+        throw new Error('pending price requires scheduled pay later');
+      if (collection)
+        tx.update(collections)
+          .set({ status: 'archived', updatedAt: clock.now() })
+          .where(eq(collections.id, collection.id))
+          .run();
+      return;
+    }
+    const scheduled = event.paymentOpensAt !== null;
     const values = {
       title: event.title,
       amountMinor: price,
       currency: 'JPY',
-      status: 'open',
+      status: scheduled ? ('draft' as const) : ('open' as const),
+      dueAt: event.paymentDueAt,
       updatedAt: clock.now()
     };
     const saved = collection
@@ -177,6 +227,7 @@ export function configureEventPayment(
           })
           .run();
     }
+    if (saved.status === 'open') backfillPaymentRequests(tx, { ...saved, status: 'open' }, clock);
     feeBreakdown(price, tuning.OFFKAI_STRIPE_FEE_BPS_ESTIMATE, event.platformFeeBps);
   } catch (cause) {
     if (cause instanceof EventError) throw cause;

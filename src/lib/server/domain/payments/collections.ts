@@ -492,6 +492,30 @@ export function findMainCollection(tx: DatabaseTransaction, eventId: string): Co
   return rows[0] ? parseCollection(rows[0]) : null;
 }
 
+/** Opens the primary collection and materializes every confirmed participant obligation atomically. */
+export function openMainCollectionInTransaction(
+  tx: DatabaseTransaction,
+  eventId: string,
+  dueAt: Date | null,
+  clock: Clock = systemClock
+): Collection | null {
+  const current = findMainCollection(tx, eventId);
+  if (!current) return null;
+  if (current.status === 'open') return current;
+  if (!isAllowedCollectionTransition(current.status, 'open'))
+    throw new CollectionError('illegal_transition', 'collection status transition denied');
+  const row = tx
+    .update(collections)
+    .set({ status: 'open', dueAt, updatedAt: clock.now() })
+    .where(and(eq(collections.id, current.id), eq(collections.status, current.status)))
+    .returning()
+    .get();
+  if (!row) throw new CollectionError('illegal_transition', 'collection changed concurrently');
+  const opened = parseCollection(row);
+  backfillPaymentRequests(tx, opened, clock);
+  return opened;
+}
+
 async function changeCollectionStatus(
   client: DatabaseClient,
   input: {
@@ -510,17 +534,20 @@ async function changeCollectionStatus(
     if (!isAllowedCollectionTransition(current.status, target)) {
       throw new CollectionError('illegal_transition', 'collection status transition denied');
     }
-    const rows = tx
-      .update(collections)
-      .set({ status: target, updatedAt: clock.now() })
-      .where(and(eq(collections.id, current.id), eq(collections.status, current.status)))
-      .returning()
-      .all();
-    if (!rows[0]) {
-      throw new CollectionError('illegal_transition', 'collection changed concurrently');
-    }
-    const updated = parseCollection(rows[0]);
-    if (updated.status === 'open') backfillPaymentRequests(tx, updated, clock);
+    const updated =
+      target === 'open'
+        ? openMainCollectionInTransaction(tx, input.eventId, current.dueAt, clock)!
+        : (() => {
+            const row = tx
+              .update(collections)
+              .set({ status: target, updatedAt: clock.now() })
+              .where(and(eq(collections.id, current.id), eq(collections.status, current.status)))
+              .returning()
+              .get();
+            if (!row)
+              throw new CollectionError('illegal_transition', 'collection changed concurrently');
+            return parseCollection(row);
+          })();
     appendAudit(
       tx,
       {

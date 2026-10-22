@@ -1,4 +1,4 @@
-import { eventPaymentFields } from '$lib/shared/event-payment-form';
+import { eventPaymentFields, validatePaymentSchedule } from '$lib/shared/event-payment-form';
 import { getConnectAccount, getCollectionDashboard } from '$lib/server/domain/payments';
 import { paymentRequirementSchema } from '$lib/shared/payment';
 import { error, fail } from '@sveltejs/kit';
@@ -16,29 +16,43 @@ import { registrationModeSchema, venueRevealSchema } from '$lib/shared/event';
 const datetimeLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 function settingsSchema(t: App.Locals['t']) {
   const datetime = z.string().regex(datetimeLocal, t('event.validation_datetime'));
-  return z.object({
-    ...eventPaymentFields(t('payments.error_validation')),
-    title: z
-      .string()
-      .trim()
-      .min(1, t('form.validation_required'))
-      .max(200, t('form.validation_too_long', { max: 200 })),
-    description: z.string().max(10_000, t('form.validation_too_long', { max: 10_000 })),
-    startsAt: datetime,
-    endsAt: datetime,
-    capacity: z.preprocess(
-      (value) => (value === '' || value === undefined || value === null ? null : Number(value)),
-      z.number().int().positive(t('event.validation_capacity')).nullable()
-    ),
-    registrationOpensAt: datetime,
-    registrationClosesAt: datetime,
-    venueName: z.string().max(300, t('form.validation_too_long', { max: 300 })),
-    venueAddress: z.string().max(500, t('form.validation_too_long', { max: 500 })),
-    venueReveal: venueRevealSchema,
-    contact: z.string().max(500, t('form.validation_too_long', { max: 500 })),
-    cancellationPolicy: z.string().max(5_000, t('form.validation_too_long', { max: 5_000 })),
-    registrationMode: registrationModeSchema
-  });
+  return z
+    .object({
+      ...eventPaymentFields(t('payments.error_validation')),
+      title: z
+        .string()
+        .trim()
+        .min(1, t('form.validation_required'))
+        .max(200, t('form.validation_too_long', { max: 200 })),
+      description: z.string().max(10_000, t('form.validation_too_long', { max: 10_000 })),
+      startsAt: datetime,
+      endsAt: datetime,
+      capacity: z.preprocess(
+        (value) => (value === '' || value === undefined || value === null ? null : Number(value)),
+        z.number().int().positive(t('event.validation_capacity')).nullable()
+      ),
+      registrationOpensAt: datetime,
+      registrationClosesAt: datetime,
+      venueName: z.string().max(300, t('form.validation_too_long', { max: 300 })),
+      venueAddress: z.string().max(500, t('form.validation_too_long', { max: 500 })),
+      venueReveal: venueRevealSchema,
+      contact: z.string().max(500, t('form.validation_too_long', { max: 500 })),
+      cancellationPolicy: z.string().max(5_000, t('form.validation_too_long', { max: 5_000 })),
+      registrationMode: registrationModeSchema
+    })
+    .superRefine((data, context) =>
+      validatePaymentSchedule(
+        data,
+        (field, message) => context.addIssue({ code: 'custom', path: [field], message }),
+        {
+          datetime: t('event.validation_datetime'),
+          dueRequired: t('payment.validation_due_required'),
+          order: t('payment.validation_schedule_order'),
+          additional: t('payment.validation_additional'),
+          pending: t('payment.validation_pending')
+        }
+      )
+    );
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -70,6 +84,19 @@ export const load: PageServerLoad = async (event) => {
         amountToCollect: item.amountToCollectMinor.toString(),
         roundingUnit: item.roundingUnit,
         priceOverride: payments.collection?.amountMinor.toString() ?? '',
+        pricePending:
+          item.paymentRequirement === 'pay_later' &&
+          item.paymentOpensAt !== null &&
+          payments.collection === null,
+        paymentOpensAt: item.paymentOpensAt
+          ? formatWallClockInput(item.paymentOpensAt, config.time.zone)
+          : '',
+        paymentDueAt: item.paymentDueAt
+          ? formatWallClockInput(item.paymentDueAt, config.time.zone)
+          : '',
+        additionalOpensAt: item.additionalOpensAt
+          ? formatWallClockInput(item.additionalOpensAt, config.time.zone)
+          : '',
         manualCash:
           payments.methods.find((m) => m.label === 'payments.default_method.cash.label')?.enabled ??
           true,
@@ -122,15 +149,17 @@ export const actions: Actions = {
         cause instanceof EventError || cause instanceof OrganizationError ? 'warn' : 'error'
       ]({ err: cause }, 'update event settings failed');
       const key =
-        cause instanceof EventError && cause.code === 'payment_frozen'
-          ? 'event.error_payment_frozen'
-          : cause instanceof EventError && cause.code === 'illegal_transition'
-            ? 'event.error_illegal_transition'
-            : cause instanceof EventError && cause.code === 'validation'
-              ? 'event.error_validation'
-              : cause instanceof OrganizationError && cause.code === 'forbidden'
-                ? 'event.error_forbidden'
-                : 'event.error_generic';
+        cause instanceof EventError && cause.message === 'payment due time cannot be in the past'
+          ? 'payment.validation_past'
+          : cause instanceof EventError && cause.code === 'payment_frozen'
+            ? 'event.error_payment_frozen'
+            : cause instanceof EventError && cause.code === 'illegal_transition'
+              ? 'event.error_illegal_transition'
+              : cause instanceof EventError && cause.code === 'validation'
+                ? 'event.error_validation'
+                : cause instanceof OrganizationError && cause.code === 'forbidden'
+                  ? 'event.error_forbidden'
+                  : 'event.error_generic';
       const status =
         cause instanceof EventError && cause.code === 'payment_frozen'
           ? 409

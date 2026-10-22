@@ -22,12 +22,19 @@ export const en = {
   'door.dashboard': 'Event dashboard',
   'door.status':
     'Confirmed: {confirmed}/{capacity}\nHeld: {held}\nWaitlisted: {waitlisted}\nUnpaid: {unpaid}\nPaid total: {total}\nChecked in: {checked}\nUnreachable: {unreachable}',
+  'door.price_pending': 'Participation fee pending: set it before payment opens.',
   'door.remind_preview':
     'Send a payment reminder?\nHeld: {held}, confirmed: {confirmed}\nJapanese: {ja}, English: {en}\nOnly participants still unpaid when confirmed and delivered will receive it.',
   'door.remind_confirm': 'Send reminders',
   'door.remind_sent': 'Queued {count} reminders.',
   'notify.payment_reminder':
     'A friendly reminder: your participation fee is still unpaid. Please open the event panel to check payment options. If you have just paid, thank you—please disregard this message.',
+  'notify.payment_open':
+    'Payment is now open. Please open your event status to pay by the deadline.',
+  'notify.payment_due_soon':
+    'Your participation fee is due soon. Please open your event status to pay.',
+  'notify.payment_overdue':
+    'Your registration was cancelled because the participation fee was not received by the deadline.',
   'roster.title': 'Offline reception roster',
   'roster.csv': 'Download reception CSV',
   'roster.number': 'Number',
@@ -80,6 +87,8 @@ export const en = {
 
   'activity.action.registration.hold_expired': 'Released an expired seat hold',
   'activity.action.registration.hold_expiring': 'Queued a seat hold expiry notice',
+  'activity.action.registration.payment_overdue': 'Cancelled an overdue unpaid registration',
+  'activity.action.payment.schedule_open': 'Opened scheduled payment collection',
   'activity.action.payment.checkout_expired': 'Checkout expired',
   'activity.action.payment.stripe_checkout_stale': 'Kept an outdated Checkout for reconciliation',
   'activity.action.payment.checkout_already_settled': 'Reconciled a completed Checkout',
@@ -92,6 +101,22 @@ export const en = {
   'payment.requirement.pay_to_confirm': 'Pay to confirm a seat',
   'payment.requirement.pay_later': 'Confirm now, pay later',
   'payment.requirement': 'Payment requirement',
+  'payment.price_pending_option': 'Decide the participation fee later',
+  'payment.price_tba': 'To be announced',
+  'payment.opens_at': 'Payment opens',
+  'payment.due_at': 'Payment deadline',
+  'payment.additional_opens_at': 'Additional recruitment opens (optional)',
+  'payment.schedule_before_open': 'Payment opens {opens} (deadline {due}).',
+  'payment.schedule_deadline': 'Payment deadline: {due}.',
+  'payment.schedule_title': 'Payment schedule',
+  'payment.schedule_summary': 'Payment opens {opens}; deadline {due}.',
+  'payment.additional_summary': 'Additional recruitment opens {opens}.',
+  'payment.validation_due_required': 'Set both the payment opening time and deadline.',
+  'payment.validation_schedule_order':
+    'Payment opening must be before the deadline, and the deadline before the event.',
+  'payment.validation_additional': 'Additional recruitment must start at or after payment opens.',
+  'payment.validation_pending': 'A pending price requires scheduled pay-later collection.',
+  'payment.validation_past': 'The payment deadline cannot be in the past.',
   'payment.amount_to_collect': 'Amount to collect per person (JPY)',
   'payment.rounding_unit': 'Multiples of ¥{unit}',
   'payment.rounding': 'Round price up to (JPY)',
@@ -141,6 +166,7 @@ export const en = {
   'payouts.test_placeholder': 'Stripe component preview (test transport)',
   'payouts.refresh_failed': 'Could not refresh Stripe status. Try again before accepting payments.',
   'event.setup_payouts': 'Payout account ready',
+  'event.setup_payment_price': 'Set the participation fee before payment opens',
   'checkout.done': 'Payment received — return to Discord',
   'checkout.done_help': 'Your Discord status updates after Stripe confirms the payment.',
   'checkout.cancelled': 'Checkout cancelled — return to Discord',
@@ -161,14 +187,14 @@ export const en = {
   'activity.action.discord.guild_name_refresh': 'Refreshed Discord server name',
 
   'panel_template.default':
-    "### Important rules\n- Registering means accepting the server and event rules. You must be at least 20 on the event day.\n- Fees are non-refundable after confirmation. Ask the organizer about questions or exceptional circumstances.\n\n### How to join\n- Select Join and submit the required answers.\n- Use My status to check confirmation or waitlist status and edit answers. Submitting does not always confirm a place.\n\n### Cancellation\n- Select Cancel registration, then confirm on the next screen. Contact the organizer if you cannot complete the cancellation.\n\n### Conduct and practical notes\n- Respect people around you and follow staff instructions and venue policies, including smoking rules.\n- Check dietary and allergy accommodations with the organizer before registering.\n- Respect others' consent and privacy when taking photos. Get staff approval before filming or streaming.\n- Keep bags compact, look after your belongings, and clear up your rubbish. Ask staff about lost property.\n- Be considerate across language differences. Follow organizer guidance for private trades; arrangements remain the responsibility of those involved.",
+    "### Important rules\n- Registering means accepting the server and event rules. You must be at least 20 on the event day.\n- Fees are non-refundable after confirmation. Ask the organizer about questions or exceptional circumstances.\n\n### How to join\n- Select Join and submit the required answers.\n- Use My status to check confirmation or waitlist status and edit answers. Submitting does not always confirm a place.\n- Payment period: {payment_opens} – {payment_due}\n- Additional recruitment opens: {additional_opens}\n\n### Cancellation\n- Select Cancel registration, then confirm on the next screen. Contact the organizer if you cannot complete the cancellation.\n\n### Conduct and practical notes\n- Respect people around you and follow staff instructions and venue policies, including smoking rules.\n- Check dietary and allergy accommodations with the organizer before registering.\n- Respect others' consent and privacy when taking photos. Get staff approval before filming or streaming.\n- Keep bags compact, look after your belongings, and clear up your rubbish. Ask staff about lost property.\n- Be considerate across language differences. Follow organizer guidance for private trades; arrangements remain the responsibility of those involved.",
   'panel_template.title': 'Panel text templates',
   'panel_template.ja': 'Japanese panel body',
   'panel_template.en': 'English panel body',
   'panel_template.help':
-    'Editable Markdown. Allowed variables: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}. Lines are omitted when all variables on the line are empty. Private venue details stay hidden. Saving marks both templates reviewed.',
+    'Editable Markdown. Allowed variables: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}, {payment_opens}, {payment_due}, {additional_opens}. Lines are omitted when all variables on the line are empty. Private venue details stay hidden. Saving marks both templates reviewed.',
   'panel_template.unknown':
-    'Unknown template variable. Allowed: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}.',
+    'Unknown template variable. Allowed: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}, {payment_opens}, {payment_due}, {additional_opens}.',
   'panel_template.save': 'Save and mark templates reviewed',
   'panel_template.saved': 'Panel templates saved.',
   'panel_template.truncated': 'Text shortened. Ask the organizer for the complete event rules.',

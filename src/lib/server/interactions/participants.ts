@@ -135,7 +135,11 @@ export async function participantAction(
               : undefined,
             manualMethods
           }
-        : undefined
+        : undefined,
+      {
+        now: clock.now(),
+        priceMinor: current.event.priceMinor
+      }
     );
   };
   const statusCard = async (): Promise<APIInteractionResponse> => {

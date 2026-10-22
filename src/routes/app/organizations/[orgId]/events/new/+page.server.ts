@@ -1,4 +1,4 @@
-import { eventPaymentFields } from '$lib/shared/event-payment-form';
+import { eventPaymentFields, validatePaymentSchedule } from '$lib/shared/event-payment-form';
 import { getConnectAccount } from '$lib/server/domain/payments';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { message, superValidate } from 'sveltekit-superforms';
@@ -16,21 +16,35 @@ import { registrationModeSchema } from '$lib/shared/event';
 const datetimeLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
 function newEventSchema(t: App.Locals['t']) {
-  return z.object({
-    ...eventPaymentFields(t('payments.error_validation')),
-    title: z
-      .string()
-      .trim()
-      .min(1, t('form.validation_required'))
-      .max(200, t('form.validation_too_long', { max: 200 })),
-    startsAt: z.string().regex(datetimeLocal, t('event.validation_datetime')),
-    capacity: z.preprocess(
-      (value) => (value === '' || value === undefined ? undefined : Number(value)),
-      z.number().int().positive(t('event.validation_capacity')).optional()
-    ),
-    copyFromEventId: z.union([z.uuid(), z.literal('')]).default(''),
-    registrationMode: z.union([registrationModeSchema, z.literal('')]).default('')
-  });
+  return z
+    .object({
+      ...eventPaymentFields(t('payments.error_validation')),
+      title: z
+        .string()
+        .trim()
+        .min(1, t('form.validation_required'))
+        .max(200, t('form.validation_too_long', { max: 200 })),
+      startsAt: z.string().regex(datetimeLocal, t('event.validation_datetime')),
+      capacity: z.preprocess(
+        (value) => (value === '' || value === undefined ? undefined : Number(value)),
+        z.number().int().positive(t('event.validation_capacity')).optional()
+      ),
+      copyFromEventId: z.union([z.uuid(), z.literal('')]).default(''),
+      registrationMode: z.union([registrationModeSchema, z.literal('')]).default('')
+    })
+    .superRefine((data, context) =>
+      validatePaymentSchedule(
+        data,
+        (field, message) => context.addIssue({ code: 'custom', path: [field], message }),
+        {
+          datetime: t('event.validation_datetime'),
+          dueRequired: t('payment.validation_due_required'),
+          order: t('payment.validation_schedule_order'),
+          additional: t('payment.validation_additional'),
+          pending: t('payment.validation_pending')
+        }
+      )
+    );
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -56,6 +70,10 @@ export const load: PageServerLoad = async (event) => {
         manualCash: true,
         manualPayPay: true,
         holdMinutes: config.tuning.OFFKAI_HOLD_MINUTES_DEFAULT,
+        pricePending: false,
+        paymentOpensAt: '',
+        paymentDueAt: '',
+        additionalOpensAt: '',
         startsAt: formatWallClockInput(Date.now() + 24 * 60 * 60 * 1_000, config.time.zone),
         registrationMode: '' as const
       },
@@ -97,11 +115,13 @@ export const actions: Actions = {
         cause instanceof EventError || cause instanceof OrganizationError ? 'warn' : 'error'
       ]({ err: cause }, 'create event failed');
       const key =
-        cause instanceof EventError && cause.code === 'validation'
-          ? 'event.error_validation'
-          : cause instanceof OrganizationError && cause.code === 'forbidden'
-            ? 'event.error_forbidden'
-            : 'event.error_generic';
+        cause instanceof EventError && cause.message === 'payment due time cannot be in the past'
+          ? 'payment.validation_past'
+          : cause instanceof EventError && cause.code === 'validation'
+            ? 'event.error_validation'
+            : cause instanceof OrganizationError && cause.code === 'forbidden'
+              ? 'event.error_forbidden'
+              : 'event.error_generic';
       return message(form, event.locals.t(key), {
         status: cause instanceof EventError || cause instanceof OrganizationError ? 400 : 500
       });

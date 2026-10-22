@@ -47,6 +47,7 @@ export const tuningSchema = z.object({
   OFFKAI_HOLD_MINUTES_MAX: positiveInteger(1440, 31, 1440),
   OFFKAI_HOLD_TICK_INTERVAL_MS: positiveInteger(15000, 100, 3600000),
   OFFKAI_HOLD_EXPIRING_SOON_MINUTES: positiveInteger(5, 1, 1440),
+  OFFKAI_PAYMENT_REMINDER_LEAD_HOURS: positiveInteger(72, 1, 8760),
   OFFKAI_NOTIFICATION_DM_INTERVAL_MS: positiveInteger(1000, 0, 60000),
   OFFKAI_NOTIFICATION_ARCHIVE_DAYS: positiveInteger(7, 0, 365),
   OFFKAI_RATE_LIMIT_WINDOW_MS: positiveInteger(60_000, 1_000, 3_600_000),

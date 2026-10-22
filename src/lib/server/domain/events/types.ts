@@ -27,6 +27,9 @@ export interface EventSummary {
   cancellationPolicy: string;
   registrationMode: RegistrationMode;
   paymentRequirement: string;
+  paymentOpensAt?: Date | null;
+  paymentDueAt?: Date | null;
+  additionalOpensAt?: Date | null;
   platformFeeBps: number;
   amountToCollectMinor: bigint;
   roundingUnit: number;
@@ -52,6 +55,9 @@ export interface CreateEventInput extends EventPaymentInput {
   organizationId: string;
   title: string;
   startsAt: string;
+  paymentOpensAt?: string;
+  paymentDueAt?: string;
+  additionalOpensAt?: string;
   capacity?: number | null;
   registrationMode?: RegistrationMode;
   copyFromEventId?: string;
@@ -73,6 +79,9 @@ export interface UpdateEventSettingsInput extends EventPaymentInput {
   cancellationPolicy: string;
   registrationOpensAt: string;
   registrationClosesAt: string;
+  paymentOpensAt?: string;
+  paymentDueAt?: string;
+  additionalOpensAt?: string;
   registrationMode: RegistrationMode;
   discordPolicy?: DiscordPolicy;
   timeZone: string;

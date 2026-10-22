@@ -56,13 +56,13 @@ export function renderDoorCard(card: DoorCard, locale: Locale) {
   );
 }
 export function renderReceptionStatus(
-  status: ReturnType<typeof receptionStatus>,
+  status: Omit<ReturnType<typeof receptionStatus>, 'pricePending'> & { pricePending?: boolean },
   locale: Locale,
   baseUrl: string
 ) {
   const t = translator(locale);
   return ephemeralCard(
-    `# ${safe(status.event.title, 250)}\n${t('door.status', { confirmed: status.confirmed, capacity: status.event.capacity ?? t('event.capacity_unlimited'), held: status.held, waitlisted: status.waitlisted, unpaid: status.unpaid, total: status.totals.map(([currency, n]) => formatMoney(n, currency, locale)).join(', ') || formatMoney(0n, 'JPY', locale), checked: status.checkedIn, unreachable: status.unreachable })}`,
+    `# ${safe(status.event.title, 250)}\n${t('door.status', { confirmed: status.confirmed, capacity: status.event.capacity ?? t('event.capacity_unlimited'), held: status.held, waitlisted: status.waitlisted, unpaid: status.unpaid, total: status.totals.map(([currency, n]) => formatMoney(n, currency, locale)).join(', ') || formatMoney(0n, 'JPY', locale), checked: status.checkedIn, unreachable: status.unreachable })}${status.pricePending ? `\n\n⚠️ ${t('door.price_pending')}` : ''}`,
     [
       new ButtonBuilder()
         .setStyle(5)

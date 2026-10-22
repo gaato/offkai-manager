@@ -1,7 +1,7 @@
 import { and, count, eq, inArray } from 'drizzle-orm';
 import type { Clock } from '$lib/server/clock';
 import type { DatabaseTransaction } from '$lib/server/db/client';
-import { checkinRecords, events, registrations } from '$lib/server/db/schema';
+import { checkinRecords, collections, events, registrations } from '$lib/server/db/schema';
 import { appendAudit } from '$lib/server/domain/audit';
 import { enqueuePanelRefresh, enqueueRoleSync } from '$lib/server/domain/discord/outbox';
 import { paymentRequirementSchema } from '$lib/shared/payment';
@@ -36,10 +36,24 @@ export function decideRegistration(
     opensAt: event.registrationOpensAt,
     closesAt: event.registrationClosesAt,
     startsAt: event.startsAt,
+    additionalOpensAt: event.additionalOpensAt,
     accepting: !event.cancelledAt && !event.archivedAt && event.visibility !== 'draft',
     capacity: event.capacity,
     confirmedCount,
-    paymentRequirement: paymentRequirementSchema.parse(event.paymentRequirement),
+    // Once the scheduled payment window has actually opened, new admissions pay immediately.
+    // Until the collection opens (for example a price still pending), joins stay pay-later and
+    // receive their obligation from the opening backfill instead of an unpayable hold.
+    paymentRequirement:
+      event.paymentRequirement === 'pay_later' &&
+      event.paymentOpensAt &&
+      clock.now() >= event.paymentOpensAt &&
+      tx
+        .select({ id: collections.id })
+        .from(collections)
+        .where(and(eq(collections.eventId, event.id), eq(collections.status, 'open')))
+        .get()
+        ? 'pay_to_confirm'
+        : paymentRequirementSchema.parse(event.paymentRequirement),
     holdMinutes: event.holdMinutes,
     registrationMode: registrationModeSchema.parse(event.registrationMode),
     checkedIn

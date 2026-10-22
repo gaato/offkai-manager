@@ -5,6 +5,9 @@ import { outboxEvents, registrations } from '$lib/server/db/schema';
 export const notificationKinds = [
   'payment_reminder',
   'payment_confirmed',
+  'payment_open',
+  'payment_due_soon',
+  'payment_overdue',
   'hold_expiring',
   'hold_expired',
   'waitlist_confirmed'

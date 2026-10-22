@@ -80,6 +80,18 @@ export async function deliverNotification(
     );
     if (!unpaid) return;
   }
+  if (payload.kind === 'payment_open' || payload.kind === 'payment_due_soon') {
+    if (!['held', 'confirmed'].includes(row.registration.status)) return;
+    const unpaid = read(client, (tx) =>
+      tx
+        .select()
+        .from(paymentRequests)
+        .where(eq(paymentRequests.registrationId, payload.registration_id))
+        .all()
+        .some((request) => ['pending', 'payment_pending'].includes(request.status))
+    );
+    if (!unpaid) return;
+  }
   // Old warning jobs are obsolete after payment, cancellation, or deadline passage.
   if (
     payload.kind === 'hold_expiring' &&

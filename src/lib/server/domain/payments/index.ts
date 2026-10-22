@@ -19,6 +19,8 @@ export * from './requests';
 
 export * from './settle';
 
+export * from './schedule';
+
 export {
   CollectionError,
   ConnectError,

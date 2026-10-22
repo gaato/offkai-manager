@@ -7,11 +7,13 @@ import { enqueuePanelRefresh, enqueueRoleSync } from '../discord/outbox';
 import { enqueueNotification } from '../notifications/outbox';
 import { cancelPaymentRequestsForRegistration } from './requests';
 import { promoteOldestWaitlisted } from '../registrations/promotion';
+import { tickPaymentSchedule } from './schedule';
 
 /** One synchronous, deterministic pass; callers supply time and own the timeout loop. */
 export function tickOnce(client: DatabaseClient, now: Date, tuning: Tuning = defaultTuning) {
   const clock = { now: () => now };
   return write(client, (tx) => {
+    tickPaymentSchedule(tx, now, tuning.OFFKAI_PAYMENT_REMINDER_LEAD_HOURS, clock);
     const held = tx.select().from(registrations).where(eq(registrations.status, 'held')).all();
     let released = 0;
     for (const registration of held) {

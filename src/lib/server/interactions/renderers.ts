@@ -1,6 +1,6 @@
 import { systemPaymentMethodMessageKey } from '$lib/shared/payment';
 import { formatMoney } from '$lib/shared/money';
-import type { paymentRequests } from '$lib/server/db/schema';
+import type { events, paymentRequests } from '$lib/server/db/schema';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -16,13 +16,20 @@ import { formatWallClock } from '$lib/server/time';
 import { renderPanelTemplate, truncatePanelBody } from './panel-template';
 import { discordLimits } from '$lib/shared/discord-limits';
 import { translator, type Locale, type MessageKey } from '$lib/i18n';
-import type { events } from '$lib/server/db/schema';
 import type { OwnedRegistrationDetail } from '$lib/server/domain/registrations/participant';
 import { encodeCustomId, type CustomAction } from './custom-id';
 
 // Reserve space for button labels and translated status text within the total message budget.
 const messageTextBudget = discordLimits.messageText - 350;
-type PanelEvent = typeof events.$inferSelect & { priceMinor?: bigint };
+type PanelEvent = Omit<
+  typeof events.$inferSelect,
+  'paymentOpensAt' | 'paymentDueAt' | 'additionalOpensAt'
+> & {
+  paymentOpensAt?: Date | null;
+  paymentDueAt?: Date | null;
+  additionalOpensAt?: Date | null;
+  priceMinor?: bigint;
+};
 export const excerpt = (value: string, max: number): string =>
   value.length > max ? value.slice(0, max - 1) + '…' : value;
 const safe = (value: string, max: number) => excerpt(escapeMarkdown(value), max);
@@ -62,8 +69,10 @@ export function renderPanel(
     !event.cancelledAt &&
     !event.archivedAt &&
     event.visibility !== 'draft' &&
-    counts.now >= event.registrationOpensAt &&
-    counts.now <= event.registrationClosesAt;
+    ((counts.now >= event.registrationOpensAt && counts.now <= event.registrationClosesAt) ||
+      (event.additionalOpensAt != null &&
+        counts.now >= event.additionalOpensAt &&
+        counts.now < event.startsAt));
   const full = event.capacity !== null && counts.confirmed >= event.capacity;
   const state = !open
     ? 'panel.closed'
@@ -85,7 +94,9 @@ export function renderPanel(
       : t('panel.capacity', { count: counts.confirmed, capacity: event.capacity }),
     ...(event.priceMinor && event.priceMinor > 0n
       ? [formatMoney(event.priceMinor, 'JPY', locale)]
-      : []),
+      : event.paymentRequirement === 'pay_later' && event.paymentOpensAt
+        ? [t('payment.price_tba')]
+        : []),
     t(state)
   ]
     .filter(Boolean)
@@ -105,9 +116,16 @@ export function renderPanel(
         : [event.venueName, event.venueAddress].filter(Boolean).join(' · ') ||
           t('panel.venue_empty'),
     fee:
-      event.priceMinor && event.priceMinor > 0n ? formatMoney(event.priceMinor, 'JPY', locale) : '',
+      event.priceMinor && event.priceMinor > 0n
+        ? formatMoney(event.priceMinor, 'JPY', locale)
+        : event.paymentRequirement === 'pay_later' && event.paymentOpensAt
+          ? t('payment.price_tba')
+          : '',
     capacity: event.capacity === null ? t('event.capacity_unlimited') : String(event.capacity),
-    deadline: formatWallClock(event.registrationClosesAt, locale, zone)
+    deadline: formatWallClock(event.registrationClosesAt, locale, zone),
+    payment_opens: event.paymentOpensAt ? time(event.paymentOpensAt, 'F') : '',
+    payment_due: event.paymentDueAt ? time(event.paymentDueAt, 'F') : '',
+    additional_opens: event.additionalOpensAt ? time(event.additionalOpensAt, 'F') : ''
   });
   // Keep state and controls intact; only the organizer-authored body is shortened.
   const text =
@@ -134,10 +152,11 @@ export function renderStatus(
   eventId: string,
   locale: Locale,
   payment?: {
-    request: typeof paymentRequests.$inferSelect;
+    request: Omit<typeof paymentRequests.$inferSelect, 'remindedAt'> & { remindedAt?: Date | null };
     checkoutUrl?: string;
     manualMethods: string[];
-  }
+  },
+  schedule?: { now: Date; priceMinor?: bigint }
 ): APIInteractionResponseChannelMessageWithSource {
   const t = translator(locale);
   if (!detail)
@@ -170,6 +189,21 @@ export function renderStatus(
       `# ${String(registration.number).padStart(3, '0')}`,
       t(statusKey),
       venue,
+      ...(event.paymentRequirement === 'pay_later' && event.paymentOpensAt && !payment
+        ? [
+            schedule?.priceMinor
+              ? formatMoney(schedule.priceMinor, 'JPY', locale)
+              : t('payment.price_tba'),
+            ...(schedule && schedule.now < event.paymentOpensAt
+              ? [
+                  t('payment.schedule_before_open', {
+                    opens: time(event.paymentOpensAt, 'F'),
+                    due: event.paymentDueAt ? time(event.paymentDueAt, 'F') : ''
+                  })
+                ]
+              : [])
+          ]
+        : []),
       ...(payment
         ? [
             formatMoney(payment.request.amountMinor, payment.request.currency, locale),
@@ -184,6 +218,9 @@ export function renderStatus(
                       ? 'payment.checkout_open'
                       : 'payment.unpaid'
             ),
+            ...(payment.request.dueAt
+              ? [t('payment.schedule_deadline', { due: time(payment.request.dueAt, 'F') })]
+              : []),
             ...(registration.holdExpiresAt && registration.status === 'held'
               ? [t('payment.hold_countdown', { time: time(registration.holdExpiresAt, 'R') })]
               : []),

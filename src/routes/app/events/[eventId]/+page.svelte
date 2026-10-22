@@ -47,11 +47,13 @@
         <a
           class="link"
           data-sveltekit-reload={step.anchor === 'payouts'}
-          href={step.anchor === 'disclosure'
-            ? `/app/organizations/${data.event.organizationId}/disclosure`
-            : step.anchor === 'payouts'
-              ? `/app/organizations/${data.event.organizationId}/payouts`
-              : `${discordHref}#${step.anchor}`}>{t(step.key)}</a
+          href={step.anchor === 'payment-schedule'
+            ? `/app/events/${data.event.id}/settings#payment-schedule`
+            : step.anchor === 'disclosure'
+              ? `/app/organizations/${data.event.organizationId}/disclosure`
+              : step.anchor === 'payouts'
+                ? `/app/organizations/${data.event.organizationId}/payouts`
+                : `${discordHref}#${step.anchor}`}>{t(step.key)}</a
         >
       </li>
     {/each}
@@ -94,6 +96,30 @@
           </div>
         </div>
       </div>
+
+      {#if data.dashboard.paymentSchedule.opensAt}
+        <div id="payment-schedule" class="card card-border bg-base-100 mt-6">
+          <div class="card-body gap-2">
+            <h2 class="card-title">{t('payment.schedule_title')}</h2>
+            <p>
+              {t('payment.schedule_summary', {
+                opens: data.formattedPaymentSchedule.opensAt,
+                due: data.formattedPaymentSchedule.dueAt
+              })}
+            </p>
+            {#if data.formattedPaymentSchedule.additionalOpensAt}
+              <p>
+                {t('payment.additional_summary', {
+                  opens: data.formattedPaymentSchedule.additionalOpensAt
+                })}
+              </p>
+            {/if}
+            {#if data.dashboard.paymentSchedule.pendingPrice}
+              <div role="alert" class="alert alert-warning">{t('event.setup_payment_price')}</div>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       <div class="card card-border bg-base-100 mt-6">
         <div class="card-body gap-2 pb-0">

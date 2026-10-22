@@ -119,6 +119,27 @@ describe('Discord pure renderers', () => {
       expect(renderCancelConfirm(event, locale)).toMatchSnapshot('cancel');
     }
   );
+  it.each(['ja', 'en'] as const)('renders pending fee and schedule variables in %s', (locale) => {
+    const paymentOpensAt = new Date('2026-12-01T00:00:00Z');
+    const paymentDueAt = new Date('2026-12-15T00:00:00Z');
+    const additionalOpensAt = new Date('2026-12-16T00:00:00Z');
+    const rendered = JSON.stringify(
+      renderPanel(
+        {
+          ...event,
+          paymentRequirement: 'pay_later',
+          paymentOpensAt,
+          paymentDueAt,
+          additionalOpensAt
+        },
+        { confirmed: 4, now },
+        locale
+      )
+    );
+    expect(rendered).toContain(translator(locale)('payment.price_tba'));
+    for (const date of [paymentOpensAt, paymentDueAt, additionalOpensAt])
+      expect(rendered).toContain(`<t:${Math.floor(date.getTime() / 1000)}:F>`);
+  });
   it.each(['ja', 'en'] as const)(
     'keeps the adapted default structured, neutral, and limited to supported variables in %s',
     (locale) => {
@@ -130,7 +151,11 @@ describe('Discord pure renderers', () => {
           : ['Important rules', 'How to join', 'Cancellation', 'Conduct and practical notes'];
       expect(template.match(/^### (.+)$/gm)).toEqual(headings.map((heading) => `### ${heading}`));
       expect(unknownPanelVariables(template)).toEqual([]);
-      expect(template).not.toMatch(/\{(?:title|date|start|end|venue|fee|capacity|deadline)\}/);
+      // The header already shows the fee, so the body only carries the payment schedule.
+      expect(template).not.toContain('{fee}');
+      expect(template).toContain('{payment_opens}');
+      expect(template).toContain('{payment_due}');
+      expect(template).toContain('{additional_opens}');
       expect(template).not.toMatch(/^## /m);
       for (const key of ['panel.join', 'panel.status', 'panel.cancel'] as const)
         expect(template).toContain(t(key));

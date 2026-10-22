@@ -301,6 +301,14 @@ for (const locale of ['ja', 'en'] as const) {
           page.getByRole('radio', { name: t('payment.rounding_unit', { unit }), exact: true })
         ).toBeVisible();
       }
+      await expect(
+        page.getByLabel(t('payment.price_pending_option'), { exact: true })
+      ).toBeVisible();
+      await expect(page.getByLabel(t('payment.opens_at'), { exact: true })).toBeVisible();
+      await expect(page.getByLabel(t('payment.due_at'), { exact: true })).toBeVisible();
+      await expect(
+        page.getByLabel(t('payment.additional_opens_at'), { exact: true })
+      ).toBeVisible();
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     }
   });
@@ -338,11 +346,49 @@ for (const javaScriptEnabled of [true, false]) {
       await expect(page.getByText(/Participants already have payments/)).toBeVisible();
       for (const requirement of paymentRequirements)
         await expect(page.locator(`#paymentRequirement-${requirement}`)).toBeDisabled();
+      for (const field of ['paymentOpensAt', 'paymentDueAt', 'additionalOpensAt'])
+        await expect(page.locator(`#${field}`)).toBeEnabled();
       await expect(page.getByLabel('Cash', { exact: true })).toBeEnabled();
       const mainForm = page.locator('form[action="?/settings"]');
       await mainForm.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(
         page.getByRole('status').filter({ hasText: 'The event settings were saved.' })
+      ).toBeVisible();
+    });
+  });
+}
+
+for (const javaScriptEnabled of [true, false]) {
+  test.describe(`Payment schedule validation (JavaScript ${javaScriptEnabled ? 'enabled' : 'disabled'})`, () => {
+    test.use({ javaScriptEnabled });
+    test('validates create fields and accepts a pending fee', async ({ page }) => {
+      await signInAs(page, e2eUsers.sweepOwner);
+      await page.getByRole('link', { name: paidJourney.organizationName, exact: true }).click();
+      await page.getByRole('link', { name: 'Create event', exact: true }).click();
+      await page.getByLabel('Confirm now, pay later', { exact: true }).check();
+      await page.getByLabel('Decide the participation fee later', { exact: true }).check();
+      await page.getByLabel('Event title', { exact: true }).fill(`Scheduled ${javaScriptEnabled}`);
+      await page.getByLabel('Start date and time', { exact: true }).fill('2027-12-31T18:00');
+      await page.getByLabel('Payment opens', { exact: true }).fill('2027-12-31T14:00');
+      await page.getByLabel('Payment deadline', { exact: true }).fill('2027-12-31T13:00');
+      await page
+        .getByLabel('Additional recruitment opens (optional)', { exact: true })
+        .fill('2027-12-31T12:00');
+      await page.getByRole('button', { name: 'Create event', exact: true }).click();
+      await expect(
+        page.getByText(/Payment opening must be before the deadline/).first()
+      ).toBeVisible();
+
+      await page.getByLabel('Payment deadline', { exact: true }).fill('2027-12-31T16:00');
+      await page
+        .getByLabel('Additional recruitment opens (optional)', { exact: true })
+        .fill('2027-12-31T14:00');
+      await page.getByRole('button', { name: 'Create event', exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/events\/[^/]+$/);
+      await expect(
+        page
+          .getByRole('alert')
+          .filter({ hasText: 'Set the participation fee before payment opens' })
       ).toBeVisible();
     });
   });

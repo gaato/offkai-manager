@@ -60,7 +60,7 @@
   {#if frozen}
     <p id="payment-frozen-note" class="alert alert-info">{t('payment.frozen_note')}</p>
     <!-- Disabled controls are not submitted, so the unchanged values travel as hidden fields. -->
-    {#each ['paymentRequirement', 'amountToCollect', 'roundingUnit', 'priceOverride', 'holdMinutes'] as const as field (field)}
+    {#each ['paymentRequirement', 'amountToCollect', 'roundingUnit', 'priceOverride', 'pricePending', 'holdMinutes'] as const as field (field)}
       <input type="hidden" name={field} value={values[field]} />
     {/each}
   {/if}
@@ -85,6 +85,15 @@
         ></label
       >
     {/each}
+    <label class="label min-h-12 gap-3" for="pricePending"
+      ><input
+        id="pricePending"
+        class="checkbox"
+        type="checkbox"
+        name="pricePending"
+        bind:checked={values.pricePending}
+      />{t('payment.price_pending_option')}</label
+    >
     <label class="label" for="amountToCollect">{t('payment.amount_to_collect')}</label>
     <input
       class="input w-full"
@@ -132,6 +141,47 @@
       </dl>
     {/if}
     <p>{t('payment.same_price')}</p>
+  </fieldset>
+  <fieldset id="payment-schedule" class="fieldset grid gap-4">
+    <legend class="fieldset-legend">{t('payment.opens_at')}</legend>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-2">
+        <label class="label" for="paymentOpensAt">{t('payment.opens_at')}</label>
+        <input
+          class="input w-full"
+          id="paymentOpensAt"
+          name="paymentOpensAt"
+          type="datetime-local"
+          bind:value={values.paymentOpensAt}
+          aria-invalid={errors.paymentOpensAt ? 'true' : undefined}
+        />
+        {#if errors.paymentOpensAt}<p role="alert">{errors.paymentOpensAt[0]}</p>{/if}
+      </div>
+      <div class="grid gap-2">
+        <label class="label" for="paymentDueAt">{t('payment.due_at')}</label>
+        <input
+          class="input w-full"
+          id="paymentDueAt"
+          name="paymentDueAt"
+          type="datetime-local"
+          bind:value={values.paymentDueAt}
+          aria-invalid={errors.paymentDueAt ? 'true' : undefined}
+        />
+        {#if errors.paymentDueAt}<p role="alert">{errors.paymentDueAt[0]}</p>{/if}
+      </div>
+    </div>
+    <div class="grid gap-2">
+      <label class="label" for="additionalOpensAt">{t('payment.additional_opens_at')}</label>
+      <input
+        class="input w-full"
+        id="additionalOpensAt"
+        name="additionalOpensAt"
+        type="datetime-local"
+        bind:value={values.additionalOpensAt}
+        aria-invalid={errors.additionalOpensAt ? 'true' : undefined}
+      />
+      {#if errors.additionalOpensAt}<p role="alert">{errors.additionalOpensAt[0]}</p>{/if}
+    </div>
   </fieldset>
   <fieldset class="fieldset">
     <legend class="fieldset-legend">{t('payment.manual_methods')}</legend>

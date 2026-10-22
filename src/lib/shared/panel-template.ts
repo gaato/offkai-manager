@@ -6,7 +6,10 @@ export const panelVariables = [
   'venue',
   'fee',
   'capacity',
-  'deadline'
+  'deadline',
+  'payment_opens',
+  'payment_due',
+  'additional_opens'
 ] as const;
 export type PanelVariable = (typeof panelVariables)[number];
 export function unknownPanelVariables(template: string): string[] {
