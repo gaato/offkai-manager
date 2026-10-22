@@ -13,6 +13,7 @@
     holdMin,
     holdMax,
     ready,
+    frozen = false,
     payoutsHref,
     errors = {}
   }: {
@@ -24,6 +25,8 @@
     holdMin: number;
     holdMax: number;
     ready: boolean;
+    /** Payment obligations exist, so the server rejects changes to these fields. */
+    frozen?: boolean;
     payoutsHref: string;
     errors?: Partial<Record<keyof EventPaymentForm, string[]>>;
   } = $props();
@@ -54,69 +57,82 @@
       {t('payment.finish_payouts')}
       <a class="link" data-sveltekit-reload href={payoutsHref}>{t('payment.manage_payouts')}</a>
     </p>{/if}
-  {#each paymentRequirements as requirement (requirement)}
-    <label for={`paymentRequirement-${requirement}`} class="label min-h-12 gap-3"
-      ><input
-        id={`paymentRequirement-${requirement}`}
-        aria-labelledby={`paymentRequirement-label-${requirement}`}
-        class="radio"
-        type="radio"
-        name="paymentRequirement"
-        value={requirement}
-        bind:group={values.paymentRequirement}
-        disabled={!ready && requirement !== 'none' && values.paymentRequirement !== requirement}
-      /><span id={`paymentRequirement-label-${requirement}`}
-        >{t(paymentRequirementLabelKey(requirement))}</span
-      ></label
-    >
-  {/each}
-  <label class="label" for="amountToCollect">{t('payment.amount_to_collect')}</label>
-  <input
-    class="input w-full"
-    id="amountToCollect"
-    name="amountToCollect"
-    inputmode="numeric"
-    pattern={'[0-9]{1,8}'}
-    bind:value={values.amountToCollect}
-    required
-  />
-  <fieldset class="fieldset">
-    <legend class="fieldset-legend">{t('payment.rounding')}</legend>
-    {#each units as unit (unit)}<label for={`roundingUnit-${unit}`} class="label min-h-12 gap-3"
+  {#if frozen}
+    <p id="payment-frozen-note" class="alert alert-info">{t('payment.frozen_note')}</p>
+    <!-- Disabled controls are not submitted, so the unchanged values travel as hidden fields. -->
+    {#each ['paymentRequirement', 'amountToCollect', 'roundingUnit', 'priceOverride', 'holdMinutes'] as const as field (field)}
+      <input type="hidden" name={field} value={values[field]} />
+    {/each}
+  {/if}
+  <fieldset
+    disabled={frozen}
+    aria-describedby={frozen ? 'payment-frozen-note' : undefined}
+    class="fieldset grid gap-4"
+  >
+    {#each paymentRequirements as requirement (requirement)}
+      <label for={`paymentRequirement-${requirement}`} class="label min-h-12 gap-3"
         ><input
+          id={`paymentRequirement-${requirement}`}
+          aria-labelledby={`paymentRequirement-label-${requirement}`}
           class="radio"
           type="radio"
-          id={`roundingUnit-${unit}`}
-          aria-labelledby={`roundingUnit-label-${unit}`}
-          name="roundingUnit"
-          value={unit}
-          bind:group={values.roundingUnit}
-        /><span id={`roundingUnit-label-${unit}`}>{t('payment.rounding_unit', { unit })}</span
+          name="paymentRequirement"
+          value={requirement}
+          bind:group={values.paymentRequirement}
+          disabled={!ready && requirement !== 'none' && values.paymentRequirement !== requirement}
+        /><span id={`paymentRequirement-label-${requirement}`}
+          >{t(paymentRequirementLabelKey(requirement))}</span
         ></label
-      >{/each}
+      >
+    {/each}
+    <label class="label" for="amountToCollect">{t('payment.amount_to_collect')}</label>
+    <input
+      class="input w-full"
+      id="amountToCollect"
+      name="amountToCollect"
+      inputmode="numeric"
+      pattern={'[0-9]{1,8}'}
+      bind:value={values.amountToCollect}
+      required
+    />
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">{t('payment.rounding')}</legend>
+      {#each units as unit (unit)}<label for={`roundingUnit-${unit}`} class="label min-h-12 gap-3"
+          ><input
+            class="radio"
+            type="radio"
+            id={`roundingUnit-${unit}`}
+            aria-labelledby={`roundingUnit-label-${unit}`}
+            name="roundingUnit"
+            value={unit}
+            bind:group={values.roundingUnit}
+          /><span id={`roundingUnit-label-${unit}`}>{t('payment.rounding_unit', { unit })}</span
+          ></label
+        >{/each}
+    </fieldset>
+    <label class="label" for="priceOverride">{t('payment.override')}</label>
+    <input
+      class="input w-full"
+      id="priceOverride"
+      name="priceOverride"
+      inputmode="numeric"
+      pattern={'[0-9]{0,8}'}
+      bind:value={values.priceOverride}
+    />
+    {#if preview}
+      <dl class="grid grid-cols-2 gap-3" aria-live="polite" data-testid="fee-breakdown">
+        <dt>{t('payment.price')}</dt>
+        <dd data-testid="participant-price">{formatMoney(preview.price, 'JPY', locale)}</dd>
+        <dt>{t('payment.stripe_fee')}</dt>
+        <dd>{formatMoney(preview.stripeFee, 'JPY', locale)}</dd>
+        <dt>{t('payment.platform_fee')}</dt>
+        <dd>{formatMoney(preview.platformFee, 'JPY', locale)}</dd>
+        <dt>{t('payment.take_home')}</dt>
+        <dd>{formatMoney(preview.takeHome, 'JPY', locale)}</dd>
+      </dl>
+    {/if}
+    <p>{t('payment.same_price')}</p>
   </fieldset>
-  <label class="label" for="priceOverride">{t('payment.override')}</label>
-  <input
-    class="input w-full"
-    id="priceOverride"
-    name="priceOverride"
-    inputmode="numeric"
-    pattern={'[0-9]{0,8}'}
-    bind:value={values.priceOverride}
-  />
-  {#if preview}
-    <dl class="grid grid-cols-2 gap-3" aria-live="polite" data-testid="fee-breakdown">
-      <dt>{t('payment.price')}</dt>
-      <dd data-testid="participant-price">{formatMoney(preview.price, 'JPY', locale)}</dd>
-      <dt>{t('payment.stripe_fee')}</dt>
-      <dd>{formatMoney(preview.stripeFee, 'JPY', locale)}</dd>
-      <dt>{t('payment.platform_fee')}</dt>
-      <dd>{formatMoney(preview.platformFee, 'JPY', locale)}</dd>
-      <dt>{t('payment.take_home')}</dt>
-      <dd>{formatMoney(preview.takeHome, 'JPY', locale)}</dd>
-    </dl>
-  {/if}
-  <p>{t('payment.same_price')}</p>
   <fieldset class="fieldset">
     <legend class="fieldset-legend">{t('payment.manual_methods')}</legend>
     <label class="label min-h-12 gap-3"
@@ -145,6 +161,7 @@
     min={holdMin}
     max={holdMax}
     step="1"
+    disabled={frozen}
     bind:value={values.holdMinutes}
     aria-describedby="hold-help"
     required

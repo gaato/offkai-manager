@@ -103,6 +103,8 @@ export const ja = {
   'payment.platform_fee': 'プラットフォーム手数料',
   'payment.take_home': '受取額（概算）',
   'payment.same_price': '現金・PayPay も同じ参加費です。',
+  'payment.frozen_note':
+    '参加者の支払いがすでに作られているため、支払い方法・参加費・席の保留時間は変更できません。現金・PayPay の受け付けは変更できます。',
   'payment.manual_methods': '手動で受け付ける支払い方法',
   'payment.cash': '現金',
   'payment.paypay': 'PayPay',
@@ -706,6 +708,8 @@ export const ja = {
   'event.validation_datetime': '有効な日時を入力してください。',
   'event.validation_capacity': '1以上の整数を入力するか、空欄にしてください。',
   'event.error_validation': 'イベントの内容を確認して、もう一度お試しください。',
+  'event.error_payment_frozen':
+    '参加者の支払いがすでに作られているため、支払い方法・参加費・席の保留時間は変更できません。',
   'event.error_forbidden': 'このイベントを変更する権限がありません。',
   'event.error_illegal_transition': '現在のイベント状態では、その変更を行えません。',
   'event.error_generic': 'イベントを変更できませんでした。もう一度お試しください。',

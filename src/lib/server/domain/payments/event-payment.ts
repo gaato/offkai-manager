@@ -56,7 +56,7 @@ export function configureEventPayment(
       (input.priceOverride && input.priceOverride !== collection.amountMinor.toString()) ||
       (input.holdMinutes !== undefined && input.holdMinutes !== event.holdMinutes)
     )
-      throw new EventError('validation', 'payment settings are frozen after registration');
+      throw new EventError('payment_frozen', 'payment settings are frozen after registration');
     for (const [method, enabled] of [
       ['cash', input.manualCash],
       ['paypay', input.manualPayPay]

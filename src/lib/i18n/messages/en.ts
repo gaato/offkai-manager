@@ -103,6 +103,8 @@ export const en = {
   'payment.platform_fee': 'Platform fee',
   'payment.take_home': 'Estimated take-home',
   'payment.same_price': 'Cash and PayPay payers pay the same price.',
+  'payment.frozen_note':
+    'Participants already have payments, so the payment mode, price and seat hold time cannot change. Cash and PayPay acceptance can still change.',
   'payment.manual_methods': 'Accepted manual payment methods',
   'payment.cash': 'Cash',
   'payment.paypay': 'PayPay',
@@ -714,6 +716,8 @@ export const en = {
   'event.validation_datetime': 'Enter a valid date and time.',
   'event.validation_capacity': 'Enter a whole number greater than zero, or leave it blank.',
   'event.error_validation': 'Check the event details and try again.',
+  'event.error_payment_frozen':
+    'Participants already have payments, so the payment mode, price and seat hold time cannot change.',
   'event.error_forbidden': 'You do not have permission to change this event.',
   'event.error_illegal_transition': 'That change is not available in the event’s current state.',
   'event.error_generic': 'The event could not be changed. Please try again.',

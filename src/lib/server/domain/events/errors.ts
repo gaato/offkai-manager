@@ -3,6 +3,7 @@ export type EventErrorCode =
   | 'forbidden'
   | 'illegal_transition'
   | 'not_found'
+  | 'payment_frozen'
   | 'slug_collision'
   | 'validation';
 

@@ -106,6 +106,8 @@ export interface CollectionDashboard {
   requests: PaymentRequestRow[];
   metrics: CollectionMetrics;
   amountFrozen: boolean;
+  /** Any payment obligation exists, which freezes the event's payment settings. */
+  obligationsExist: boolean;
   conflicts: SettleConflictRow[];
   consentMissing: boolean;
 }
@@ -156,7 +158,8 @@ export async function getCollectionDashboard(
         organizationId: events.organizationId,
         eventTitle: events.title,
         eventSlug: events.slug,
-        organizationSlug: organizations.slug
+        organizationSlug: organizations.slug,
+        paymentRequirement: events.paymentRequirement
       })
       .from(events)
       .innerJoin(organizations, eq(organizations.id, events.organizationId))
@@ -220,6 +223,13 @@ export async function getCollectionDashboard(
       )
       .limit(1)
       .all();
+    const obligationsExist = Boolean(
+      tx
+        .select({ id: paymentRequests.id })
+        .from(paymentRequests)
+        .where(eq(paymentRequests.collectionId, collection.id))
+        .get()
+    );
     const conflictRows = listUnresolvedSettleConflicts(tx, {
       eventId: input.eventId,
       newestFirst: false
@@ -244,7 +254,13 @@ export async function getCollectionDashboard(
       methods,
       requests,
       metrics: collectionMetrics(requests),
-      amountFrozen: Boolean(startedRows[0] || settledRows[0]),
+      // Paid events freeze the price with the first obligation, matching updateCollection.
+      amountFrozen: Boolean(
+        startedRows[0] ||
+        settledRows[0] ||
+        (eventRows[0].paymentRequirement !== 'none' && obligationsExist)
+      ),
+      obligationsExist,
       conflicts: conflictRows,
       consentMissing: collection.status === 'open' && collection.amountMinor > 0n && !consentRows[0]
     };
@@ -857,6 +873,7 @@ function emptyDashboard(): CollectionDashboard {
       waivedAmountMinor: 0n
     },
     amountFrozen: false,
+    obligationsExist: false,
     conflicts: [],
     consentMissing: false
   };

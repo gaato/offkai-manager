@@ -3,7 +3,7 @@ import { registrationModes, registrationModeLabelKey } from '../src/lib/shared/e
 import { paymentRequirements, paymentRequirementLabelKey } from '../src/lib/shared/payment';
 import { expect, test } from '@playwright/test';
 import { signInAs } from './auth';
-import { e2eUsers, paidJourney } from './fixtures';
+import { e2eUsers, paidJourney, paymentEventFixtures } from './fixtures';
 import { translator } from '../src/lib/i18n';
 
 test('only payouts documents allow Connect and navigation restores the strict CSP', async ({
@@ -324,3 +324,26 @@ test('organizer legal disclosure is public and names the organization', async ({
     404
   );
 });
+
+for (const javaScriptEnabled of [true, false]) {
+  test.describe(`Frozen payment settings (JavaScript ${javaScriptEnabled ? 'enabled' : 'disabled'})`, () => {
+    test.use({ javaScriptEnabled });
+    test('explains locked payment fields and still saves the other settings', async ({ page }) => {
+      await signInAs(page, e2eUsers.sweepOwner);
+      await page.getByRole('link', { name: 'Sweep Workspace', exact: true }).first().click();
+      await expect(page).toHaveURL(/\/app\/organizations\/[0-9a-f-]+$/);
+      await page.getByRole('link', { name: paymentEventFixtures.frozen, exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/events\/[0-9a-f-]+$/);
+      await page.goto(`${page.url()}/settings?lang=en`);
+      await expect(page.getByText(/Participants already have payments/)).toBeVisible();
+      for (const requirement of paymentRequirements)
+        await expect(page.locator(`#paymentRequirement-${requirement}`)).toBeDisabled();
+      await expect(page.getByLabel('Cash', { exact: true })).toBeEnabled();
+      const mainForm = page.locator('form[action="?/settings"]');
+      await mainForm.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await expect(
+        page.getByRole('status').filter({ hasText: 'The event settings were saved.' })
+      ).toBeVisible();
+    });
+  });
+}

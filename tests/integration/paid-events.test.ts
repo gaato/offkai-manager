@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { type DatabaseClient } from '$lib/server/db/client';
+import { type DatabaseClient, write } from '$lib/server/db/client';
 import {
   events,
   registrations,
@@ -16,6 +16,7 @@ import {
   waivePaymentRequest
 } from '$lib/server/domain/payments';
 import { tickOnce } from '$lib/server/domain/payments/holds';
+import { configureEventPayment } from '$lib/server/domain/payments/event-payment';
 import { withdrawRegistration } from '$lib/server/domain/registrations/participant';
 import { defaultTuning } from '$lib/server/config';
 import { createEvent } from '$lib/server/domain/events';
@@ -195,4 +196,27 @@ it('snapshots the configured platform fee at creation, independent of later conf
   ).toBe(300);
   await base.join();
   expect(client.db.select().from(paymentRequests).get()?.applicationFeeAmount).toBe(106n);
+});
+it('reports frozen payment settings with their own error code once an obligation exists', async () => {
+  const fixture = await paidEvent(client, 'pay_later', 5);
+  await fixture.join();
+  const event = client.db.select().from(events).get()!;
+  expect(() =>
+    write(client, (tx) =>
+      configureEventPayment(tx, event, { paymentRequirement: 'pay_to_confirm' }, fixedClock)
+    )
+  ).toThrow(expect.objectContaining({ code: 'payment_frozen' }));
+  // Manual methods stay editable after obligations exist.
+  write(client, (tx) =>
+    configureEventPayment(
+      tx,
+      event,
+      {
+        paymentRequirement: 'pay_later',
+        amountToCollect: event.amountToCollectMinor.toString(),
+        manualCash: true
+      },
+      fixedClock
+    )
+  );
 });

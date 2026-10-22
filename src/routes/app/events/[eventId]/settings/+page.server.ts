@@ -56,6 +56,7 @@ export const load: PageServerLoad = async (event) => {
   return {
     paymentUi: {
       ready: account?.onboardingStatus === 'ready',
+      frozen: payments.obligationsExist,
       stripeBps: config.tuning.OFFKAI_STRIPE_FEE_BPS_ESTIMATE,
       platformBps: item.platformFeeBps,
       units: config.priceRoundingUnits,
@@ -121,21 +122,25 @@ export const actions: Actions = {
         cause instanceof EventError || cause instanceof OrganizationError ? 'warn' : 'error'
       ]({ err: cause }, 'update event settings failed');
       const key =
-        cause instanceof EventError && cause.code === 'illegal_transition'
-          ? 'event.error_illegal_transition'
-          : cause instanceof EventError && cause.code === 'validation'
-            ? 'event.error_validation'
-            : cause instanceof OrganizationError && cause.code === 'forbidden'
-              ? 'event.error_forbidden'
-              : 'event.error_generic';
-      const status =
-        cause instanceof EventError && cause.code === 'validation'
-          ? 400
+        cause instanceof EventError && cause.code === 'payment_frozen'
+          ? 'event.error_payment_frozen'
           : cause instanceof EventError && cause.code === 'illegal_transition'
-            ? 409
-            : cause instanceof OrganizationError && cause.code === 'forbidden'
-              ? 403
-              : 500;
+            ? 'event.error_illegal_transition'
+            : cause instanceof EventError && cause.code === 'validation'
+              ? 'event.error_validation'
+              : cause instanceof OrganizationError && cause.code === 'forbidden'
+                ? 'event.error_forbidden'
+                : 'event.error_generic';
+      const status =
+        cause instanceof EventError && cause.code === 'payment_frozen'
+          ? 409
+          : cause instanceof EventError && cause.code === 'validation'
+            ? 400
+            : cause instanceof EventError && cause.code === 'illegal_transition'
+              ? 409
+              : cause instanceof OrganizationError && cause.code === 'forbidden'
+                ? 403
+                : 500;
       return message(form, event.locals.t(key), { status });
     }
   }
