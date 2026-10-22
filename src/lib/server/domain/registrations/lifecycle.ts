@@ -1,7 +1,7 @@
 import { and, count, eq, inArray } from 'drizzle-orm';
 import type { Clock } from '$lib/server/clock';
 import type { DatabaseTransaction } from '$lib/server/db/client';
-import { events, registrations } from '$lib/server/db/schema';
+import { checkinRecords, events, registrations } from '$lib/server/db/schema';
 import { appendAudit } from '$lib/server/domain/audit';
 import { enqueuePanelRefresh, enqueueRoleSync } from '$lib/server/domain/discord/outbox';
 import { paymentRequirementSchema } from '$lib/shared/payment';
@@ -14,8 +14,16 @@ export function decideRegistration(
   event: typeof events.$inferSelect,
   state: RegistrationState,
   command: RegistrationCommand,
-  clock: Clock
+  clock: Clock,
+  registrationId?: string
 ) {
+  const checkedIn =
+    registrationId !== undefined &&
+    tx
+      .select({ id: checkinRecords.id })
+      .from(checkinRecords)
+      .where(eq(checkinRecords.registrationId, registrationId))
+      .get() !== undefined;
   const confirmedCount = tx
     .select({ n: count() })
     .from(registrations)
@@ -33,7 +41,8 @@ export function decideRegistration(
     confirmedCount,
     paymentRequirement: paymentRequirementSchema.parse(event.paymentRequirement),
     holdMinutes: event.holdMinutes,
-    registrationMode: registrationModeSchema.parse(event.registrationMode)
+    registrationMode: registrationModeSchema.parse(event.registrationMode),
+    checkedIn
   });
   if (!result.ok) throw new RegistrationError(result.code, 'registration transition rejected');
   return result;

@@ -150,7 +150,8 @@ export async function withdrawRegistration(
       eventRows[0],
       attendanceState(current),
       { type: 'cancel' },
-      clock
+      clock,
+      current.id
     );
     const updatedRows = tx
       .update(registrations)

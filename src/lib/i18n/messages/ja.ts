@@ -289,6 +289,8 @@ export const ja = {
   'participant.closed_saved':
     '現在は受付時間外です。送信した回答は保存されています。受付開始後に再度お試しください。',
   'participant.not_withdrawable': 'イベント開始後、または参加取消済みの場合は取り消せません。',
+  'participant.checked_in':
+    '受付済みのため取り消せません。取り消しが必要な場合はスタッフに声をかけてください。',
   'participant.error': '操作を完了できませんでした。参加状況を更新してから再度お試しください。',
   'participant.form_unavailable':
     '参加フォームが Discord の上限を超えています。主催者に修正を依頼してください。',

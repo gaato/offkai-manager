@@ -43,13 +43,20 @@ export interface RegistrationContext {
   readonly holdMinutes?: number;
   readonly heldCount?: number;
   readonly payment?: PaymentState;
+  /** A check-in record exists; staff undo it before the attendance can be released. */
+  readonly checkedIn?: boolean;
 }
 export type RegistrationEffect =
   { readonly type: 'syncRoles' } | { readonly type: 'refreshPanels' } | { readonly type: 'audit' };
 export type Rejection = {
   readonly ok: false;
   readonly code:
-    'duplicate' | 'not_registrable' | 'not_withdrawable' | 'illegal_transition' | 'capacity';
+    | 'duplicate'
+    | 'not_registrable'
+    | 'not_withdrawable'
+    | 'checked_in'
+    | 'illegal_transition'
+    | 'capacity';
 };
 export type Decision =
   | {
@@ -172,6 +179,7 @@ export function decide(
         return { ok: false, code: 'not_registrable' };
       return { ok: true, next: state, effects: [{ type: 'audit' }, { type: 'refreshPanels' }] };
     case 'cancel':
+      if (context.checkedIn) return { ok: false, code: 'checked_in' };
       if (state.kind === 'none' || context.now >= context.startsAt)
         return { ok: false, code: 'not_withdrawable' };
       return {
@@ -187,6 +195,8 @@ export function decide(
     case 'setStatus':
       if (state.kind === 'none' || state.kind === command.status)
         return { ok: false, code: 'illegal_transition' };
+      if (context.checkedIn && command.status !== 'confirmed')
+        return { ok: false, code: 'checked_in' };
       if (command.status === 'confirmed' && full) return { ok: false, code: 'capacity' };
       return command.status === 'confirmed' ? admission() : transition(command.status);
     default:

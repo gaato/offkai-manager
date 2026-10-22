@@ -116,6 +116,27 @@ describe('pure registration lifecycle', () => {
     ).toBe(true);
   });
 
+  it.each(['applied', 'waitlisted', 'confirmed'] as const)(
+    'a checked-in %s attendance cannot be released, only confirmed',
+    (kind) => {
+      const checkedIn = { ...context, checkedIn: true };
+      for (const command of [
+        { type: 'cancel' },
+        { type: 'setStatus', status: 'waitlisted' },
+        { type: 'setStatus', status: 'cancelled' }
+      ] as const) {
+        const expected = command.type === 'setStatus' && command.status === kind;
+        expect(decide({ kind }, command, checkedIn)).toMatchObject({
+          ok: false,
+          code: expected ? 'illegal_transition' : 'checked_in'
+        });
+      }
+      // The check-in guard runs before the start-time boundary, so the reason is specific.
+      expect(
+        decide({ kind }, { type: 'cancel' }, { ...checkedIn, now: context.startsAt })
+      ).toMatchObject({ ok: false, code: 'checked_in' });
+    }
+  );
   it('model-checks random actor command sequences against an independent transition matrix', () => {
     fc.assert(
       fc.property(
@@ -124,19 +145,34 @@ describe('pure registration lifecycle', () => {
         fc.array(
           fc.record({
             actor: fc.integer({ min: 0, max: 7 }),
-            command: fc.integer({ min: 0, max: commands.length - 1 })
+            command: fc.integer({ min: 0, max: commands.length + 1 })
           }),
           { maxLength: 300 }
         ),
         (capacity, mode, sequence) => {
           const model: Exclude<RegistrationState['kind'], 'held'>[] = Array(8).fill('none');
           const actual: RegistrationState[] = model.map((kind) => ({ kind }));
+          const checkedIn: boolean[] = Array(8).fill(false);
           for (const step of sequence) {
             const count = model.filter((kind) => kind === 'confirmed').length;
             const before = actual[step.actor];
+            // Staff check-in admits only confirmed attendance; undo always clears the record.
+            if (step.command >= commands.length) {
+              checkedIn[step.actor] =
+                step.command === commands.length && model[step.actor] === 'confirmed';
+              continue;
+            }
             const command = commands[step.command];
             let expected = matrix[model[step.actor]][step.command];
-            if (model[step.actor] === 'none' && command.type === 'join')
+            if (
+              checkedIn[step.actor] &&
+              (command.type === 'cancel' ||
+                (command.type === 'setStatus' &&
+                  command.status !== 'confirmed' &&
+                  expected !== '!illegal_transition'))
+            )
+              expected = '!checked_in';
+            else if (model[step.actor] === 'none' && command.type === 'join')
               expected =
                 mode === 'approval' ? 'applied' : count >= capacity ? 'waitlisted' : 'confirmed';
             else if (
@@ -149,7 +185,8 @@ describe('pure registration lifecycle', () => {
               ...context,
               capacity,
               confirmedCount: count,
-              registrationMode: mode as 'auto_confirm' | 'approval'
+              registrationMode: mode as 'auto_confirm' | 'approval',
+              checkedIn: checkedIn[step.actor]
             });
             expect(result.ok ? result.next.kind : `!${result.code}`).toBe(expected);
             if (result.ok) {
@@ -164,6 +201,9 @@ describe('pure registration lifecycle', () => {
             // Each actor has exactly one lifecycle; a rejected duplicate cannot create another.
             expect(actual.map((state) => state.kind)).toEqual(model);
             expect(actual).toHaveLength(8);
+            expect(model.filter((kind, actor) => checkedIn[actor] && kind !== 'confirmed')).toEqual(
+              []
+            );
           }
         }
       ),

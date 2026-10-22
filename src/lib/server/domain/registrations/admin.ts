@@ -312,7 +312,8 @@ export async function changeRegistrationStatus(
       event,
       attendanceState(current),
       { type: 'setStatus', status: input.status },
-      clock
+      clock,
+      current.id
     );
     const updatedRows = tx
       .update(registrations)

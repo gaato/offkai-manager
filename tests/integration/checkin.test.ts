@@ -12,12 +12,14 @@ import {
 } from '$lib/server/domain/checkin';
 import { createEvent } from '$lib/server/domain/events';
 import { createOrganization } from '$lib/server/domain/orgs';
+import { withdrawRegistration } from '$lib/server/domain/registrations/participant';
 
 describe('event-day check-in', () => {
   let client: DatabaseClient;
   let actorUserId: string;
   let eventId: string;
   let registrationId: string;
+  let participantUserId: string;
   beforeEach(async () => {
     client = testDatabase();
     actorUserId = (
@@ -42,6 +44,7 @@ describe('event-day check-in', () => {
       },
       fixedClock
     );
+    participantUserId = participant.userId;
     const organization = await createOrganization(
       client,
       {
@@ -104,6 +107,19 @@ describe('event-day check-in', () => {
       .where(eq(auditLogs.targetId, registrationId))
       .all();
     expect(audits.filter(({ action }) => action === 'checkin.record')).toHaveLength(1);
+  });
+  it('keeps a checked-in attendance until staff undo the check-in', async () => {
+    await recordCheckIn(client, { actorUserId, registrationId }, fixedClock);
+    const withdraw = () =>
+      withdrawRegistration(client, { registrationId, userId: participantUserId }, fixedClock);
+    await expect(withdraw()).rejects.toMatchObject({ code: 'checked_in' });
+    expect(
+      client.db.select().from(registrations).where(eq(registrations.id, registrationId)).get()
+        ?.status
+    ).toBe('confirmed');
+    expect(client.db.select().from(checkinRecords).all()).toHaveLength(1);
+    await undoCheckIn(client, { actorUserId, registrationId }, fixedClock);
+    expect((await withdraw()).registration.status).toBe('cancelled');
   });
   it('shows checked-in state, undoes it, and appends the undo audit', async () => {
     await recordCheckIn(client, { actorUserId, registrationId }, fixedClock);

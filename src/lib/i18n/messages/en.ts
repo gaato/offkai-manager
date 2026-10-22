@@ -291,6 +291,8 @@ export const en = {
     'Registration is not open. Your submitted answers are saved; try again when registration opens.',
   'participant.not_withdrawable':
     'Cancellation is unavailable after the event starts or after registration is cancelled.',
+  'participant.checked_in':
+    'You are already checked in, so this cannot be cancelled. Ask the staff if you need to cancel.',
   'participant.error': 'This action could not be completed. Refresh your status and try again.',
   'participant.form_unavailable':
     'The event form exceeds Discord’s limits. Please ask the organizer to update it.',

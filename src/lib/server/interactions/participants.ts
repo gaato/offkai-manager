@@ -388,6 +388,7 @@ function participantErrorKey(cause: unknown, answersSaved = false): MessageKey {
     if (cause.code === 'not_registrable')
       return answersSaved ? 'participant.closed_saved' : 'participant.closed';
     if (cause.code === 'not_withdrawable') return 'participant.not_withdrawable';
+    if (cause.code === 'checked_in') return 'participant.checked_in';
     if (cause.code === 'validation')
       return answersSaved ? 'participant.invalid' : 'participant.error';
     if (cause.code === 'forbidden') return 'interaction.unavailable';

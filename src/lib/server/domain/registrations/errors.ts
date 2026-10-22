@@ -2,6 +2,7 @@ export type RegistrationErrorCode =
   | 'not_found'
   | 'not_registrable'
   | 'not_withdrawable'
+  | 'checked_in'
   | 'duplicate'
   | 'validation'
   | 'forbidden'

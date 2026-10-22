@@ -24,6 +24,7 @@ import { write } from '$lib/server/db/client';
 import { processRoleSyncBatch } from '$lib/server/worker/role-sync';
 import * as restModule from '$lib/server/interactions/rest';
 import { archiveField } from '$lib/server/domain/events';
+import { recordCheckIn } from '$lib/server/domain/checkin';
 import { excerpt } from '$lib/server/interactions/renderers';
 import { discordEvent } from '../support/discord-registration';
 import { recordingRest, responseLike } from '../support/discord-rest';
@@ -443,6 +444,16 @@ describe('signed FREE event Discord journeys', () => {
         (request) => request.method === 'DELETE' && request.url.includes('/roles/')
       )
     ).toBe(true);
+  });
+  it('refuses cancellation after check-in and points the participant to the staff', async () => {
+    const { event, owner } = await discordEvent(client);
+    await call(button('join', event.id));
+    const registrationId = client.db.select().from(registrations).get()!.id;
+    await recordCheckIn(client, { actorUserId: owner.userId, registrationId }, fixedClock);
+    expect(JSON.stringify(await call(button('cancel_confirm', event.id)))).toContain(
+      'You are already checked in'
+    );
+    expect(client.db.select().from(registrations).get()!.status).toBe('confirmed');
   });
   it('edits active fields without removing archived snapshots or truncating an unchanged legacy long answer', async () => {
     const { event, fields, owner } = await discordEvent(client, {
