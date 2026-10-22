@@ -52,7 +52,7 @@
     "@sveltejs/kit": "^2.50.2",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/vite": "^4.1.18",
-    "@types/better-sqlite3": "^7",
+    "@types/better-sqlite3": "^9.0.0",
     "@types/node": "^26.0.0",
     "daisyui": "^5",
     "dependency-cruiser": "^17.3.6",
