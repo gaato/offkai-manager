@@ -10,6 +10,7 @@ import {
   users
 } from '$lib/server/db/schema';
 import { upsertDiscordIdentity } from '$lib/server/domain/auth/discord';
+import { createOrganization } from '$lib/server/domain/orgs';
 import { fixedClock } from '../database';
 import { signingKey } from '../support/scenario-setup';
 import {
@@ -94,6 +95,27 @@ describe('signed HTTP interactions', () => {
     );
     expect(oauth.userId).toBe(user.id);
     expect(client.db.select().from(users).all()).toHaveLength(1);
+  });
+  it('offkai web adds no personal organization for someone who already runs a group', async () => {
+    const owner = await upsertDiscordIdentity(
+      client,
+      {
+        providerUserId: actor.id,
+        username: actor.username,
+        displayName: 'Web login',
+        avatarUrl: ''
+      },
+      fixedClock
+    );
+    await createOrganization(
+      client,
+      { actorUserId: owner.userId, name: 'Running group' },
+      fixedClock
+    );
+    expect((await callInteraction(makeChatInput(), signingKey.privateKey)).status).toBe(200);
+    expect(client.db.select().from(organizations).all()).toMatchObject([
+      { name: 'Running group', personalOwnerUserId: null }
+    ]);
   });
   it('reuses an OAuth identity when OAuth was first', async () => {
     const user = await upsertDiscordIdentity(

@@ -27,15 +27,15 @@ describe('personal organizations', () => {
       ensurePersonalOrganization(client, owner, fixedClock),
       ensurePersonalOrganization(client, owner, fixedClock)
     ]);
-    expect(second.id).toBe(first.id);
+    expect(second!.id).toBe(first!.id);
     expect(client.db.select().from(organizations).all()).toHaveLength(1);
     expect(client.db.select().from(organizationMemberships).all()).toMatchObject([
-      { organizationId: first.id, userId: owner.userId, role: 'owner', status: 'active' }
+      { organizationId: first!.id, userId: owner.userId, role: 'owner', status: 'active' }
     ]);
     expect(
       client.db.select().from(auditLogs).where(eq(auditLogs.action, 'organization.create')).all()
     ).toHaveLength(1);
-    expect(first.createdAt).toEqual(fixedClock.now());
+    expect(first!.createdAt).toEqual(fixedClock.now());
   });
   it('enforces one personal organization per user in SQLite', async () => {
     const owner = await user();
@@ -54,20 +54,67 @@ describe('personal organizations', () => {
     ).toThrow(/UNIQUE constraint/);
   });
   it('keeps regular organizations separate and resolves name collisions', async () => {
-    const owner = await user();
-    await createOrganization(client, { actorUserId: owner.userId, name: 'Owner' }, fixedClock);
-    const first = await ensurePersonalOrganization(client, owner, fixedClock);
+    const other = await user('200000000000000003');
+    await createOrganization(client, { actorUserId: other.userId, name: 'Owner' }, fixedClock);
+    const first = await ensurePersonalOrganization(client, await user(), fixedClock);
     const second = await ensurePersonalOrganization(
       client,
       await user('200000000000000002'),
       fixedClock
     );
-    expect(new Set(['owner', first.slug, second.slug]).size).toBe(3);
+    expect(new Set(['owner', first!.slug, second!.slug]).size).toBe(3);
     expect(client.db.select().from(organizations).all()).toHaveLength(3);
+  });
+  it.each(['owner', 'organizer'] as const)(
+    'creates nothing for someone who is already an active %s',
+    async (role) => {
+      const owner = await user();
+      const member = await user('200000000000000002');
+      const org = await createOrganization(
+        client,
+        { actorUserId: owner.userId, name: 'Running group' },
+        fixedClock
+      );
+      const subject = role === 'owner' ? owner : member;
+      if (role === 'organizer')
+        write(client, (tx) =>
+          tx
+            .insert(organizationMemberships)
+            .values({ organizationId: org.id, userId: member.userId, role, status: 'active' })
+            .run()
+        );
+      expect(await ensurePersonalOrganization(client, subject, fixedClock)).toBeNull();
+      expect(client.db.select().from(organizations).all()).toHaveLength(1);
+    }
+  );
+  it.each([
+    ['staff membership', { role: 'staff', status: 'active' }, false],
+    ['disabled organizer membership', { role: 'organizer', status: 'disabled' }, false],
+    ['organizer membership in a suspended group', { role: 'organizer', status: 'active' }, true]
+  ] as const)('still creates one for a %s', async (_, membership, suspended) => {
+    const owner = await user();
+    const member = await user('200000000000000002');
+    const org = await createOrganization(
+      client,
+      { actorUserId: owner.userId, name: 'Someone else' },
+      fixedClock
+    );
+    write(client, (tx) => {
+      tx.insert(organizationMemberships)
+        .values({ organizationId: org.id, userId: member.userId, ...membership })
+        .run();
+      if (suspended)
+        tx.update(organizations)
+          .set({ suspendedAt: fixedClock.now() })
+          .where(eq(organizations.id, org.id))
+          .run();
+    });
+    const personal = await ensurePersonalOrganization(client, member, fixedClock);
+    expect(personal?.personalOwnerUserId).toBe(member.userId);
   });
   it('does not recreate a suspended personal organization or reenable its membership', async () => {
     const owner = await user();
-    const org = await ensurePersonalOrganization(client, owner, fixedClock);
+    const org = (await ensurePersonalOrganization(client, owner, fixedClock))!;
     write(client, (tx) => {
       tx.update(organizations)
         .set({ suspendedAt: fixedClock.now() })
@@ -75,7 +122,7 @@ describe('personal organizations', () => {
         .run();
       tx.update(organizationMemberships).set({ status: 'disabled' }).run();
     });
-    expect((await ensurePersonalOrganization(client, owner, fixedClock)).suspendedAt).toEqual(
+    expect((await ensurePersonalOrganization(client, owner, fixedClock))?.suspendedAt).toEqual(
       fixedClock.now()
     );
     expect(client.db.select().from(organizationMemberships).get()?.status).toBe('disabled');

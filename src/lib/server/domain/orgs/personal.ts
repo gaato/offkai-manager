@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { systemClock, type Clock } from '$lib/server/clock';
 import { write, type DatabaseClient } from '$lib/server/db/client';
 import { organizations, organizationMemberships, users } from '$lib/server/db/schema';
@@ -23,6 +23,22 @@ export async function ensurePersonalOrganization(
       .get();
     // Never restore disabled membership or a suspended organization as a side effect.
     if (existing) return existing;
+    // The personal organization is a starting place for a first-time organizer. Someone who
+    // already runs a group would only get an empty extra workspace.
+    const organizing = tx
+      .select({ id: organizationMemberships.id })
+      .from(organizationMemberships)
+      .innerJoin(organizations, eq(organizations.id, organizationMemberships.organizationId))
+      .where(
+        and(
+          eq(organizationMemberships.userId, user.userId),
+          eq(organizationMemberships.status, 'active'),
+          inArray(organizationMemberships.role, ['owner', 'organizer']),
+          isNull(organizations.suspendedAt)
+        )
+      )
+      .get();
+    if (organizing) return null;
     const name = (user.displayName.trim() || user.userId).slice(0, 120);
     const slugs = tx.select({ slug: organizations.slug }).from(organizations).all();
     const organization = tx
