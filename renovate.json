@@ -5,9 +5,12 @@
   "minimumReleaseAge": "3 days",
   "packageRules": [
     {
-      "description": "Batch non-major updates into one PR; majors get their own.",
+      "description": "Batch non-major updates into one PR and merge it once CI passes; majors get their own and stay manual.",
       "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
-      "groupName": "non-major dependencies"
+      "groupName": "non-major dependencies",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
     }
   ]
 }
