@@ -7,7 +7,7 @@
     "node": ">=26.12.0",
     "pnpm": ">=10"
   },
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.28.7",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -65,7 +65,7 @@
     "globals": "^16.5.0",
     "prettier": "^3.8.1",
     "prettier-plugin-svelte": "^3.4.1",
-    "prettier-plugin-tailwindcss": "^0.7.2",
+    "prettier-plugin-tailwindcss": "^0.8.0",
     "svelte": "^5.49.1",
     "svelte-check": "^4.3.5",
     "tailwindcss": "^4.1.18",
