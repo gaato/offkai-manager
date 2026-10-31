@@ -1,7 +1,7 @@
 ARG SOURCE_REPOSITORY=https://github.com/gaato/offkai-manager
 ARG VCS_REF=development
 
-FROM node:26.12.0-slim AS base
+FROM node:26.12.1-slim AS base
 WORKDIR /app
 RUN npm install --global pnpm@11.9.0
 
@@ -22,7 +22,7 @@ RUN pnpm install --prod --frozen-lockfile
 # The glibc image loads better-sqlite3 v13's bundled N-API prebuild.
 RUN node -e "const db = new (require('better-sqlite3'))(':memory:'); db.close()"
 
-FROM node:26.12.0-slim AS runtime
+FROM node:26.12.1-slim AS runtime
 ARG SOURCE_REPOSITORY
 ARG VCS_REF
 LABEL org.opencontainers.image.licenses="AGPL-3.0-or-later" \
