@@ -23,6 +23,7 @@ export const en = {
   'door.status':
     'Confirmed: {confirmed}/{capacity}\nHeld: {held}\nWaitlisted: {waitlisted}\nUnpaid: {unpaid}\nPaid total: {total}\nChecked in: {checked}\nUnreachable: {unreachable}',
   'door.price_pending': 'Participation fee pending: set it before payment opens.',
+  'door.overdue': 'Overdue unpaid: {count}',
   'door.remind_preview':
     'Send a payment reminder?\nHeld: {held}, confirmed: {confirmed}\nJapanese: {ja}, English: {en}\nOnly participants still unpaid when confirmed and delivered will receive it.',
   'door.remind_confirm': 'Send reminders',
@@ -33,6 +34,10 @@ export const en = {
     'Payment is now open. Please open your event status to pay by the deadline.',
   'notify.payment_due_soon':
     'Your participation fee is due soon. Please open your event status to pay.',
+  'notify.payment_past_due':
+    'The payment deadline has passed. Please pay from your event status; your registration will be cancelled if payment is not received by the date shown there.',
+  'notify.payment_past_due_manual':
+    'The payment deadline has passed. Please pay from your event status as soon as possible, or contact the organizer.',
   'notify.payment_overdue':
     'Your registration was cancelled because the participation fee was not received by the deadline.',
   'roster.title': 'Offline reception roster',
@@ -117,6 +122,37 @@ export const en = {
   'payment.validation_additional': 'Additional recruitment must start at or after payment opens.',
   'payment.validation_pending': 'A pending price requires scheduled pay-later collection.',
   'payment.validation_past': 'The payment deadline cannot be in the past.',
+  'payment.validation_grace': 'The grace period must end before the event starts.',
+  'payment.overdue_title': 'Unpaid after the deadline',
+  'payment.overdue_auto': 'Cancel automatically',
+  'payment.overdue_manual': 'Organizers decide',
+  'payment.overdue_grace_days': 'Grace period before registrations can be cancelled (days)',
+  'payment.overdue_help':
+    'Nobody is cancelled, automatically or by organizers, until the grace period after the deadline has passed. Automatic with 0 days cancels at the deadline. Participants are told when the deadline passes and can still pay. Freed seats go to the waitlist in order.',
+  'payment.overdue_locked_note':
+    'After payment requests exist, changes that make cancellation possible earlier (a shorter grace period, an earlier deadline, or switching from “Organizers decide” to automatic) are not allowed.',
+  'payment.overdue_rule_auto': 'Registrations still unpaid at {release} are cancelled.',
+  'payment.overdue_rule_manual':
+    'From {release}, the organizer may cancel registrations that are still unpaid.',
+  'payment.overdue_past_due': 'The payment deadline has passed.',
+  'payment.overdue_summary_auto': 'Unpaid after the deadline: cancelled automatically at {release}',
+  'payment.overdue_summary_manual': 'Unpaid after the deadline: organizers decide from {release}',
+  'payment.overdue_release_not_yet':
+    'Registrations cannot be cancelled before {release}, because participants were told so.',
+  'payment.overdue_count': 'Overdue unpaid: {count}',
+  'payment.overdue_release_link': 'Cancel overdue unpaid registrations',
+  'payment.overdue_release_title': 'Cancel overdue unpaid registrations',
+  'payment.overdue_release_question_one':
+    'This cancels the following registration, which is unpaid after the payment deadline. The participant is notified, and waitlisted people are promoted in order. This cannot be undone.',
+  'payment.overdue_release_question_other':
+    'This cancels the following {count} registrations, which are unpaid after the payment deadline. Participants are notified, and waitlisted people are promoted in order. This cannot be undone.',
+  'payment.overdue_release_submit_one': 'Cancel {count} registration',
+  'payment.overdue_release_submit_other': 'Cancel {count} registrations',
+  'payment.overdue_release_paying_note':
+    'People who are paying in an open Checkout page right now are not included.',
+  'payment.overdue_release_changed':
+    'The overdue list changed after this page opened. Review the new list and try again.',
+  'payment.overdue_release_none': 'No registrations are overdue.',
   'payment.amount_to_collect': 'Amount to collect per person (JPY)',
   'payment.rounding_unit': 'Multiples of ¥{unit}',
   'payment.rounding': 'Round price up to (JPY)',
@@ -187,14 +223,14 @@ export const en = {
   'activity.action.discord.guild_name_refresh': 'Refreshed Discord server name',
 
   'panel_template.default':
-    "### Important rules\n- Registering means accepting the server and event rules. You must be at least 20 on the event day.\n- Fees are non-refundable after confirmation. Ask the organizer about questions or exceptional circumstances.\n\n### How to join\n- Select Join and submit the required answers.\n- Use My status to check confirmation or waitlist status and edit answers. Submitting does not always confirm a place.\n- Payment period: {payment_opens} – {payment_due}\n- Additional recruitment opens: {additional_opens}\n\n### Cancellation\n- Select Cancel registration, then confirm on the next screen. Contact the organizer if you cannot complete the cancellation.\n\n### Conduct and practical notes\n- Respect people around you and follow staff instructions and venue policies, including smoking rules.\n- Check dietary and allergy accommodations with the organizer before registering.\n- Respect others' consent and privacy when taking photos. Get staff approval before filming or streaming.\n- Keep bags compact, look after your belongings, and clear up your rubbish. Ask staff about lost property.\n- Be considerate across language differences. Follow organizer guidance for private trades; arrangements remain the responsibility of those involved.",
+    "### Important rules\n- Registering means accepting the server and event rules. You must be at least 20 on the event day.\n- Fees are non-refundable after confirmation. Ask the organizer about questions or exceptional circumstances.\n\n### How to join\n- Select Join and submit the required answers.\n- Use My status to check confirmation or waitlist status and edit answers. Submitting does not always confirm a place.\n- Payment period: {payment_opens} – {payment_due}\n- {overdue_rule}\n- Additional recruitment opens: {additional_opens}\n\n### Cancellation\n- Select Cancel registration, then confirm on the next screen. Contact the organizer if you cannot complete the cancellation.\n\n### Conduct and practical notes\n- Respect people around you and follow staff instructions and venue policies, including smoking rules.\n- Check dietary and allergy accommodations with the organizer before registering.\n- Respect others' consent and privacy when taking photos. Get staff approval before filming or streaming.\n- Keep bags compact, look after your belongings, and clear up your rubbish. Ask staff about lost property.\n- Be considerate across language differences. Follow organizer guidance for private trades; arrangements remain the responsibility of those involved.",
   'panel_template.title': 'Panel text templates',
   'panel_template.ja': 'Japanese panel body',
   'panel_template.en': 'English panel body',
   'panel_template.help':
-    'Editable Markdown. Allowed variables: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}, {payment_opens}, {payment_due}, {additional_opens}. Lines are omitted when all variables on the line are empty. Private venue details stay hidden. Saving marks both templates reviewed.',
+    'Editable Markdown. Allowed variables: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}, {payment_opens}, {payment_due}, {overdue_rule}, {additional_opens}. Lines are omitted when all variables on the line are empty. Private venue details stay hidden. Saving marks both templates reviewed.',
   'panel_template.unknown':
-    'Unknown template variable. Allowed: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}, {payment_opens}, {payment_due}, {additional_opens}.',
+    'Unknown template variable. Allowed: {title}, {date}, {start}, {end}, {venue}, {fee}, {capacity}, {deadline}, {payment_opens}, {payment_due}, {overdue_rule}, {additional_opens}.',
   'panel_template.save': 'Save and mark templates reviewed',
   'panel_template.saved': 'Panel templates saved.',
   'panel_template.truncated': 'Text shortened. Ask the organizer for the complete event rules.',
@@ -742,6 +778,8 @@ export const en = {
   'event.validation_datetime': 'Enter a valid date and time.',
   'event.validation_capacity': 'Enter a whole number greater than zero, or leave it blank.',
   'event.error_validation': 'Check the event details and try again.',
+  'event.error_overdue_tightened':
+    'After payment requests exist, unpaid registrations cannot become cancellable earlier. Review the grace period and the payment deadline.',
   'event.error_payment_frozen':
     'Participants already have payments, so the payment mode, price and seat hold time cannot change.',
   'event.error_forbidden': 'You do not have permission to change this event.',

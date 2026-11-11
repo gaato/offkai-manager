@@ -1,5 +1,6 @@
 import { systemPaymentMethodMessageKey } from '$lib/shared/payment';
 import { formatMoney } from '$lib/shared/money';
+import { overduePolicyFromColumns, overdueReleasableAt } from '$lib/shared/overdue-policy';
 import type { events, paymentRequests } from '$lib/server/db/schema';
 import {
   ActionRowBuilder,
@@ -30,6 +31,18 @@ type PanelEvent = Omit<
   additionalOpensAt?: Date | null;
   priceMinor?: bigint;
 };
+/** The announced overdue rule; empty when the event has no scheduled payment deadline. */
+function overdueRule(
+  event: Pick<PanelEvent, 'paymentDueAt' | 'overdueRelease' | 'overdueGraceDays'>,
+  t: ReturnType<typeof translator>
+): string {
+  if (!event.paymentDueAt) return '';
+  const policy = overduePolicyFromColumns(event);
+  const release = time(overdueReleasableAt(event.paymentDueAt, policy), 'F');
+  return t(policy.kind === 'auto' ? 'payment.overdue_rule_auto' : 'payment.overdue_rule_manual', {
+    release
+  });
+}
 export const excerpt = (value: string, max: number): string =>
   value.length > max ? value.slice(0, max - 1) + '…' : value;
 const safe = (value: string, max: number) => excerpt(escapeMarkdown(value), max);
@@ -125,6 +138,7 @@ export function renderPanel(
     deadline: formatWallClock(event.registrationClosesAt, locale, zone),
     payment_opens: event.paymentOpensAt ? time(event.paymentOpensAt, 'F') : '',
     payment_due: event.paymentDueAt ? time(event.paymentDueAt, 'F') : '',
+    overdue_rule: overdueRule(event, t),
     additional_opens: event.additionalOpensAt ? time(event.additionalOpensAt, 'F') : ''
   });
   // Keep state and controls intact; only the organizer-authored body is shortened.
@@ -199,7 +213,8 @@ export function renderStatus(
                   t('payment.schedule_before_open', {
                     opens: time(event.paymentOpensAt, 'F'),
                     due: event.paymentDueAt ? time(event.paymentDueAt, 'F') : ''
-                  })
+                  }),
+                  overdueRule(event, t)
                 ]
               : [])
           ]
@@ -220,6 +235,15 @@ export function renderStatus(
             ),
             ...(payment.request.dueAt
               ? [t('payment.schedule_deadline', { due: time(payment.request.dueAt, 'F') })]
+              : []),
+            // Held seats pay within their hold; the deadline rule binds confirmed attendance.
+            ...(registration.status === 'confirmed' &&
+            ['pending', 'payment_pending'].includes(payment.request.status)
+              ? [
+                  schedule && event.paymentDueAt && schedule.now >= event.paymentDueAt
+                    ? `${t('payment.overdue_past_due')} ${overdueRule(event, t)}`
+                    : overdueRule(event, t)
+                ]
               : []),
             ...(registration.holdExpiresAt && registration.status === 'held'
               ? [t('payment.hold_countdown', { time: time(registration.holdExpiresAt, 'R') })]

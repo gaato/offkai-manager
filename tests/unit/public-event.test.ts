@@ -4,6 +4,8 @@ import { publicVenue, registrationAvailability } from '$lib/server/domain/regist
 
 const event = {
   paymentRequirement: 'none',
+  overdueRelease: 'auto',
+  overdueGraceDays: 0,
   platformFeeBps: 0,
   amountToCollectMinor: 0n,
   roundingUnit: 1,

@@ -13,6 +13,7 @@ import { EventError, updateSettings } from '$lib/server/domain/events';
 import { OrganizationError } from '$lib/server/domain/orgs';
 import { formatWallClockInput } from '$lib/server/time';
 import { registrationModeSchema, venueRevealSchema } from '$lib/shared/event';
+import { overduePolicyFromColumns } from '$lib/shared/overdue-policy';
 const datetimeLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 function settingsSchema(t: App.Locals['t']) {
   const datetime = z.string().regex(datetimeLocal, t('event.validation_datetime'));
@@ -49,7 +50,8 @@ function settingsSchema(t: App.Locals['t']) {
           dueRequired: t('payment.validation_due_required'),
           order: t('payment.validation_schedule_order'),
           additional: t('payment.validation_additional'),
-          pending: t('payment.validation_pending')
+          pending: t('payment.validation_pending'),
+          grace: t('payment.validation_grace')
         }
       )
     );
@@ -97,6 +99,8 @@ export const load: PageServerLoad = async (event) => {
         additionalOpensAt: item.additionalOpensAt
           ? formatWallClockInput(item.additionalOpensAt, config.time.zone)
           : '',
+        overdueRelease: overduePolicyFromColumns(item).kind,
+        overdueGraceDays: item.overdueGraceDays,
         manualCash:
           payments.methods.find((m) => m.label === 'payments.default_method.cash.label')?.enabled ??
           true,
@@ -153,15 +157,18 @@ export const actions: Actions = {
           ? 'payment.validation_past'
           : cause instanceof EventError && cause.code === 'payment_frozen'
             ? 'event.error_payment_frozen'
-            : cause instanceof EventError && cause.code === 'illegal_transition'
-              ? 'event.error_illegal_transition'
-              : cause instanceof EventError && cause.code === 'validation'
-                ? 'event.error_validation'
-                : cause instanceof OrganizationError && cause.code === 'forbidden'
-                  ? 'event.error_forbidden'
-                  : 'event.error_generic';
+            : cause instanceof EventError && cause.code === 'overdue_policy_tightened'
+              ? 'event.error_overdue_tightened'
+              : cause instanceof EventError && cause.code === 'illegal_transition'
+                ? 'event.error_illegal_transition'
+                : cause instanceof EventError && cause.code === 'validation'
+                  ? 'event.error_validation'
+                  : cause instanceof OrganizationError && cause.code === 'forbidden'
+                    ? 'event.error_forbidden'
+                    : 'event.error_generic';
       const status =
-        cause instanceof EventError && cause.code === 'payment_frozen'
+        cause instanceof EventError &&
+        (cause.code === 'payment_frozen' || cause.code === 'overdue_policy_tightened')
           ? 409
           : cause instanceof EventError && cause.code === 'validation'
             ? 400

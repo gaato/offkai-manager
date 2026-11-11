@@ -41,7 +41,8 @@ function newEventSchema(t: App.Locals['t']) {
           dueRequired: t('payment.validation_due_required'),
           order: t('payment.validation_schedule_order'),
           additional: t('payment.validation_additional'),
-          pending: t('payment.validation_pending')
+          pending: t('payment.validation_pending'),
+          grace: t('payment.validation_grace')
         }
       )
     );
@@ -74,6 +75,8 @@ export const load: PageServerLoad = async (event) => {
         paymentOpensAt: '',
         paymentDueAt: '',
         additionalOpensAt: '',
+        overdueRelease: 'auto' as const,
+        overdueGraceDays: 0,
         startsAt: formatWallClockInput(Date.now() + 24 * 60 * 60 * 1_000, config.time.zone),
         registrationMode: '' as const
       },

@@ -202,3 +202,30 @@ it.each([
     }
   }
 );
+it('delivers a deadline notice once per deadline, so an extended deadline can notify again', async () => {
+  const fixture = await paidEvent(client, 'pay_later', 2);
+  const registration = await fixture.join();
+  const { rest } = recordingRest();
+  const deliver = async (campaign: string) => {
+    fixedClock.advance(defaultTuning.OFFKAI_NOTIFICATION_DM_INTERVAL_MS);
+    await deliverNotification(
+      client,
+      rest,
+      { registration_id: registration.id, kind: 'payment_past_due_manual', campaign_id: campaign },
+      fixedClock,
+      defaultTuning
+    );
+  };
+  const sent = () =>
+    client.db
+      .select()
+      .from(notificationDeliveries)
+      .all()
+      .filter((row) => row.kind === 'payment_past_due_manual' && row.result === 'sent');
+  const first = crypto.randomUUID();
+  await deliver(first);
+  await deliver(first);
+  expect(sent()).toHaveLength(1);
+  await deliver(crypto.randomUUID());
+  expect(sent()).toHaveLength(2);
+});

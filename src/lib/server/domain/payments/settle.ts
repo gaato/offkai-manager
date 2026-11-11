@@ -1,5 +1,5 @@
 import { completeAttendancePayment } from './completion';
-import { promoteOldestWaitlisted } from '../registrations/promotion';
+import { afterSeatFreed } from '../registrations/promotion';
 import { enqueuePanelRefresh, enqueueRoleSync } from '../discord/outbox';
 import { enqueueNotification } from '../notifications/outbox';
 import { systemClock, type Clock } from '$lib/server/clock';
@@ -241,22 +241,12 @@ function settlePaymentRequest(
     if (registration.status === 'held') {
       enqueueRoleSync(tx, request.eventId, registration.id, clock);
       enqueueNotification(tx, registration.id, 'hold_expired', clock);
-      if (
-        event.registrationMode === 'auto_confirm' &&
-        !event.cancelledAt &&
-        !event.archivedAt &&
-        clock.now() < event.startsAt
-      )
-        promoteOldestWaitlisted(
-          tx,
-          {
-            eventId: event.id,
-            capacity: event.capacity,
-            actorUserId: registration.userId,
-            reason: 'late payment after hold release'
-          },
-          clock
-        );
+      afterSeatFreed(
+        tx,
+        event,
+        { actorUserId: registration.userId, reason: 'late payment after hold release' },
+        clock
+      );
     }
   }
   if (!conflict) {

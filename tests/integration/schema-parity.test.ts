@@ -176,6 +176,11 @@ const checkFragments: Readonly<Record<string, readonly string[]>> = {
   ],
   events_venue_reveal_check: ['venue_reveal', 'public', 'confirmed'],
   events_registration_mode_check: ['registration_mode', 'auto_confirm', 'approval'],
+  events_overdue_policy_check: [
+    'overdue_releasein',
+    "'auto','manual'",
+    'overdue_grace_daysbetween0and30'
+  ],
   event_form_fields_field_key_check: ['length(field_key)>0'],
   event_form_fields_label_check: ['length(label)>0'],
   event_form_fields_field_type_check: [

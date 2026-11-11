@@ -56,13 +56,16 @@ export function renderDoorCard(card: DoorCard, locale: Locale) {
   );
 }
 export function renderReceptionStatus(
-  status: Omit<ReturnType<typeof receptionStatus>, 'pricePending'> & { pricePending?: boolean },
+  status: Omit<ReturnType<typeof receptionStatus>, 'pricePending' | 'overdue'> & {
+    pricePending?: boolean;
+    overdue?: number;
+  },
   locale: Locale,
   baseUrl: string
 ) {
   const t = translator(locale);
   return ephemeralCard(
-    `# ${safe(status.event.title, 250)}\n${t('door.status', { confirmed: status.confirmed, capacity: status.event.capacity ?? t('event.capacity_unlimited'), held: status.held, waitlisted: status.waitlisted, unpaid: status.unpaid, total: status.totals.map(([currency, n]) => formatMoney(n, currency, locale)).join(', ') || formatMoney(0n, 'JPY', locale), checked: status.checkedIn, unreachable: status.unreachable })}${status.pricePending ? `\n\n⚠️ ${t('door.price_pending')}` : ''}`,
+    `# ${safe(status.event.title, 250)}\n${t('door.status', { confirmed: status.confirmed, capacity: status.event.capacity ?? t('event.capacity_unlimited'), held: status.held, waitlisted: status.waitlisted, unpaid: status.unpaid, total: status.totals.map(([currency, n]) => formatMoney(n, currency, locale)).join(', ') || formatMoney(0n, 'JPY', locale), checked: status.checkedIn, unreachable: status.unreachable })}${status.pricePending ? `\n\n⚠️ ${t('door.price_pending')}` : ''}${status.overdue ? `\n\n⚠️ ${t('door.overdue', { count: status.overdue })}` : ''}`,
     [
       new ButtonBuilder()
         .setStyle(5)

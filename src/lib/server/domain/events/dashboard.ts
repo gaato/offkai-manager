@@ -10,6 +10,9 @@ import {
   stripeConnectAccounts
 } from '$lib/server/db/schema';
 import { authorizeOrganizationRole } from '$lib/server/domain/orgs';
+import { systemClock, type Clock } from '$lib/server/clock';
+import { overduePolicyFromColumns } from '$lib/shared/overdue-policy';
+import { countOverdue } from '../payments/overdue';
 import { EventError } from './errors';
 
 export function preparationChecklist(input: {
@@ -51,7 +54,12 @@ export function preparationChecklist(input: {
     { key: 'event.setup_posted' as const, done: input.panelPosted, anchor: 'panel-posting' }
   ];
 }
-export function getEventDashboard(client: DatabaseClient, actorUserId: string, eventId: string) {
+export function getEventDashboard(
+  client: DatabaseClient,
+  actorUserId: string,
+  eventId: string,
+  clock: Clock = systemClock
+) {
   return read(client, (tx) => {
     const event = tx.select().from(events).where(eq(events.id, eventId)).get();
     if (!event) throw new EventError('not_found', 'event not found');
@@ -115,6 +123,8 @@ export function getEventDashboard(client: DatabaseClient, actorUserId: string, e
         opensAt: event.paymentOpensAt,
         dueAt: event.paymentDueAt,
         additionalOpensAt: event.additionalOpensAt,
+        overduePolicy: overduePolicyFromColumns(event),
+        overdueCount: event.paymentDueAt ? countOverdue(tx, eventId, clock.now()) : 0,
         pendingPrice:
           event.paymentRequirement === 'pay_later' &&
           event.paymentOpensAt !== null &&

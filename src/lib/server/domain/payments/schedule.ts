@@ -1,28 +1,26 @@
 import { and, eq, inArray, isNull, lte } from 'drizzle-orm';
 import type { Clock } from '$lib/server/clock';
 import type { DatabaseTransaction } from '$lib/server/db/client';
-import {
-  checkinRecords,
-  collections,
-  events,
-  paymentRequests,
-  registrations
-} from '$lib/server/db/schema';
+import { collections, events, paymentRequests, registrations } from '$lib/server/db/schema';
+import { overduePolicyFromColumns, overdueReleasableAt } from '$lib/shared/overdue-policy';
 import { appendAudit } from '../audit';
 import { enqueueNotification } from '../notifications/outbox';
-import { applyRegistrationEffects, decideRegistration } from '../registrations/lifecycle';
 import { openMainCollectionInTransaction } from './collections';
-import { cancelPaymentRequestsForRegistration } from './requests';
+import { releaseOverdueRegistration, selectOverdue } from './overdue';
 
-/** Runs payment opening, one-off reminders, and overdue release inside the worker transaction. */
+/**
+ * Runs payment opening, one-off reminders, the past-due notice and the overdue release that the
+ * event's policy announces, inside the worker transaction.
+ */
 export function tickPaymentSchedule(
   tx: DatabaseTransaction,
   now: Date,
   reminderLeadHours: number,
   clock: Clock
-): { opened: number; reminded: number; overdue: number } {
+): { opened: number; reminded: number; pastDue: number; overdue: number } {
   let opened = 0;
   let reminded = 0;
+  let pastDue = 0;
   let overdue = 0;
 
   const scheduled = tx
@@ -102,66 +100,37 @@ export function tickPaymentSchedule(
       .set({ remindedAt: now, updatedAt: now })
       .where(and(eq(paymentRequests.id, request.id), isNull(paymentRequests.remindedAt)))
       .run();
-    enqueueNotification(tx, request.registrationId, 'payment_due_soon', clock);
+    enqueueNotification(tx, request.registrationId, 'payment_due_soon', clock, {
+      perDeadline: true
+    });
     reminded++;
   }
 
-  const overdueRows = tx
-    .select({ request: paymentRequests, registration: registrations, event: events })
-    .from(paymentRequests)
-    .innerJoin(registrations, eq(registrations.id, paymentRequests.registrationId))
-    .innerJoin(events, eq(events.id, paymentRequests.eventId))
-    .where(
-      and(
-        eq(registrations.status, 'confirmed'),
-        inArray(paymentRequests.status, ['pending', 'payment_pending']),
-        isNull(events.cancelledAt),
-        isNull(events.archivedAt),
-        lte(events.paymentDueAt, now)
-      )
-    )
-    .all();
-  for (const { request, registration, event } of overdueRows) {
-    const checkedIn = tx
-      .select({ id: checkinRecords.id })
-      .from(checkinRecords)
-      .where(
-        and(
-          eq(checkinRecords.registrationId, registration.id),
-          eq(checkinRecords.status, 'checked_in')
-        )
-      )
-      .get();
-    if (checkedIn) continue;
-    const decision = decideRegistration(
-      tx,
-      event,
-      { kind: 'confirmed' },
-      { type: 'paymentOverdue' },
-      clock,
-      registration.id
-    );
-    tx.update(registrations)
-      .set({ status: 'cancelled', updatedAt: now })
-      .where(and(eq(registrations.id, registration.id), eq(registrations.status, 'confirmed')))
+  // Past the deadline: tell each unpaid participant once what happens next. An immediate
+  // release needs no separate notice because `payment_overdue` follows in the same tick.
+  for (const row of selectOverdue(tx, now, { unnotified: true })) {
+    const policy = overduePolicyFromColumns(row.event);
+    if (policy.kind === 'auto' && policy.graceDays === 0) continue;
+    tx.update(paymentRequests)
+      .set({ overdueNotifiedAt: now, updatedAt: now })
+      .where(and(eq(paymentRequests.id, row.request.id), isNull(paymentRequests.overdueNotifiedAt)))
       .run();
-    cancelPaymentRequestsForRegistration(tx, registration.id, clock);
-    applyRegistrationEffects(
+    enqueueNotification(
       tx,
-      decision,
-      {
-        actorUserId: null,
-        eventId: event.id,
-        action: 'registration.payment_overdue',
-        targetType: 'registration',
-        targetId: registration.id,
-        before: { status: 'confirmed', paymentRequestId: request.id },
-        after: { status: 'cancelled' }
-      },
-      clock
+      row.registration.id,
+      policy.kind === 'manual' ? 'payment_past_due_manual' : 'payment_past_due',
+      clock,
+      { perDeadline: true }
     );
-    enqueueNotification(tx, registration.id, 'payment_overdue', clock);
+    pastDue++;
+  }
+
+  for (const row of selectOverdue(tx, now)) {
+    const policy = overduePolicyFromColumns(row.event);
+    if (policy.kind !== 'auto' || overdueReleasableAt(row.event.paymentDueAt!, policy) > now)
+      continue;
+    releaseOverdueRegistration(tx, row, null, clock);
     overdue++;
   }
-  return { opened, reminded, overdue };
+  return { opened, reminded, pastDue, overdue };
 }

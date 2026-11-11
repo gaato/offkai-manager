@@ -6,7 +6,7 @@ import { appendAudit } from '../audit';
 import { enqueuePanelRefresh, enqueueRoleSync } from '../discord/outbox';
 import { enqueueNotification } from '../notifications/outbox';
 import { cancelPaymentRequestsForRegistration } from './requests';
-import { promoteOldestWaitlisted } from '../registrations/promotion';
+import { afterSeatFreed } from '../registrations/promotion';
 import { tickPaymentSchedule } from './schedule';
 
 /** One synchronous, deterministic pass; callers supply time and own the timeout loop. */
@@ -47,22 +47,12 @@ export function tickOnce(client: DatabaseClient, now: Date, tuning: Tuning = def
           clock
         );
         const event = tx.select().from(events).where(eq(events.id, registration.eventId)).get()!;
-        if (
-          event.registrationMode === 'auto_confirm' &&
-          !event.cancelledAt &&
-          !event.archivedAt &&
-          now < event.startsAt
-        )
-          promoteOldestWaitlisted(
-            tx,
-            {
-              eventId: event.id,
-              capacity: event.capacity,
-              actorUserId: registration.userId,
-              reason: 'hold expired'
-            },
-            clock
-          );
+        afterSeatFreed(
+          tx,
+          event,
+          { actorUserId: registration.userId, reason: 'hold expired' },
+          clock
+        );
         released++;
       } else if (
         !registration.holdWarnedAt &&

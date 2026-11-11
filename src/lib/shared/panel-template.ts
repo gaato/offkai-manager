@@ -9,6 +9,7 @@ export const panelVariables = [
   'deadline',
   'payment_opens',
   'payment_due',
+  'overdue_rule',
   'additional_opens'
 ] as const;
 export type PanelVariable = (typeof panelVariables)[number];

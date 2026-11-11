@@ -10,6 +10,7 @@ import {
   eventDiscordIntegrations,
   eventFormFields,
   eventFormFieldOptions,
+  paymentRequests,
   registrations
 } from '$lib/server/db/schema';
 import { enqueueExistingPanelRefresh } from '$lib/server/domain/discord/outbox';
@@ -22,6 +23,16 @@ import {
   registrationModeSchema,
   venueRevealSchema
 } from '$lib/shared/event';
+import {
+  defaultOverduePolicy,
+  isLoosening,
+  OVERDUE_GRACE_DAYS_MAX,
+  overduePolicyColumns,
+  overduePolicyFromColumns,
+  overdueReleasableAt,
+  overdueReleaseSchema,
+  type OverduePolicy
+} from '$lib/shared/overdue-policy';
 import { translate } from '$lib/i18n';
 import { EventError } from './errors';
 import { generateEventSlug } from './slug';
@@ -50,6 +61,8 @@ export async function createEvent(
   const title = validateTitle(input.title);
   const startsAt = parseInputTime(input.startsAt, input.timeZone, 'start time');
   const paymentSchedule = parsePaymentSchedule(input, startsAt, clock.now());
+  const overduePolicy = parseOverduePolicy(input) ?? defaultOverduePolicy;
+  validateOverdueGrace(overduePolicy, paymentSchedule.paymentDueAt, startsAt);
   const capacity = validateCapacity(input.capacity ?? null);
   const registrationMode = parseRegistrationMode(input.registrationMode ?? 'auto_confirm');
   for (let attempt = 0; attempt < slugAttempts; attempt += 1) {
@@ -106,6 +119,7 @@ export async function createEvent(
             registrationOpensAt: clock.now(),
             registrationClosesAt: startsAt,
             ...paymentSchedule,
+            ...overduePolicyColumns(overduePolicy),
             venueReveal: source?.venueReveal ?? 'public',
             registrationMode: input.registrationMode ?? source?.registrationMode ?? registrationMode
           })
@@ -276,6 +290,29 @@ export async function updateSettings(
     ) {
       throw new EventError('validation', 'payment due time cannot be in the past');
     }
+    const currentPolicy = overduePolicyFromColumns(current);
+    const nextPolicy = parseOverduePolicy(input) ?? currentPolicy;
+    validateOverdueGrace(nextPolicy, values.paymentDueAt, values.startsAt);
+    // Participants are told the rule with their first payment request, so from then on neither
+    // the policy nor the deadline may make anyone releasable earlier. Without a previous deadline
+    // nothing about overdue release was announced, so there is nothing to compare against.
+    if (
+      current.paymentDueAt &&
+      values.paymentDueAt &&
+      !isLoosening(
+        { dueAt: current.paymentDueAt, policy: currentPolicy },
+        { dueAt: values.paymentDueAt, policy: nextPolicy }
+      ) &&
+      tx
+        .select({ id: paymentRequests.id })
+        .from(paymentRequests)
+        .where(eq(paymentRequests.eventId, current.id))
+        .get()
+    )
+      throw new EventError(
+        'overdue_policy_tightened',
+        'overdue policy can only become more lenient after payment requests exist'
+      );
     if (values.capacity !== null) {
       const occupied = tx
         .select({ n: count() })
@@ -300,7 +337,7 @@ export async function updateSettings(
       throw new EventError('disclosure_required', 'organizer disclosure required');
     const updatedRows = tx
       .update(events)
-      .set({ ...values, updatedAt: clock.now() })
+      .set({ ...values, ...overduePolicyColumns(nextPolicy), updatedAt: clock.now() })
       .where(eq(events.id, current.id))
       .returning()
       .all();
@@ -561,6 +598,25 @@ function parsePaymentSchedule(
   return { paymentOpensAt, paymentDueAt, additionalOpensAt };
 }
 
+function parseOverduePolicy(
+  input: Pick<CreateEventInput | UpdateEventSettingsInput, 'overdueRelease' | 'overdueGraceDays'>
+): OverduePolicy | undefined {
+  if (input.overdueRelease === undefined) return undefined;
+  const release = overdueReleaseSchema.safeParse(input.overdueRelease);
+  if (!release.success) throw new EventError('validation', 'overdue policy is invalid');
+  const graceDays = input.overdueGraceDays ?? 0;
+  if (!Number.isInteger(graceDays) || graceDays < 0 || graceDays > OVERDUE_GRACE_DAYS_MAX)
+    throw new EventError('validation', 'overdue grace days are out of range');
+  return { kind: release.data, graceDays };
+}
+
+/** A grace period lasting until the event would never let anyone release an unpaid seat. */
+function validateOverdueGrace(policy: OverduePolicy, dueAt: Date | null, startsAt: Date): void {
+  if (policy.graceDays === 0 || !dueAt) return;
+  if (overdueReleasableAt(dueAt, policy) >= startsAt)
+    throw new EventError('validation', 'overdue grace must end before the event starts');
+}
+
 function validateTitle(raw: string): string {
   const title = raw.trim();
   if (!title || title.length > 200) {
@@ -634,6 +690,8 @@ function settingsAuditSnapshot(event: EventSummary) {
     paymentOpensAt: event.paymentOpensAt?.toISOString() ?? null,
     paymentDueAt: event.paymentDueAt?.toISOString() ?? null,
     additionalOpensAt: event.additionalOpensAt?.toISOString() ?? null,
+    overdueRelease: event.overdueRelease,
+    overdueGraceDays: event.overdueGraceDays,
     registrationMode: event.registrationMode,
     discordPolicy: event.discordPolicy
   };

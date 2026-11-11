@@ -24,7 +24,7 @@ import {
 import { formFieldTypeSchema, type FormFieldType } from '$lib/shared/registration-form';
 import { registrationStatusSchema } from '$lib/shared/registration';
 import { RegistrationError } from './errors';
-import { promoteOldestWaitlisted } from './promotion';
+import { afterSeatFreed } from './promotion';
 import type { RegistrationSummary } from './service';
 
 export interface RegistrationAnswerView {
@@ -176,22 +176,14 @@ export async function withdrawRegistration(
       clock
     );
     cancelPaymentRequestsForRegistration(tx, current.id, clock);
-    let promotedRegistrationId: string | null = null;
-    if (
-      ['confirmed', 'held'].includes(current.status) &&
-      event.registrationMode === 'auto_confirm'
-    ) {
-      promotedRegistrationId = promoteOldestWaitlisted(
-        tx,
-        {
-          eventId: event.id,
-          capacity: event.capacity,
-          actorUserId: input.userId,
-          reason: 'vacancy after participant withdrawal'
-        },
-        clock
-      );
-    }
+    const promotedRegistrationId = ['confirmed', 'held'].includes(current.status)
+      ? afterSeatFreed(
+          tx,
+          event,
+          { actorUserId: input.userId, reason: 'vacancy after participant withdrawal' },
+          clock
+        )
+      : null;
     return { registration: withdrawn, promotedRegistrationId };
   });
 }

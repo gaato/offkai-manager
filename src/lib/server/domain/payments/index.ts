@@ -21,6 +21,8 @@ export * from './settle';
 
 export * from './schedule';
 
+export * from './overdue';
+
 export {
   CollectionError,
   ConnectError,

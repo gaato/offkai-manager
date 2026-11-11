@@ -1,5 +1,15 @@
 import { escapeMarkdown } from '@discordjs/formatters';
-import type { PanelVariable } from '$lib/shared/panel-template';
+import { panelVariables, type PanelVariable } from '$lib/shared/panel-template';
+
+// Built from the shared list so a new variable cannot be accepted by validation but left raw here.
+const variablePattern = () => new RegExp(`\\{(${panelVariables.join('|')})\\}`, 'g');
+// Generated internally (Discord timestamps and catalog text), never organizer input.
+const trustedVariables: readonly PanelVariable[] = [
+  'payment_opens',
+  'payment_due',
+  'overdue_rule',
+  'additional_opens'
+];
 
 /** Replace once: organizer-controlled values cannot inject another variable or mention. */
 export function renderPanelTemplate(
@@ -10,27 +20,18 @@ export function renderPanelTemplate(
   return template
     .split(/\r?\n/)
     .filter((line) => {
-      const variables = [
-        ...line.matchAll(
-          /\{(title|date|start|end|venue|fee|capacity|deadline|payment_opens|payment_due|additional_opens)\}/g
-        )
-      ];
+      const variables = [...line.matchAll(variablePattern())];
       return (
         variables.length === 0 ||
         variables.some((match) => value(match[1] as PanelVariable).trim() !== '')
       );
     })
     .map((line) =>
-      line.replace(
-        /\{(title|date|start|end|venue|fee|capacity|deadline|payment_opens|payment_due|additional_opens)\}/g,
-        (_, key: PanelVariable) => {
-          const substituted = value(key);
-          // These values are generated internally as Discord timestamps, not organizer input.
-          if (['payment_opens', 'payment_due', 'additional_opens'].includes(key))
-            return substituted;
-          return escapeMarkdown(substituted).replace(/@/g, '@\u200b').replace(/</g, '<\u200b');
-        }
-      )
+      line.replace(variablePattern(), (_, key: PanelVariable) => {
+        const substituted = value(key);
+        if (trustedVariables.includes(key)) return substituted;
+        return escapeMarkdown(substituted).replace(/@/g, '@\u200b').replace(/</g, '<\u200b');
+      })
     )
     .join('\n');
 }

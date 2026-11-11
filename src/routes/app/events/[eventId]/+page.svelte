@@ -114,6 +114,31 @@
                 })}
               </p>
             {/if}
+            <p>
+              {t(
+                data.dashboard.paymentSchedule.overduePolicy.kind === 'manual'
+                  ? 'payment.overdue_summary_manual'
+                  : 'payment.overdue_summary_auto',
+                { release: data.formattedPaymentSchedule.overdueReleaseAt }
+              )}
+            </p>
+            {#if data.dashboard.paymentSchedule.overdueCount > 0}
+              <div role="status" class="alert alert-warning flex flex-wrap gap-3">
+                <span
+                  >{t('payment.overdue_count', {
+                    count: data.dashboard.paymentSchedule.overdueCount
+                  })}</span
+                >
+                {#if data.dashboard.paymentSchedule.overduePolicy.kind === 'manual' && data.capabilities.canManageEvent && !data.event.archivedAt}
+                  <a
+                    class="btn btn-sm"
+                    href={resolve('/app/events/[eventId]/release-overdue', {
+                      eventId: data.event.id
+                    })}>{t('payment.overdue_release_link')}</a
+                  >
+                {/if}
+              </div>
+            {/if}
             {#if data.dashboard.paymentSchedule.pendingPrice}
               <div role="alert" class="alert alert-warning">{t('event.setup_payment_price')}</div>
             {/if}

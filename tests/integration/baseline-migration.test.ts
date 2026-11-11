@@ -43,7 +43,29 @@ it('initializes the baseline and safely reruns it without changing history or pe
     runMigrations(client);
     expect(
       client.db.$client.prepare('select count(*) as count from __drizzle_migrations').get()
-    ).toEqual({ count: 2 });
+    ).toEqual({ count: 3 });
+    // Existing events keep the 0.2.0 behavior: release unpaid seats at the deadline.
+    expect(
+      client.db
+        .select()
+        .from(events)
+        .all()
+        .map((row) => [row.overdueRelease, row.overdueGraceDays])
+    ).toEqual([
+      ['auto', 0],
+      ['auto', 0]
+    ]);
+    for (const [release, grace] of [
+      ['manual', 31],
+      ['auto', 31],
+      ['auto', -1],
+      ['later', 0]
+    ] as const)
+      expect(() =>
+        client.db.$client
+          .prepare('update events set overdue_release = ?, overdue_grace_days = ? where id = ?')
+          .run(release, grace, 'event-a')
+      ).toThrow(/CHECK constraint failed/);
     expect(
       client.db
         .select()

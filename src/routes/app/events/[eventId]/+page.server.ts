@@ -14,6 +14,7 @@ import {
 import { getEventDashboard } from '$lib/server/domain/events/dashboard';
 import { OrganizationError } from '$lib/server/domain/orgs';
 import { formatWallClock } from '$lib/server/time';
+import { overdueReleasableAt } from '$lib/shared/overdue-policy';
 
 export const load: PageServerLoad = async (event) => {
   const data = await event.parent();
@@ -22,6 +23,9 @@ export const load: PageServerLoad = async (event) => {
   if (!eventId.success) throw error(404);
   const config = getConfig();
   const dashboard = getEventDashboard(getDatabaseClient(config), session.userId, eventId.data);
+  const releaseAt = dashboard.paymentSchedule.dueAt
+    ? overdueReleasableAt(dashboard.paymentSchedule.dueAt, dashboard.paymentSchedule.overduePolicy)
+    : null;
   return {
     dashboard,
     formattedPaymentSchedule: {
@@ -37,7 +41,8 @@ export const load: PageServerLoad = async (event) => {
             data.locale,
             config.time.zone
           )
-        : ''
+        : '',
+      overdueReleaseAt: releaseAt ? formatWallClock(releaseAt, data.locale, config.time.zone) : ''
     },
     discordSettings: await getEventDiscordSettings(
       getDatabaseClient(config),

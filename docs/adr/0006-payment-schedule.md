@@ -1,6 +1,7 @@
 # Scheduled pay-later collection and additional recruitment
 
-Status: accepted.
+Status: accepted; the overdue release and its waitlist handling are superseded by
+[ADR 0007](0007-overdue-policy.md).
 
 Meetups often confirm participants months before collecting money. Collecting at registration
 creates avoidable refunds, while retaining unpaid seats after the deadline prevents organizers

@@ -13,7 +13,8 @@ import {
 } from '$lib/server/db/schema';
 import { authorizeDoorStaff, type DoorActor } from '../checkin/access';
 import { appendAudit } from '../audit';
-import type { Clock } from '$lib/server/clock';
+import { systemClock, type Clock } from '$lib/server/clock';
+import { countOverdue } from '../payments/overdue';
 import { OrganizationError } from '../orgs/errors';
 
 export function unpaidRecipients(tx: DatabaseTransaction, eventId: string) {
@@ -34,7 +35,12 @@ export function unpaidRecipients(tx: DatabaseTransaction, eventId: string) {
     )
     .all();
 }
-export function receptionStatus(client: DatabaseClient, eventId: string, actor: DoorActor) {
+export function receptionStatus(
+  client: DatabaseClient,
+  eventId: string,
+  actor: DoorActor,
+  clock: Clock = systemClock
+) {
   return read(client, (tx) => {
     const event = authorizeDoorStaff(tx, eventId, actor, true);
     const rows = tx.select().from(registrations).where(eq(registrations.eventId, eventId)).all();
@@ -73,6 +79,7 @@ export function receptionStatus(client: DatabaseClient, eventId: string, actor: 
         .where(and(eq(checkinRecords.eventId, eventId), eq(checkinRecords.status, 'checked_in')))
         .all().length,
       unreachable,
+      overdue: event.paymentDueAt ? countOverdue(tx, eventId, clock.now()) : 0,
       pricePending:
         event.paymentRequirement === 'pay_later' &&
         event.paymentOpensAt !== null &&

@@ -6,16 +6,46 @@ import { events, registrations } from '$lib/server/db/schema';
 import { decideRegistration, applyRegistrationEffects } from './lifecycle';
 import { ensurePaymentRequestsForRegistration } from '$lib/server/domain/payments/requests';
 
+/**
+ * The single vacancy rule: every path that frees a confirmed or held seat calls this, whatever
+ * the reason (withdrawal, organizer cancellation, hold expiry, late payment, overdue release).
+ * Auto-confirm events hand the seat to the oldest waiter until the event starts; approval events
+ * leave it to organizers. Without waiters the seat simply reopens to the normal or additional
+ * recruitment window, so new applicants never overtake people already waiting.
+ */
+export function afterSeatFreed(
+  tx: DatabaseTransaction,
+  event: Pick<
+    typeof events.$inferSelect,
+    'id' | 'capacity' | 'registrationMode' | 'cancelledAt' | 'archivedAt' | 'startsAt'
+  >,
+  input: { actorUserId: string | null; reason: string },
+  clock: Clock = systemClock
+): string | null {
+  if (
+    event.registrationMode !== 'auto_confirm' ||
+    event.cancelledAt ||
+    event.archivedAt ||
+    clock.now() >= event.startsAt
+  )
+    return null;
+  return promoteOldestWaitlisted(
+    tx,
+    { eventId: event.id, capacity: event.capacity, ...input },
+    clock
+  );
+}
+
 /** Promotes the oldest waiter inside the caller's write transaction if capacity permits. */
-export function promoteOldestWaitlisted(
+function promoteOldestWaitlisted(
   tx: DatabaseTransaction,
   input: {
     eventId: string;
     capacity: number | null;
-    actorUserId: string;
+    actorUserId: string | null;
     reason: string;
   },
-  clock: Clock = systemClock
+  clock: Clock
 ): string | null {
   const confirmedRows = tx
     .select({ value: count(registrations.id) })

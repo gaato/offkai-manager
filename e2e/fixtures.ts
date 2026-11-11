@@ -60,8 +60,11 @@ export const devStripeOrganizations = {
 
 export const paymentEventFixtures = {
   draft: 'Payments Draft Event',
-  frozen: 'Payments Frozen Event'
+  frozen: 'Payments Frozen Event',
+  overdue: 'Overdue Manual Event'
 } as const;
+
+export const overdueParticipant = 'Overdue Participant';
 
 export const participantFixtures = {
   applied: {

@@ -4,6 +4,7 @@
   import { grossUp, feeBreakdown } from '$lib/shared/fees';
   import { formatMoney } from '$lib/shared/money';
   import type { EventPaymentForm } from '$lib/shared/event-payment-form';
+  import { OVERDUE_GRACE_DAYS_MAX, overdueReleases } from '$lib/shared/overdue-policy';
   let {
     values = $bindable(),
     locale,
@@ -182,6 +183,42 @@
       />
       {#if errors.additionalOpensAt}<p role="alert">{errors.additionalOpensAt[0]}</p>{/if}
     </div>
+    <fieldset
+      class="fieldset grid gap-2"
+      aria-describedby={frozen ? 'overdue-help overdue-locked-note' : 'overdue-help'}
+    >
+      <legend class="fieldset-legend">{t('payment.overdue_title')}</legend>
+      {#each overdueReleases as release (release)}
+        <label for={`overdueRelease-${release}`} class="label min-h-12 gap-3"
+          ><input
+            id={`overdueRelease-${release}`}
+            aria-labelledby={`overdueRelease-label-${release}`}
+            class="radio"
+            type="radio"
+            name="overdueRelease"
+            value={release}
+            bind:group={values.overdueRelease}
+          /><span id={`overdueRelease-label-${release}`}
+            >{t(release === 'auto' ? 'payment.overdue_auto' : 'payment.overdue_manual')}</span
+          ></label
+        >
+      {/each}
+      <label class="label" for="overdueGraceDays">{t('payment.overdue_grace_days')}</label>
+      <input
+        class="input w-full"
+        id="overdueGraceDays"
+        name="overdueGraceDays"
+        type="number"
+        min="0"
+        max={OVERDUE_GRACE_DAYS_MAX}
+        step="1"
+        bind:value={values.overdueGraceDays}
+        aria-invalid={errors.overdueGraceDays ? 'true' : undefined}
+      />
+      {#if errors.overdueGraceDays}<p role="alert">{errors.overdueGraceDays[0]}</p>{/if}
+      <p id="overdue-help">{t('payment.overdue_help')}</p>
+      {#if frozen}<p id="overdue-locked-note">{t('payment.overdue_locked_note')}</p>{/if}
+    </fieldset>
   </fieldset>
   <fieldset class="fieldset">
     <legend class="fieldset-legend">{t('payment.manual_methods')}</legend>

@@ -24,6 +24,7 @@ export const ja = {
   'door.status':
     '参加確定: {confirmed}/{capacity}\n仮押さえ: {held}\nキャンセル待ち: {waitlisted}\n未払い: {unpaid}\n支払済合計: {total}\n受付済: {checked}\n連絡不可: {unreachable}',
   'door.price_pending': '参加費未定：支払い開始までに参加費を決めてください。',
+  'door.overdue': '期限切れの未払い：{count}人',
   'door.remind_preview':
     '支払いのご案内を送信しますか？\n仮押さえ: {held}、参加確定: {confirmed}\n日本語: {ja}、英語: {en}\n確定時・配信時にも未払いの方だけに送信します。',
   'door.remind_confirm': '案内を送信する',
@@ -32,6 +33,10 @@ export const ja = {
     '参加費のお支払いについてのご案内です。イベントのパネルからお支払い方法をご確認ください。お支払い直後の行き違いでしたらご容赦ください。',
   'notify.payment_open': '参加費のお支払いを開始しました。期限までに参加状況からお支払いください。',
   'notify.payment_due_soon': '参加費のお支払い期限が近づいています。参加状況からお支払いください。',
+  'notify.payment_past_due':
+    '参加費のお支払い期限を過ぎました。参加状況からお支払いください。参加状況に表示されている日時までにお支払いを確認できない場合、参加登録を取り消します。',
+  'notify.payment_past_due_manual':
+    '参加費のお支払い期限を過ぎました。お早めに参加状況からお支払いいただくか、主催者へご連絡ください。',
   'notify.payment_overdue':
     '期限までに参加費を確認できなかったため、参加登録をキャンセルしました。',
   'roster.title': 'オフライン受付名簿',
@@ -115,6 +120,37 @@ export const ja = {
   'payment.validation_additional': '追加募集は支払い開始以降に設定してください。',
   'payment.validation_pending': '参加費未定は、支払い日程を設定した後払いでのみ選べます。',
   'payment.validation_past': '支払い期限を過去には設定できません。',
+  'payment.validation_grace': '猶予は開催の開始より前に終わるようにしてください。',
+  'payment.overdue_title': '期限を過ぎた未払い',
+  'payment.overdue_auto': '自動で取り消す',
+  'payment.overdue_manual': '主催者が判断する',
+  'payment.overdue_grace_days': '取り消せるようになるまでの猶予（日）',
+  'payment.overdue_help':
+    '期限から猶予の日数が過ぎるまでは、自動でも主催者の判断でも取り消しません。猶予0日の自動は期限と同時に取り消します。期限を過ぎると本人に知らせ、その後も支払いを受け付けます。空いた席は補欠の古い順に回ります。',
+  'payment.overdue_locked_note':
+    '支払い依頼を出した後は、取り消せるようになる日時を早める変更（猶予を縮める・期限を早める・「主催者が判断する」から自動に戻す）はできません。',
+  'payment.overdue_rule_auto':
+    '{release} までにお支払いを確認できない場合、参加登録を取り消します。',
+  'payment.overdue_rule_manual':
+    '{release} 以降、お支払いを確認できない場合は主催者の判断で参加登録を取り消すことがあります。',
+  'payment.overdue_past_due': 'お支払い期限を過ぎています。',
+  'payment.overdue_summary_auto': '期限を過ぎた未払い：{release} に自動で取り消し',
+  'payment.overdue_summary_manual': '期限を過ぎた未払い：{release} 以降、主催者が判断',
+  'payment.overdue_release_not_yet':
+    '{release} までは取り消せません。参加者にそう案内しているためです。',
+  'payment.overdue_count': '期限切れの未払い：{count}人',
+  'payment.overdue_release_link': '期限切れの未払いを取り消す',
+  'payment.overdue_release_title': '期限切れの未払いを取り消す',
+  'payment.overdue_release_question_one':
+    '支払い期限を過ぎて未払いの次の参加者の参加登録を取り消します。本人に通知が届き、補欠がいれば古い順に繰り上がります。この操作は元に戻せません。',
+  'payment.overdue_release_question_other':
+    '支払い期限を過ぎて未払いの次の {count} 人の参加登録を取り消します。本人に通知が届き、補欠がいれば古い順に繰り上がります。この操作は元に戻せません。',
+  'payment.overdue_release_submit_one': '{count}人を取り消す',
+  'payment.overdue_release_submit_other': '{count}人を取り消す',
+  'payment.overdue_release_paying_note': '決済画面を開いて支払い中の人は、この一覧に含めません。',
+  'payment.overdue_release_changed':
+    '確認画面を開いた後で対象者が変わりました。新しい一覧を確認してから、もう一度操作してください。',
+  'payment.overdue_release_none': '期限切れの未払いはいません。',
   'payment.amount_to_collect': '1人あたりの受取希望額（円）',
   'payment.rounding_unit': '{unit}円単位',
   'payment.rounding': '参加費の切り上げ単位（円）',
@@ -185,14 +221,14 @@ export const ja = {
   'activity.action.discord.guild_name_refresh': 'Discordサーバー名を更新',
 
   'panel_template.default':
-    '### 重要なルール\n- 申込みによりサーバーとイベントのルールを受け入れます。参加対象は、開催当日に20歳以上の方です。\n- 参加確定後の返金はできません。不明点や特別な事情は主催者に相談してください。\n\n### 参加方法\n- 「参加する」から必要事項を送信してください。\n- 「参加状況」で参加確定やキャンセル待ちなどの状態を確認し、必要に応じて回答を編集してください。送信だけで参加確定になるとは限りません。\n- 支払い期間：{payment_opens} ～ {payment_due}\n- 追加募集の開始：{additional_opens}\n\n### キャンセル\n- 「参加を取り消す」を選び、次の確認画面で確定してください。操作できない場合は主催者に連絡してください。\n\n### マナー・注意事項\n- 周囲の人を尊重し、スタッフの案内や会場の喫煙ルールを守ってください。\n- 食事の制約やアレルギーへの対応は、申込み前に主催者へ確認してください。\n- 撮影時は周囲の同意とプライバシーに配慮し、動画撮影・配信には事前にスタッフの許可を得てください。\n- 荷物はコンパクトにまとめ、持ち物とゴミは各自で管理してください。忘れ物はスタッフにお問い合わせください。\n- 言語の違いに配慮してください。個人間の取引は主催者の案内に従い、当事者同士で責任を持って行ってください。',
+    '### 重要なルール\n- 申込みによりサーバーとイベントのルールを受け入れます。参加対象は、開催当日に20歳以上の方です。\n- 参加確定後の返金はできません。不明点や特別な事情は主催者に相談してください。\n\n### 参加方法\n- 「参加する」から必要事項を送信してください。\n- 「参加状況」で参加確定やキャンセル待ちなどの状態を確認し、必要に応じて回答を編集してください。送信だけで参加確定になるとは限りません。\n- 支払い期間：{payment_opens} ～ {payment_due}\n- {overdue_rule}\n- 追加募集の開始：{additional_opens}\n\n### キャンセル\n- 「参加を取り消す」を選び、次の確認画面で確定してください。操作できない場合は主催者に連絡してください。\n\n### マナー・注意事項\n- 周囲の人を尊重し、スタッフの案内や会場の喫煙ルールを守ってください。\n- 食事の制約やアレルギーへの対応は、申込み前に主催者へ確認してください。\n- 撮影時は周囲の同意とプライバシーに配慮し、動画撮影・配信には事前にスタッフの許可を得てください。\n- 荷物はコンパクトにまとめ、持ち物とゴミは各自で管理してください。忘れ物はスタッフにお問い合わせください。\n- 言語の違いに配慮してください。個人間の取引は主催者の案内に従い、当事者同士で責任を持って行ってください。',
   'panel_template.title': 'パネル本文テンプレート',
   'panel_template.ja': '日本語のパネル本文',
   'panel_template.en': '英語のパネル本文',
   'panel_template.help':
-    'Markdownで編集できます。使用可能な変数: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}、{payment_opens}、{payment_due}、{additional_opens}。その行の変数がすべて空欄の場合、行全体を省略します。非公開の会場情報は表示されません。保存すると両言語を確認済みにします。',
+    'Markdownで編集できます。使用可能な変数: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}、{payment_opens}、{payment_due}、{overdue_rule}、{additional_opens}。その行の変数がすべて空欄の場合、行全体を省略します。非公開の会場情報は表示されません。保存すると両言語を確認済みにします。',
   'panel_template.unknown':
-    '不明なテンプレート変数です。使用可能: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}、{payment_opens}、{payment_due}、{additional_opens}。',
+    '不明なテンプレート変数です。使用可能: {title}、{date}、{start}、{end}、{venue}、{fee}、{capacity}、{deadline}、{payment_opens}、{payment_due}、{overdue_rule}、{additional_opens}。',
   'panel_template.save': 'テンプレートを保存して確認済みにする',
   'panel_template.saved': 'パネルテンプレートを保存しました。',
   'panel_template.truncated': '本文を省略しています。ルールの全文は主催者に確認してください。',
@@ -732,6 +768,8 @@ export const ja = {
   'event.validation_datetime': '有効な日時を入力してください。',
   'event.validation_capacity': '1以上の整数を入力するか、空欄にしてください。',
   'event.error_validation': 'イベントの内容を確認して、もう一度お試しください。',
+  'event.error_overdue_tightened':
+    '支払い依頼を出した後は、未払いを取り消せるようになる日時を早める変更はできません。猶予と支払い期限を見直してください。',
   'event.error_payment_frozen':
     '参加者の支払いがすでに作られているため、支払い方法・参加費・席の保留時間は変更できません。',
   'event.error_forbidden': 'このイベントを変更する権限がありません。',

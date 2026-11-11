@@ -6,6 +6,7 @@ import type {
   VenueReveal
 } from '$lib/shared/event';
 import type { OrganizationRole } from '$lib/shared/organization';
+import type { OverdueRelease } from '$lib/shared/overdue-policy';
 
 export interface EventSummary {
   id: string;
@@ -30,6 +31,9 @@ export interface EventSummary {
   paymentOpensAt?: Date | null;
   paymentDueAt?: Date | null;
   additionalOpensAt?: Date | null;
+  /** Raw columns; read them through `overduePolicyFromColumns`. */
+  overdueRelease: string;
+  overdueGraceDays: number;
   platformFeeBps: number;
   amountToCollectMinor: bigint;
   roundingUnit: number;
@@ -58,6 +62,8 @@ export interface CreateEventInput extends EventPaymentInput {
   paymentOpensAt?: string;
   paymentDueAt?: string;
   additionalOpensAt?: string;
+  overdueRelease?: OverdueRelease;
+  overdueGraceDays?: number;
   capacity?: number | null;
   registrationMode?: RegistrationMode;
   copyFromEventId?: string;
@@ -82,6 +88,9 @@ export interface UpdateEventSettingsInput extends EventPaymentInput {
   paymentOpensAt?: string;
   paymentDueAt?: string;
   additionalOpensAt?: string;
+  /** Omitted keeps the event's current overdue policy. */
+  overdueRelease?: OverdueRelease;
+  overdueGraceDays?: number;
   registrationMode: RegistrationMode;
   discordPolicy?: DiscordPolicy;
   timeZone: string;

@@ -27,7 +27,7 @@ import {
   type RegistrationStatus
 } from '$lib/shared/registration';
 import { RegistrationError } from './errors';
-import { promoteOldestWaitlisted } from './promotion';
+import { afterSeatFreed } from './promotion';
 import type { RegistrationSummary } from './service';
 
 export type ParticipantStatusFilter = RegistrationStatus | 'all';
@@ -349,22 +349,13 @@ export async function changeRegistrationStatus(
     } else if (input.status === 'cancelled') {
       cancelPaymentRequestsForRegistration(tx, current.id, clock);
     }
-    if (
-      input.status === 'cancelled' &&
-      ['confirmed', 'held'].includes(currentStatus) &&
-      event.registrationMode === 'auto_confirm'
-    ) {
-      promoteOldestWaitlisted(
+    if (input.status === 'cancelled' && ['confirmed', 'held'].includes(currentStatus))
+      afterSeatFreed(
         tx,
-        {
-          eventId: event.id,
-          capacity: event.capacity,
-          actorUserId: input.actorUserId,
-          reason: 'vacancy after organizer cancellation'
-        },
+        event,
+        { actorUserId: input.actorUserId, reason: 'vacancy after organizer cancellation' },
         clock
       );
-    }
     return updated;
   });
 }

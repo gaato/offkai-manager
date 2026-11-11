@@ -202,14 +202,36 @@ and `/offkai status` keep the missing-fee warning visible until a draft collecti
 
 Keep the single application worker enabled. At opening it opens the draft collection, creates one
 request for every confirmed participant, and sends the localized payment-opening notification.
-It sends the one-off deadline reminder at `OFFKAI_PAYMENT_REMINDER_LEAD_HOURS`, then cancels unpaid,
-unchecked attendance at the deadline. Checked-in, paid, waived, and manually settled participants
-remain confirmed. A Checkout payment arriving after cancellation is retained for refund review.
+It sends the one-off deadline reminder at `OFFKAI_PAYMENT_REMINDER_LEAD_HOURS`. What happens after
+the deadline follows the event's "unpaid after the deadline" setting, which has two parts: a grace
+period of 0–30 days after the deadline, before which nobody is cancelled, and who cancels after it.
+
+- **Cancel automatically**: the worker cancels unpaid attendance when the grace period ends. With 0
+  days that is the deadline itself.
+- **Organizers decide**: nothing is cancelled automatically. The event dashboard and
+  `/offkai status` show the overdue count, and once the grace period has ended the dashboard links
+  to a confirmation page listing the overdue unpaid registrations it will cancel. If the list
+  changes before confirmation, nothing is cancelled and the page asks for a fresh review.
+  Participants paying in an open Checkout page are left out. Individual participants can still be
+  cancelled, waived or settled from the participant and payment pages.
+
+Unless the release is immediate, every unpaid participant is told once when the deadline passes;
+extending the deadline makes the reminder and this notice apply to the new deadline again.
+
+Checked-in, paid, waived, and manually settled participants are never cancelled. A Checkout
+payment arriving after cancellation is retained for refund review. Participants see the rule in
+the panel (the `{overdue_rule}` template variable) and in their status card. Once any payment
+request exists, nothing may make unpaid registrations cancellable earlier: not a shorter grace
+period, not an earlier deadline, and not a switch from "Organizers decide" back to automatic.
+
+Every freed seat goes to the oldest waitlisted participant on auto-confirm events, whatever freed
+it (withdrawal, organizer cancellation, hold expiry or the overdue rule), until the event starts.
+After payment opens, a promoted participant holds the seat and pays immediately. Only when the
+waitlist is empty does the seat reopen to new registrations.
 
 To run additional recruitment, set its opening time at or after payment opening and announce that
 time. The gap after normal registration closes remains closed. From the additional opening until
-the event starts, new admissions use held seats and immediate Checkout. Deadline cancellations do
-not promote the old waitlist, so those seats remain available for the announced additional round.
+the event starts, new admissions use held seats and immediate Checkout.
 
 ## Backups and restore
 

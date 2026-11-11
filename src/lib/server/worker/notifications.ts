@@ -61,7 +61,7 @@ export async function deliverNotification(
   );
   if (!row) return;
   const deliveryKind = payload.kind;
-  const campaignId = payload.kind === 'payment_reminder' ? (payload.campaign_id ?? '') : '';
+  const campaignId = payload.campaign_id ?? '';
   if (payload.kind === 'payment_reminder') {
     if (
       !payload.campaign_id ||
@@ -80,7 +80,12 @@ export async function deliverNotification(
     );
     if (!unpaid) return;
   }
-  if (payload.kind === 'payment_open' || payload.kind === 'payment_due_soon') {
+  if (
+    payload.kind === 'payment_open' ||
+    payload.kind === 'payment_due_soon' ||
+    payload.kind === 'payment_past_due' ||
+    payload.kind === 'payment_past_due_manual'
+  ) {
     if (!['held', 'confirmed'].includes(row.registration.status)) return;
     const unpaid = read(client, (tx) =>
       tx

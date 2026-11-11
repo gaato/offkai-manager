@@ -97,8 +97,17 @@ export function configureEventPayment(
       .set({ dueAt: event.paymentDueAt, updatedAt: clock.now() })
       .where(eq(collections.id, collection.id))
       .run();
+    // An extended deadline is a new deadline: the reminder and past-due notice apply to it again.
+    const extended =
+      event.paymentDueAt !== null &&
+      collection.dueAt !== null &&
+      event.paymentDueAt > collection.dueAt;
     tx.update(paymentRequests)
-      .set({ dueAt: event.paymentDueAt, updatedAt: clock.now() })
+      .set({
+        dueAt: event.paymentDueAt,
+        ...(extended ? { remindedAt: null, overdueNotifiedAt: null } : {}),
+        updatedAt: clock.now()
+      })
       .where(
         and(
           eq(paymentRequests.collectionId, collection.id),

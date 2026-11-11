@@ -97,7 +97,7 @@ export async function receptionCommand(
     }
     if (command === 'status')
       return renderReceptionStatus(
-        receptionStatus(client, eventId, actor),
+        receptionStatus(client, eventId, actor, clock),
         context.locale,
         dependencies.publicBaseUrl
       );

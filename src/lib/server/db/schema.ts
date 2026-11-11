@@ -155,6 +155,8 @@ export const events = sqliteTable(
     paymentOpensAt: integer('payment_opens_at', { mode: 'timestamp_ms' }),
     paymentDueAt: integer('payment_due_at', { mode: 'timestamp_ms' }),
     additionalOpensAt: integer('additional_opens_at', { mode: 'timestamp_ms' }),
+    overdueRelease: text('overdue_release').notNull().default('auto'),
+    overdueGraceDays: integer('overdue_grace_days').notNull().default(0),
     platformFeeBps: integer('platform_fee_bps').notNull().default(0),
     amountToCollectMinor: money('amount_to_collect_minor').default(sql`0`),
     roundingUnit: integer('rounding_unit').notNull().default(1),
@@ -196,6 +198,10 @@ export const events = sqliteTable(
     check(
       'events_registration_mode_check',
       sql`${table.registrationMode} in ('auto_confirm', 'approval')`
+    ),
+    check(
+      'events_overdue_policy_check',
+      sql`${table.overdueRelease} in ('auto', 'manual') and ${table.overdueGraceDays} between 0 and 30`
     ),
     index('events_archived_at_idx').on(table.archivedAt)
   ]
@@ -552,6 +558,7 @@ export const paymentRequests = sqliteTable(
     status: text('status').notNull(),
     dueAt: integer('due_at', { mode: 'timestamp_ms' }),
     remindedAt: integer('reminded_at', { mode: 'timestamp_ms' }),
+    overdueNotifiedAt: integer('overdue_notified_at', { mode: 'timestamp_ms' }),
     stripeAccountId: text('stripe_account_id').notNull().default(''),
     applicationFeeAmount: money('application_fee_amount').default(sql`0`),
     checkoutAttempt: integer('checkout_attempt').notNull().default(0),

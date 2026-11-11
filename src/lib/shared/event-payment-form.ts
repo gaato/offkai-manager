@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { paymentRequirements } from './payment';
+import { OVERDUE_GRACE_DAYS_MAX, overdueReleases } from './overdue-policy';
 export const eventPaymentFields = (message: string) => ({
   paymentRequirement: z.enum(paymentRequirements, { error: message }).default('none'),
   amountToCollect: z
@@ -15,6 +16,13 @@ export const eventPaymentFields = (message: string) => ({
   paymentOpensAt: z.string({ error: message }).default(''),
   paymentDueAt: z.string({ error: message }).default(''),
   additionalOpensAt: z.string({ error: message }).default(''),
+  overdueRelease: z.enum(overdueReleases, { error: message }).default('auto'),
+  overdueGraceDays: z.coerce
+    .number({ error: message })
+    .int(message)
+    .min(0, message)
+    .max(OVERDUE_GRACE_DAYS_MAX, message)
+    .default(0),
   manualCash: z.boolean({ error: message }).default(false),
   manualPayPay: z.boolean({ error: message }).default(false),
   holdMinutes: z.coerce
@@ -31,7 +39,13 @@ const datetimeLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 export function validatePaymentSchedule(
   data: Pick<
     EventPaymentForm,
-    'paymentRequirement' | 'pricePending' | 'paymentOpensAt' | 'paymentDueAt' | 'additionalOpensAt'
+    | 'paymentRequirement'
+    | 'pricePending'
+    | 'paymentOpensAt'
+    | 'paymentDueAt'
+    | 'additionalOpensAt'
+    | 'overdueRelease'
+    | 'overdueGraceDays'
   > & { startsAt: string },
   addIssue: (field: keyof EventPaymentForm | 'startsAt', message: string) => void,
   messages: {
@@ -40,6 +54,7 @@ export function validatePaymentSchedule(
     order: string;
     additional: string;
     pending: string;
+    grace: string;
   }
 ): void {
   const scheduled = data.paymentOpensAt !== '';
@@ -58,4 +73,18 @@ export function validatePaymentSchedule(
     addIssue('additionalOpensAt', messages.additional);
   if (data.pricePending && (data.paymentRequirement !== 'pay_later' || !scheduled))
     addIssue('pricePending', messages.pending);
+  // A grace period that outlasts the event start would never let anyone release a seat.
+  if (
+    data.overdueGraceDays > 0 &&
+    datetimeLocal.test(data.paymentDueAt) &&
+    datetimeLocal.test(data.startsAt) &&
+    wallClockMs(data.paymentDueAt) + data.overdueGraceDays * 86_400_000 >=
+      wallClockMs(data.startsAt)
+  )
+    addIssue('overdueGraceDays', messages.grace);
+}
+
+/** Both inputs share the organizer's zone; the server re-checks the rule with real instants. */
+function wallClockMs(value: string): number {
+  return Date.parse(`${value}:00Z`);
 }

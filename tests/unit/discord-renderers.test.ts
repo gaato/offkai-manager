@@ -12,6 +12,8 @@ const event: EventSummary = {
   id: '12345678-1234-4234-8234-123456789012',
   organizationId: '12345678-1234-4234-8234-123456789013',
   paymentRequirement: 'none',
+  overdueRelease: 'auto',
+  overdueGraceDays: 0,
   platformFeeBps: 0,
   amountToCollectMinor: 0n,
   roundingUnit: 1,
@@ -139,6 +141,50 @@ describe('Discord pure renderers', () => {
     expect(rendered).toContain(translator(locale)('payment.price_tba'));
     for (const date of [paymentOpensAt, paymentDueAt, additionalOpensAt])
       expect(rendered).toContain(`<t:${Math.floor(date.getTime() / 1000)}:F>`);
+    // The default template announces the overdue rule with the release moment.
+    expect(rendered).toContain(
+      JSON.stringify(
+        translator(locale)('payment.overdue_rule_auto', {
+          release: `<t:${Math.floor(paymentDueAt.getTime() / 1000)}:F>`
+        })
+      ).slice(1, -1)
+    );
+  });
+  it.each(['ja', 'en'] as const)('announces grace and manual overdue rules in %s', (locale) => {
+    const t = translator(locale);
+    const paymentDueAt = new Date('2026-12-15T00:00:00Z');
+    const scheduled = {
+      ...event,
+      paymentRequirement: 'pay_later',
+      paymentOpensAt: new Date('2026-12-01T00:00:00Z'),
+      paymentDueAt
+    };
+    const grace = JSON.stringify(
+      renderPanel(
+        { ...scheduled, overdueRelease: 'auto', overdueGraceDays: 3 },
+        { confirmed: 4, now },
+        locale
+      )
+    );
+    const release = Math.floor(paymentDueAt.getTime() / 1000) + 3 * 86_400;
+    expect(grace).toContain(`<t:${release}:F>`);
+    const manual = JSON.stringify(
+      renderPanel(
+        { ...scheduled, overdueRelease: 'manual', overdueGraceDays: 0 },
+        { confirmed: 4, now },
+        locale
+      )
+    );
+    const manualRule = JSON.stringify(
+      t('payment.overdue_rule_manual', {
+        release: `<t:${Math.floor(paymentDueAt.getTime() / 1000)}:F>`
+      })
+    ).slice(1, -1);
+    expect(manual).toContain(manualRule);
+    // Without a deadline the rule line disappears instead of rendering an empty bullet.
+    const unscheduled = JSON.stringify(renderPanel(event, { confirmed: 4, now }, locale));
+    expect(unscheduled).not.toContain(manualRule);
+    expect(unscheduled).not.toContain('{overdue_rule}');
   });
   it.each(['ja', 'en'] as const)(
     'keeps the adapted default structured, neutral, and limited to supported variables in %s',
@@ -155,6 +201,7 @@ describe('Discord pure renderers', () => {
       expect(template).not.toContain('{fee}');
       expect(template).toContain('{payment_opens}');
       expect(template).toContain('{payment_due}');
+      expect(template).toContain('{overdue_rule}');
       expect(template).toContain('{additional_opens}');
       expect(template).not.toMatch(/^## /m);
       for (const key of ['panel.join', 'panel.status', 'panel.cancel'] as const)
@@ -334,6 +381,7 @@ it.each(['ja', 'en'] as const)(
         currency: 'JPY',
         status,
         dueAt: null,
+        overdueNotifiedAt: null,
         stripeAccountId: 'acct',
         checkoutSessionId: 'cs',
         checkoutAttempt: 1,
@@ -382,3 +430,60 @@ it.each(['ja', 'en'] as const)('links paid panels to the organizer disclosure in
   expect(JSON.stringify(panel)).toContain(`https://example.test/legal/${event.organizationId}`);
   expect(JSON.stringify(panel)).toContain(translator(locale)('legal.title'));
 });
+
+it.each(['ja', 'en'] as const)(
+  'tells confirmed unpaid participants the overdue rule before and after the deadline in %s',
+  (locale) => {
+    const t = translator(locale);
+    const paymentDueAt = new Date('2026-12-15T00:00:00Z');
+    const confirmed = detail('confirmed');
+    confirmed.event = {
+      ...confirmed.event,
+      paymentRequirement: 'pay_later',
+      paymentOpensAt: new Date('2026-12-01T00:00:00Z'),
+      paymentDueAt,
+      overdueRelease: 'auto',
+      overdueGraceDays: 2
+    };
+    const request = {
+      id: 'request',
+      eventId: event.id,
+      collectionId: 'collection',
+      registrationId: confirmed.registration.id,
+      collectionPaymentMethodId: 'card',
+      amountMinor: 5000n,
+      applicationFeeAmount: 100n,
+      currency: 'JPY',
+      status: 'pending' as const,
+      dueAt: paymentDueAt,
+      overdueNotifiedAt: null,
+      stripeAccountId: 'acct',
+      checkoutSessionId: '',
+      checkoutAttempt: 0,
+      checkoutExpiresAt: null,
+      checkoutUrl: '',
+      paymentIntentId: '',
+      chargeType: 'direct',
+      createdAt: now,
+      updatedAt: now
+    };
+    const release = `<t:${Math.floor(paymentDueAt.getTime() / 1000) + 2 * 86_400}:F>`;
+    const rule = JSON.stringify(t('payment.overdue_rule_auto', { release })).slice(1, -1);
+    const pastDue = JSON.stringify(t('payment.overdue_past_due')).slice(1, -1);
+    const render = (at: Date) =>
+      JSON.stringify(
+        renderStatus(confirmed, event.id, locale, { request, manualMethods: [] }, { now: at })
+      );
+    const before = render(new Date('2026-12-14T00:00:00Z'));
+    expect(before).toContain(rule);
+    expect(before).not.toContain(pastDue);
+    expect(render(new Date('2026-12-16T00:00:00Z'))).toContain(`${pastDue} ${rule}`);
+    const paid = JSON.stringify(
+      renderStatus(confirmed, event.id, locale, {
+        request: { ...request, status: 'paid' },
+        manualMethods: []
+      })
+    );
+    expect(paid).not.toContain(rule);
+  }
+);

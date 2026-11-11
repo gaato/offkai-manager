@@ -179,6 +179,12 @@ for (const locale of ['ja', 'en'] as const) {
         .filter({ hasText: paymentEventFixtures.frozen })
         .first()
         .getAttribute('href');
+      const overdueEventHref = await page
+        .locator('a[href^="/app/events/"]')
+        .filter({ hasText: paymentEventFixtures.overdue })
+        .first()
+        .getAttribute('href');
+      expect(overdueEventHref).toMatch(/^\/app\/events\/[0-9a-f-]+$/);
       expect(draftPaymentEventHref).toMatch(/^\/app\/events\/[0-9a-f-]+$/);
       expect(frozenPaymentEventHref).toMatch(/^\/app\/events\/[0-9a-f-]+$/);
       await page.goto('/app');
@@ -201,7 +207,8 @@ for (const locale of ['ja', 'en'] as const) {
         .replace('/app/events/[event]', eventHref!)
         .replace('/app/events/[participant-event]', participantEventHref!)
         .replace('/app/events/[payments-draft-event]', draftPaymentEventHref!)
-        .replace('/app/events/[payments-frozen-event]', frozenPaymentEventHref!);
+        .replace('/app/events/[payments-frozen-event]', frozenPaymentEventHref!)
+        .replace('/app/events/[overdue-event]', overdueEventHref!);
       const separator = path.includes('?') ? '&' : '?';
       await page.goto(`${path}${separator}lang=${locale}`);
       expect(page.url()).toContain(path);

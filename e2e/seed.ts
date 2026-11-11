@@ -44,6 +44,7 @@ import {
   e2eUsers,
   participantFixtures,
   opsJourney,
+  overdueParticipant,
   paymentEventFixtures,
   paymentJourney,
   paidJourney,
@@ -320,6 +321,50 @@ export async function seedE2E(databasePath: string): Promise<void> {
       externalReference: '',
       note: 'fixture settlement'
     });
+    // A manual overdue policy whose deadline has passed with one participant still unpaid.
+    const overdueEvent = await createEvent(client, {
+      actorUserId: sweepOwner.userId,
+      organizationId: organization.id,
+      title: paymentEventFixtures.overdue,
+      startsAt: '2099-07-27T18:00',
+      capacity: 20,
+      registrationMode: 'auto_confirm',
+      timeZone: 'Asia/Tokyo'
+    });
+    client.db
+      .insert(registrations)
+      .values({
+        id: '10000000-0000-4000-8000-000000000031',
+        eventId: overdueEvent.id,
+        userId: sweepOwner.userId,
+        status: 'confirmed',
+        displayNameSnapshot: overdueParticipant,
+        searchText: `${overdueParticipant} sweep-owner`
+      })
+      .run();
+    const overdueDueAt = new Date('2026-01-31T15:00:00Z');
+    await createCollection(client, {
+      actorUserId: sweepOwner.userId,
+      eventId: overdueEvent.id,
+      title: 'Overdue participation fee',
+      amountMinor: 5000n,
+      currency: 'JPY',
+      dueAt: overdueDueAt,
+      instructions: ''
+    });
+    await openCollection(client, { actorUserId: sweepOwner.userId, eventId: overdueEvent.id });
+    // Written directly because the domain rightly refuses to schedule a deadline in the past.
+    client.db
+      .update(events)
+      .set({
+        paymentRequirement: 'pay_later',
+        paymentOpensAt: new Date('2026-01-01T00:00:00Z'),
+        paymentDueAt: overdueDueAt,
+        overdueRelease: 'manual',
+        overdueGraceDays: 0
+      })
+      .where(eq(events.id, overdueEvent.id))
+      .run();
     const fixtureFields = [
       { label: 'Display name preference', type: 'text', required: true, optionLabels: [] },
       { label: 'Access notes', type: 'textarea', required: false, optionLabels: [] },
