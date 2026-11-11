@@ -391,7 +391,6 @@ export const en = {
   'command.who.name': 'who',
   'command.who.description': 'Participant to check in',
   'interaction.unknown': 'This action is unknown or has expired. Please run the command again.',
-  'interaction.soon': 'Coming soon.',
   'interaction.web': 'Open your organizer dashboard.',
   'interaction.web_button': 'Open dashboard',
   'interaction.unavailable': 'This account cannot use this action.',

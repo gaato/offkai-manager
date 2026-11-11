@@ -35,14 +35,7 @@ const arbitraries = {
   edit_submit: fc.uuid().map((id): CustomAction => ({ action: 'edit_submit', args: [id] })),
   retry_join: fc.uuid().map((id): CustomAction => ({ action: 'retry_join', args: [id] })),
   retry_edit: fc.uuid().map((id): CustomAction => ({ action: 'retry_edit', args: [id] })),
-  web: fc.constant<CustomAction>({ action: 'web', args: [] }),
-  soon: fc.constantFrom('panel', 'status', 'remind', 'checkin').map(
-    (feature) =>
-      ({
-        action: 'soon' as const,
-        args: [feature]
-      }) as CustomAction
-  )
+  web: fc.constant<CustomAction>({ action: 'web', args: [] })
 } satisfies Record<CustomAction['action'], fc.Arbitrary<CustomAction>>;
 describe('om1 wire contract', () => {
   for (const [action, arbitrary] of Object.entries(arbitraries)) {
@@ -52,15 +45,12 @@ describe('om1 wire contract', () => {
       expect(decodeCustomId(encoded)).toEqual({ ok: true, value });
     });
   }
-  it.each([
-    ['om1:web', { action: 'web', args: [] }],
-    ['om1:soon:panel', { action: 'soon', args: ['panel'] }],
-    ['om1:soon:status', { action: 'soon', args: ['status'] }],
-    ['om1:soon:remind', { action: 'soon', args: ['remind'] }],
-    ['om1:soon:checkin', { action: 'soon', args: ['checkin'] }]
-  ])('keeps released string %s decodable', (encoded, value) => {
-    expect(decodeCustomId(encoded)).toEqual({ ok: true, value });
-  });
+  it.each([['om1:web', { action: 'web', args: [] }]])(
+    'keeps released string %s decodable',
+    (encoded, value) => {
+      expect(decodeCustomId(encoded)).toEqual({ ok: true, value });
+    }
+  );
   it.each([
     '',
     'om2:web',
@@ -72,9 +62,9 @@ describe('om1 wire contract', () => {
     'om1:reception_page:status:1.5',
     'om1:reception_page:status:100000',
     'om1:web:extra',
-    'om1:soon',
-    'om1:soon:missing',
-    'om1:soon:panel:extra',
+    // Placeholder buttons retired before the first public release.
+    'om1:soon:panel',
+    'om1:soon:checkin',
     'om1:' + 'x'.repeat(100)
   ])('rejects %s', (value) => {
     expect(decodeCustomId(value)).toEqual({ ok: false, error: 'unknown_or_expired' });

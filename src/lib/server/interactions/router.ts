@@ -193,7 +193,7 @@ export async function dispatchInteraction(
         });
         return deferEphemeral();
       }
-      if (decoded.value.action !== 'web' && decoded.value.action !== 'soon')
+      if (decoded.value.action !== 'web')
         return participantAction(
           decoded.value,
           context,
@@ -260,19 +260,12 @@ export async function dispatchInteraction(
 }
 
 function dispatchAction(
-  action: Extract<CustomAction, { action: 'web' | 'soon' }>,
+  _action: Extract<CustomAction, { action: 'web' }>,
   context: Context,
   dependencies: RouterDependencies
 ): Promise<APIInteractionResponse> | APIInteractionResponse {
   // custom_id only selects behavior. Identity and organization access come from the actor and DB.
-  switch (action.action) {
-    case 'web':
-      return openWeb(context, dependencies);
-    case 'soon':
-      return ephemeralReply(context.t('interaction.soon'));
-    default:
-      return action satisfies never;
-  }
+  return openWeb(context, dependencies);
 }
 
 async function openWeb(

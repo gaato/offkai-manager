@@ -390,7 +390,6 @@ export const ja = {
   'command.who.description': '受付する参加者',
   'interaction.unknown':
     'この操作は不明、または有効期限が切れています。コマンドをもう一度実行してください。',
-  'interaction.soon': '近日公開予定です。',
   'interaction.web': '主催者の管理画面を開きます。',
   'interaction.web_button': '管理画面を開く',
   'interaction.unavailable': 'このアカウントではこの操作を利用できません。',

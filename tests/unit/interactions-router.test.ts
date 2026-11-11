@@ -31,13 +31,13 @@ describe('interaction router and responses', () => {
       ephemeralReply(translate('en', 'door.unavailable'))
     );
   });
-  it('routes checkin and known component/modal actions', async () => {
+  it('answers retired placeholder buttons and modals as unknown', async () => {
     for (const interaction of [
       makeComponent('om1:soon:checkin'),
       makeModalSubmit('om1:soon:panel')
     ])
       expect(await dispatchInteraction(interaction, dependencies)).toEqual(
-        ephemeralReply(translate('en', 'interaction.soon'))
+        ephemeralReply(translate('en', 'interaction.unknown'))
       );
   });
   it('rejects unknown commands and invalid own options without effects', async () => {

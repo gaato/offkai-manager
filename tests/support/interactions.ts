@@ -80,7 +80,7 @@ export function makeComponent(customId = 'om1:web'): APIMessageComponentInteract
     data: { component_type: 2, custom_id: customId }
   };
 }
-export function makeModalSubmit(customId = 'om1:soon:panel'): APIModalSubmitInteraction {
+export function makeModalSubmit(customId: string): APIModalSubmitInteraction {
   return { ...base(), type: 5, data: { custom_id: customId, components: [] } };
 }
 export function makeAutocomplete(value = ''): APIApplicationCommandAutocompleteInteraction {

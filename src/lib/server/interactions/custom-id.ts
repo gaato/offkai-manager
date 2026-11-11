@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-// Released om1 strings are a wire contract; retain this decoder when adding versions.
+// om1 strings on messages posted by a publicly released version are a wire contract: keep them
+// decodable when adding versions, because those messages stay clickable after an upgrade.
+// Strings only ever posted before the first public release (staging, test servers) may be retired.
 export const actionSchemas = {
   web: z.tuple([]),
   reception_pick: z.tuple([z.enum(['status', 'remind'])]),
@@ -20,8 +22,7 @@ export const actionSchemas = {
   join_submit: z.tuple([z.uuid()]),
   edit_submit: z.tuple([z.uuid()]),
   retry_join: z.tuple([z.uuid()]),
-  retry_edit: z.tuple([z.uuid()]),
-  soon: z.tuple([z.enum(['panel', 'status', 'remind', 'checkin'])])
+  retry_edit: z.tuple([z.uuid()])
 };
 export type CustomAction = {
   [K in keyof typeof actionSchemas]: { action: K; args: z.infer<(typeof actionSchemas)[K]> };
@@ -37,10 +38,6 @@ export function decodeCustomId(value: string): DecodeResult {
   switch (action) {
     case 'web': {
       const parsed = actionSchemas.web.safeParse(args);
-      return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
-    }
-    case 'soon': {
-      const parsed = actionSchemas.soon.safeParse(args);
       return parsed.success ? { ok: true, value: { action, args: parsed.data } } : invalid;
     }
     case 'reception_pick': {
