@@ -26,9 +26,16 @@ When the deadline passes, every unpaid, unchecked participant is notified once
 separate notice. Extending the deadline clears that mark and the reminder mark, and deadline
 notices carry a fresh delivery campaign, so the new deadline is announced again. Automatic releases
 and the bulk action share one release function, so notification, audit and the vacancy rule cannot
-drift apart. The bulk action exists only for manual policies, releases exactly the people the
-confirmation page listed or nobody, and leaves out participants with an open Checkout session,
-whose payment would otherwise turn into a refund.
+drift apart. They also share one test of who is releasable now (`isReleasableNow`): the grace
+period has ended, and the participant has no open Checkout session, whose payment would otherwise
+turn into a refund. A participant who opens Checkout just before the deadline is therefore released
+only after that session expires, up to an hour later, plus five minutes so a payment completed at
+the last moment can still arrive by webhook. The first version applied the Checkout rule to
+the bulk action only; a staging run showed an automatic release cancelling someone mid-payment, and
+a single shared predicate now keeps the two paths from diverging again. We did not shorten the
+Checkout session to end at the deadline: Stripe requires at least 30 minutes, so it would trim the
+wait by at most half an hour while adding another branch to session expiry. The bulk action exists
+only for manual policies and releases exactly the people the confirmation page listed or nobody.
 
 Participants see the rule, including the "not before" moment, in the panel and status card. Once
 the first payment request exists, no change may make anyone releasable earlier. The check compares

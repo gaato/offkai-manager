@@ -40,6 +40,7 @@ export interface PaymentRequest {
   dueAt: Date | null;
   stripeAccountId: string;
   checkoutSessionId: string;
+  checkoutExpiresAt: Date | null;
   paymentIntentId: string;
   chargeType: string;
   createdAt: Date;

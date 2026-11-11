@@ -11,10 +11,11 @@ import {
   registrations
 } from '$lib/server/db/schema';
 import { getEventDashboard } from '$lib/server/domain/events/dashboard';
-import { updateSettings } from '$lib/server/domain/events';
+import { createEvent, updateSettings } from '$lib/server/domain/events';
 import { configureEventPayment } from '$lib/server/domain/payments/event-payment';
 import { tickOnce } from '$lib/server/domain/payments/holds';
 import {
+  checkoutSettlementSlackMs,
   listReleasableOverdue,
   releaseOverdueRegistrations
 } from '$lib/server/domain/payments/overdue';
@@ -31,10 +32,10 @@ beforeEach(() => {
 });
 afterEach(() => client.db.$client.close());
 
-async function scheduled(capacity: number, policy: OverduePolicy) {
+async function scheduled(capacity: number, policy: OverduePolicy, windowHours = 100) {
   const fixture = await paidEvent(client, 'pay_later', capacity);
   const opensAt = new Date(fixedClock.now().getTime() + 60 * 60_000);
-  const dueAt = new Date(opensAt.getTime() + 100 * 60 * 60_000);
+  const dueAt = new Date(opensAt.getTime() + windowHours * 60 * 60_000);
   write(client, (tx) => {
     const event = tx
       .update(events)
@@ -219,8 +220,13 @@ it('leaves participants paying in an open Checkout out of the bulk release', asy
   expect(listReleasableOverdue(client, fixture.owner.userId, fixture.event.id, fixedClock)).toEqual(
     []
   );
-  // Once the session has expired the participant is releasable again.
+  // Expiry alone is not enough: a payment finished at the last moment may still be reported.
   fixedClock.advance(30 * 60_000);
+  expect(listReleasableOverdue(client, fixture.owner.userId, fixture.event.id, fixedClock)).toEqual(
+    []
+  );
+  // Shortly after the session has expired the participant is releasable again.
+  fixedClock.advance(checkoutSettlementSlackMs);
   expect(
     listReleasableOverdue(client, fixture.owner.userId, fixture.event.id, fixedClock).map(
       (row) => row.registrationId
@@ -373,3 +379,102 @@ it('keeps the announced grace period after switching from automatic to manual', 
     )
   ).toBe(1);
 });
+
+it('waits for an open Checkout before releasing automatically, like the organizer release', async () => {
+  const fixture = await scheduled(1, { kind: 'auto', graceDays: 0 });
+  const paying = await fixture.join();
+  fixedClock.advance(1);
+  const waiting = await fixture.join('200000000000000003');
+  tickOnce(client, fixture.opensAt);
+  const checkoutExpiresAt = new Date(fixture.dueAt.getTime() + 40 * 60_000);
+  client.db
+    .update(paymentRequests)
+    .set({ status: 'payment_pending', checkoutExpiresAt })
+    .where(eq(paymentRequests.registrationId, paying.id))
+    .run();
+  tickOnce(client, fixture.dueAt);
+  tickOnce(client, checkoutExpiresAt);
+  // Releasing now would turn a payment in progress into a refund.
+  expect(statusOf(paying.id)).toBe('confirmed');
+  expect(statusOf(waiting.id)).toBe('waitlisted');
+  tickOnce(client, new Date(checkoutExpiresAt.getTime() + checkoutSettlementSlackMs));
+  expect(statusOf(paying.id)).toBe('cancelled');
+  expect(statusOf(waiting.id)).toBe('held');
+  // The promotion audit records the state the seat actually entered.
+  const promoted = client.db
+    .select()
+    .from(auditLogs)
+    .where(and(eq(auditLogs.action, 'registration.promote'), eq(auditLogs.targetId, waiting.id)))
+    .get()!;
+  expect(promoted.afterJson).toMatchObject({ status: 'held' });
+});
+
+it('lets a payment completed in the open Checkout keep the seat', async () => {
+  const fixture = await scheduled(1, { kind: 'auto', graceDays: 0 });
+  const paying = await fixture.join();
+  tickOnce(client, fixture.opensAt);
+  client.db
+    .update(paymentRequests)
+    .set({
+      status: 'payment_pending',
+      checkoutExpiresAt: new Date(fixture.dueAt.getTime() + 40 * 60_000)
+    })
+    .where(eq(paymentRequests.registrationId, paying.id))
+    .run();
+  tickOnce(client, fixture.dueAt);
+  markPaid(paying.id);
+  tickOnce(client, new Date(fixture.dueAt.getTime() + 60 * 60_000));
+  expect(statusOf(paying.id)).toBe('confirmed');
+});
+
+it('lets the opening notice stand in for the reminder when the window is shorter than the lead', async () => {
+  const short = await scheduled(2, { kind: 'auto', graceDays: 0 }, 10);
+  await short.join();
+  tickOnce(client, short.opensAt);
+  tickOnce(client, new Date(short.opensAt.getTime() + 60_000));
+  expect(notices('payment_open')).toHaveLength(1);
+  expect(notices('payment_due_soon')).toHaveLength(0);
+});
+
+it('still reminds before the deadline when the window is longer than the lead', async () => {
+  const long = await scheduled(2, { kind: 'auto', graceDays: 0 });
+  await long.join();
+  tickOnce(client, long.opensAt);
+  expect(notices('payment_due_soon')).toHaveLength(0);
+  tickOnce(
+    client,
+    new Date(long.dueAt.getTime() - defaultTuning.OFFKAI_PAYMENT_REMINDER_LEAD_HOURS * 3_600_000)
+  );
+  expect(notices('payment_open')).toHaveLength(1);
+  expect(notices('payment_due_soon')).toHaveLength(1);
+});
+
+it.each([false, true])(
+  'stores an organizer-decided policy chosen at creation (copying a previous event: %s)',
+  async (copy) => {
+    const base = await paidEvent(client, 'pay_later', 2);
+    const created = await createEvent(
+      client,
+      {
+        actorUserId: base.owner.userId,
+        organizationId: base.org.id,
+        ...(copy ? { copyFromEventId: base.event.id } : {}),
+        title: 'Manual policy',
+        startsAt: '2027-03-01T19:00',
+        capacity: 2,
+        paymentRequirement: 'pay_later',
+        amountToCollect: '1000',
+        roundingUnit: 10,
+        paymentOpensAt: '2027-02-01T12:00',
+        paymentDueAt: '2027-02-10T12:00',
+        overdueRelease: 'manual',
+        overdueGraceDays: 3,
+        timeZone: 'Asia/Tokyo'
+      },
+      undefined,
+      fixedClock
+    );
+    const stored = client.db.select().from(events).where(eq(events.id, created.id)).get()!;
+    expect([stored.overdueRelease, stored.overdueGraceDays]).toEqual(['manual', 3]);
+  }
+);

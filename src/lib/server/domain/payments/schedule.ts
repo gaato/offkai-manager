@@ -2,11 +2,11 @@ import { and, eq, inArray, isNull, lte } from 'drizzle-orm';
 import type { Clock } from '$lib/server/clock';
 import type { DatabaseTransaction } from '$lib/server/db/client';
 import { collections, events, paymentRequests, registrations } from '$lib/server/db/schema';
-import { overduePolicyFromColumns, overdueReleasableAt } from '$lib/shared/overdue-policy';
+import { overduePolicyFromColumns } from '$lib/shared/overdue-policy';
 import { appendAudit } from '../audit';
 import { enqueueNotification } from '../notifications/outbox';
 import { openMainCollectionInTransaction } from './collections';
-import { releaseOverdueRegistration, selectOverdue } from './overdue';
+import { isReleasableNow, releaseOverdueRegistration, selectOverdue } from './overdue';
 
 /**
  * Runs payment opening, one-off reminders, the past-due notice and the overdue release that the
@@ -22,6 +22,7 @@ export function tickPaymentSchedule(
   let reminded = 0;
   let pastDue = 0;
   let overdue = 0;
+  const reminderThreshold = new Date(now.getTime() + reminderLeadHours * 3_600_000);
 
   const scheduled = tx
     .select()
@@ -61,6 +62,19 @@ export function tickPaymentSchedule(
       .all();
     for (const request of requests)
       enqueueNotification(tx, request.registrationId, 'payment_open', clock);
+    // A window shorter than the reminder lead would send the opening notice and the reminder
+    // back to back. The opening notice states the deadline, so it doubles as the reminder.
+    if (event.paymentDueAt && event.paymentDueAt <= reminderThreshold)
+      tx.update(paymentRequests)
+        .set({ remindedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(paymentRequests.collectionId, openedCollection.id),
+            isNull(paymentRequests.remindedAt),
+            inArray(paymentRequests.status, ['pending', 'payment_pending'])
+          )
+        )
+        .run();
     appendAudit(
       tx,
       {
@@ -76,7 +90,6 @@ export function tickPaymentSchedule(
     opened++;
   }
 
-  const reminderThreshold = new Date(now.getTime() + reminderLeadHours * 3_600_000);
   const reminderRows = tx
     .select({ request: paymentRequests, dueAt: events.paymentDueAt })
     .from(paymentRequests)
@@ -126,9 +139,7 @@ export function tickPaymentSchedule(
   }
 
   for (const row of selectOverdue(tx, now)) {
-    const policy = overduePolicyFromColumns(row.event);
-    if (policy.kind !== 'auto' || overdueReleasableAt(row.event.paymentDueAt!, policy) > now)
-      continue;
+    if (overduePolicyFromColumns(row.event).kind !== 'auto' || !isReleasableNow(row, now)) continue;
     releaseOverdueRegistration(tx, row, null, clock);
     overdue++;
   }

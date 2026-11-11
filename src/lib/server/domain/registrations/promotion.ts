@@ -94,7 +94,12 @@ function promoteOldestWaitlisted(
       targetType: 'registration',
       targetId: waitlisted.id,
       before: { status: 'waitlisted' },
-      after: { status: 'confirmed' },
+      after: {
+        status: decision.next.kind,
+        ...(decision.next.kind === 'held'
+          ? { holdExpiresAt: decision.next.holdExpiresAt.toISOString() }
+          : {})
+      },
       reason: input.reason
     },
     clock

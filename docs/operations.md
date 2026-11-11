@@ -166,6 +166,9 @@ UI. Paid publication requires complete organizer disclosure at the organization'
 settings; the public `/legal/[orgId]` page displays organizer-provided information. Set prices,
 manual methods and holds before taking registrations, because existing obligations freeze the
 price/payment requirement. Review templates before posting a panel with `/offkai panel`.
+A panel is shown in the language chosen when posting it, while replies to its buttons follow each
+participant's Discord language. For meetups with both Japanese and English speakers, post both
+panels.
 
 - `/checkin who:<number or name> [event:<event>]` finds participants across authorized open
   events when no event is selected. Autocomplete accepts padded numbers and name substrings;
@@ -202,12 +205,16 @@ and `/offkai status` keep the missing-fee warning visible until a draft collecti
 
 Keep the single application worker enabled. At opening it opens the draft collection, creates one
 request for every confirmed participant, and sends the localized payment-opening notification.
-It sends the one-off deadline reminder at `OFFKAI_PAYMENT_REMINDER_LEAD_HOURS`. What happens after
+It sends the one-off deadline reminder at `OFFKAI_PAYMENT_REMINDER_LEAD_HOURS`; when payment opens
+less than that before the deadline, the opening notice, which states the deadline, replaces it.
+While payment is open, the panel shows a Pay button, and payment notices link to the panel. What happens after
 the deadline follows the event's "unpaid after the deadline" setting, which has two parts: a grace
 period of 0–30 days after the deadline, before which nobody is cancelled, and who cancels after it.
 
 - **Cancel automatically**: the worker cancels unpaid attendance when the grace period ends. With 0
-  days that is the deadline itself.
+  days that is the deadline itself. A participant paying in an open Checkout page at that moment is
+  cancelled only if the page expires unpaid (at most an hour later, plus five minutes for a late
+  payment confirmation).
 - **Organizers decide**: nothing is cancelled automatically. The event dashboard and
   `/offkai status` show the overdue count, and once the grace period has ended the dashboard links
   to a confirmation page listing the overdue unpaid registrations it will cancel. If the list

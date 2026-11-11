@@ -110,18 +110,30 @@ export function countOverdue(tx: DatabaseTransaction, eventId: string, now: Date
 }
 
 /**
- * Rows the organizer may release now. A participant whose Checkout is still open is paying right
- * now; cancelling them would only turn the payment into a refund, so they wait for the next try.
+ * Whether an overdue row may be released at `now`, by the worker or by organizers alike. The
+ * announced grace period must have passed, and a participant whose Checkout is still open is
+ * paying right now: cancelling them would only turn the payment into a refund, so they wait until
+ * shortly after that session expires. Both release paths call this so their rules cannot drift apart again.
  */
-function releasable(tx: DatabaseTransaction, eventId: string, now: Date): OverdueRow[] {
-  return selectOverdue(tx, now, { eventId }).filter(
-    ({ request, event }) =>
-      // The announced grace period binds organizers as much as the worker.
-      overdueReleasableAt(event.paymentDueAt!, overduePolicyFromColumns(event)) <= now &&
-      (request.status !== 'payment_pending' ||
-        !request.checkoutExpiresAt ||
-        request.checkoutExpiresAt <= now)
+export function isReleasableNow({ request, event }: OverdueRow, now: Date): boolean {
+  if (!event.paymentDueAt) return false;
+  if (overdueReleasableAt(event.paymentDueAt, overduePolicyFromColumns(event)) > now) return false;
+  return (
+    request.status !== 'payment_pending' ||
+    !request.checkoutExpiresAt ||
+    request.checkoutExpiresAt.getTime() + checkoutSettlementSlackMs <= now.getTime()
   );
+}
+
+/**
+ * A payment completed just before its Checkout session expires is reported by webhook moments
+ * later; waiting this long after expiry keeps that payment from landing on a released seat.
+ */
+export const checkoutSettlementSlackMs = 5 * 60_000;
+
+/** Rows the organizer may release now. */
+function releasable(tx: DatabaseTransaction, eventId: string, now: Date): OverdueRow[] {
+  return selectOverdue(tx, now, { eventId }).filter((row) => isReleasableNow(row, now));
 }
 
 export interface ReleasableOverdue {

@@ -203,6 +203,7 @@
           ></label
         >
       {/each}
+      {#if errors.overdueRelease}<p role="alert">{errors.overdueRelease[0]}</p>{/if}
       <label class="label" for="overdueGraceDays">{t('payment.overdue_grace_days')}</label>
       <input
         class="input w-full"

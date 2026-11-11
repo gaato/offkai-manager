@@ -1,9 +1,10 @@
 import { translate } from '$lib/i18n';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { RateLimitError } from '@discordjs/rest';
 import { type DatabaseClient, write } from '$lib/server/db/client';
 import {
+  discordPanels,
   events,
   registrations,
   eventDiscordIntegrations,
@@ -187,6 +188,13 @@ it.each([
           .set({ status: 'held', holdExpiresAt: new Date(fixedClock.now().getTime() + 60000) })
           .where(eq(registrations.id, registration.id))
           .run();
+      // A promotion that confirmed the seat outright uses the plain confirmation text.
+      if (kind === 'waitlist_confirmed')
+        client.db
+          .update(registrations)
+          .set({ status: 'confirmed', holdExpiresAt: null })
+          .where(eq(registrations.id, registration.id))
+          .run();
       await deliverNotification(
         client,
         rest,
@@ -228,4 +236,127 @@ it('delivers a deadline notice once per deadline, so an extended deadline can no
   expect(sent()).toHaveLength(1);
   await deliver(crypto.randomUUID());
   expect(sent()).toHaveLength(2);
+});
+
+describe('payment notices point to the panel', () => {
+  async function heldParticipant(locale: 'ja' | 'en' = 'en') {
+    const fixture = await paidEvent(client);
+    const registration = await fixture.join(undefined, locale);
+    const holdExpiresAt = new Date(fixedClock.now().getTime() + 30 * 60000);
+    client.db
+      .update(registrations)
+      .set({ status: 'held', holdExpiresAt })
+      .where(eq(registrations.id, registration.id))
+      .run();
+    const integration = client.db
+      .select()
+      .from(eventDiscordIntegrations)
+      .where(eq(eventDiscordIntegrations.eventId, fixture.event.id))
+      .get()!;
+    client.db
+      .update(eventDiscordIntegrations)
+      .set({ notificationChannelId: 'notifications' })
+      .where(eq(eventDiscordIntegrations.eventId, fixture.event.id))
+      .run();
+    const panel = (panelLocale: 'ja' | 'en', messageId: string, guildId = integration.guildId) =>
+      client.db
+        .insert(discordPanels)
+        .values({
+          eventId: fixture.event.id,
+          guildId,
+          channelId: '500000000000000001',
+          messageId,
+          locale: panelLocale,
+          createdAt: fixedClock.now()
+        })
+        .run();
+    return { fixture, registration, holdExpiresAt, integration, panel };
+  }
+  async function deliver(
+    registrationId: string,
+    kind: 'hold_expiring' | 'waitlist_confirmed' | 'payment_confirmed',
+    fallback = false
+  ) {
+    const { rest, calls } = recordingRest((call) =>
+      fallback && call.url.endsWith('/users/@me/channels')
+        ? responseLike({ code: 50007, message: 'No DMs' }, 403)
+        : responseLike({ id: 'message' })
+    );
+    await deliverNotification(client, rest, { registration_id: registrationId, kind }, fixedClock, {
+      ...defaultTuning,
+      OFFKAI_NOTIFICATION_DM_INTERVAL_MS: 0
+    });
+    return JSON.stringify(calls.filter((call) => call.url.endsWith('/messages')).at(-1)!.body);
+  }
+
+  it.each([false, true])(
+    'links a payment notice to the panel in the participant language (thread fallback: %s)',
+    async (fallback) => {
+      const { registration, panel, integration } = await heldParticipant('en');
+      panel('ja', '500000000000000002');
+      panel('en', '500000000000000003');
+      const body = await deliver(registration.id, 'hold_expiring', fallback);
+      expect(body).toContain(
+        `https://discord.com/channels/${integration.guildId}/500000000000000001/500000000000000003`
+      );
+      expect(body).toContain(translate('en', 'notify.open_panel'));
+    }
+  );
+
+  it('falls back to another language, and ignores panels left in a previous server', async () => {
+    const { registration, panel, integration } = await heldParticipant('en');
+    panel('en', '500000000000000009', '900000000000000009');
+    panel('ja', '500000000000000002');
+    const body = await deliver(registration.id, 'hold_expiring');
+    expect(body).toContain(
+      `https://discord.com/channels/${integration.guildId}/500000000000000001/500000000000000002`
+    );
+    expect(body).not.toContain('500000000000000009');
+  });
+
+  it('sends text only when no panel is posted, and never links notices that ask nothing', async () => {
+    const { registration, panel } = await heldParticipant();
+    expect(await deliver(registration.id, 'hold_expiring')).not.toMatch(/"type":1[,}]/);
+    panel('en', '500000000000000003');
+    expect(await deliver(registration.id, 'payment_confirmed')).not.toMatch(/"type":1[,}]/);
+  });
+
+  it.each(['ja', 'en'] as const)(
+    'states the hold deadline when a promotion leaves the seat held (%s)',
+    async (locale) => {
+      const { registration, holdExpiresAt, panel } = await heldParticipant(locale);
+      panel(locale, '500000000000000003');
+      const body = await deliver(registration.id, 'waitlist_confirmed');
+      const deadline = `<t:${Math.floor(holdExpiresAt.getTime() / 1000)}:F>`;
+      expect(body).toContain(
+        JSON.stringify(translate(locale, 'notify.waitlist_held', { deadline })).slice(1, -1)
+      );
+      expect(body).toContain(translate(locale, 'notify.open_panel'));
+      expect(body).not.toContain(translate(locale, 'notify.waitlist_confirmed'));
+    }
+  );
+
+  it.each([
+    { status: 'cancelled' as const, minutes: 30 },
+    { status: 'held' as const, minutes: -1 }
+  ])(
+    'drops a promotion notice once the seat is gone ($status, hold in $minutes min)',
+    async ({ status, minutes }) => {
+      const { registration } = await heldParticipant();
+      client.db
+        .update(registrations)
+        .set({ status, holdExpiresAt: new Date(fixedClock.now().getTime() + minutes * 60000) })
+        .where(eq(registrations.id, registration.id))
+        .run();
+      const { rest, calls } = recordingRest();
+      await deliverNotification(
+        client,
+        rest,
+        { registration_id: registration.id, kind: 'waitlist_confirmed' },
+        fixedClock,
+        { ...defaultTuning, OFFKAI_NOTIFICATION_DM_INTERVAL_MS: 0 }
+      );
+      expect(calls).toHaveLength(0);
+    }
+  );
 });

@@ -1,7 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { signInAs } from './auth';
-import { e2eUsers, overdueParticipant, paymentEventFixtures } from './fixtures';
+import { e2eUsers, overdueParticipant, paidJourney, paymentEventFixtures } from './fixtures';
+import { translator } from '../src/lib/i18n';
+import { paymentRequirementLabelKey } from '../src/lib/shared/payment';
 
 // The release is irreversible on the shared seed, so the read-only checks run first.
 test.describe.configure({ mode: 'serial' });
@@ -60,3 +62,36 @@ test.describe('without JavaScript', () => {
     await expect(page.getByText('No registrations are overdue.')).toBeVisible();
   });
 });
+
+for (const javaScriptEnabled of [true, false]) {
+  test.describe(`creating a manual-policy event (JavaScript ${javaScriptEnabled ? 'on' : 'off'})`, () => {
+    test.use({ javaScriptEnabled });
+    test('keeps the organizer-decided overdue policy chosen on the create form', async ({
+      page
+    }) => {
+      const t = translator('en');
+      await signInAs(page, e2eUsers.sweepOwner);
+      await page.getByRole('link', { name: paidJourney.organizationName, exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/organizations\/[^/?]+$/);
+      await page.goto(`${page.url()}/events/new?lang=en`);
+      const title = `Manual policy ${javaScriptEnabled ? 'js' : 'nojs'}`;
+      await page.getByLabel(t('event.title'), { exact: true }).fill(title);
+      await page.getByLabel(t('event.starts_at'), { exact: true }).fill('2027-06-01T19:00');
+      await page
+        .getByRole('radio', { name: t(paymentRequirementLabelKey('pay_later')), exact: true })
+        .check();
+      await page.getByLabel(t('payment.amount_to_collect'), { exact: true }).fill('1000');
+      await page.getByLabel(t('payment.opens_at'), { exact: true }).fill('2027-05-01T12:00');
+      await page.getByLabel(t('payment.due_at'), { exact: true }).fill('2027-05-10T12:00');
+      await page.getByLabel(t('payment.overdue_manual'), { exact: true }).check();
+      await page.getByLabel(t('payment.overdue_grace_days'), { exact: true }).fill('2');
+      await page.getByRole('button', { name: t('event.create_submit') }).click();
+      await expect(page).toHaveURL(/\/app\/events\/[0-9a-f-]+$/);
+      await page.goto(`${page.url()}/settings?lang=en`);
+      await expect(page.getByLabel(t('payment.overdue_manual'), { exact: true })).toBeChecked();
+      await expect(page.getByLabel(t('payment.overdue_grace_days'), { exact: true })).toHaveValue(
+        '2'
+      );
+    });
+  });
+}

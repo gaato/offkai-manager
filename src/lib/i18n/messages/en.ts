@@ -31,13 +31,13 @@ export const en = {
   'notify.payment_reminder':
     'A friendly reminder: your participation fee is still unpaid. Please open the event panel to check payment options. If you have just paid, thank you—please disregard this message.',
   'notify.payment_open':
-    'Payment is now open. Please open your event status to pay by the deadline.',
+    'Payment is now open. Please pay with the “Pay” button on the event panel by the deadline.',
   'notify.payment_due_soon':
-    'Your participation fee is due soon. Please open your event status to pay.',
+    'Your participation fee is due soon. Please pay with the “Pay” button on the event panel.',
   'notify.payment_past_due':
-    'The payment deadline has passed. Please pay from your event status; your registration will be cancelled if payment is not received by the date shown there.',
+    'The payment deadline has passed. Please pay with the “Pay” button on the event panel.',
   'notify.payment_past_due_manual':
-    'The payment deadline has passed. Please pay from your event status as soon as possible, or contact the organizer.',
+    'The payment deadline has passed. Please pay with the “Pay” button on the event panel as soon as possible, or contact the organizer.',
   'notify.payment_overdue':
     'Your registration was cancelled because the participation fee was not received by the deadline.',
   'roster.title': 'Offline reception roster',
@@ -208,11 +208,14 @@ export const en = {
   'checkout.cancelled': 'Checkout cancelled — return to Discord',
   'checkout.discord': 'Return to Discord',
   'notify.payment_confirmed': 'Your payment is confirmed.',
-  'notify.hold_expiring': 'Your seat hold expires soon. Open your Discord status to pay.',
+  'notify.hold_expiring':
+    'Your seat hold expires soon. Please pay with the “Pay” button on the event panel.',
   'notify.hold_expired':
     'Your unpaid seat hold expired. You can join again if a seat is available.',
-  'notify.waitlist_confirmed':
-    'A seat is available for you. Check your Discord status for confirmation or payment.',
+  'notify.waitlist_confirmed': 'A seat opened up and your registration is confirmed.',
+  'notify.waitlist_held':
+    'A seat opened up for you and is held until {deadline}. Please pay with the “Pay” button on the event panel; if payment is not received by then, the hold is released.',
+  'notify.open_panel': 'Open event panel',
   'participant.unreachable': 'Unreachable',
 
   'event.discord_nav': 'Discord',
@@ -319,6 +322,7 @@ export const en = {
   'panel.failed': 'The panel could not be posted. Please try again.',
   'panel.rate_limit': 'Discord is busy. Please try again shortly.',
   'panel.join': 'Join',
+  'panel.pay': 'Pay',
   'panel.status': 'My status',
   'panel.cancel': 'Cancel registration',
   'panel.capacity': 'Confirmed: {count}/{capacity}',
@@ -681,7 +685,8 @@ export const en = {
   'payments.confirmation.manual': 'Confirmed by the event team',
   'payments.confirmation.none': 'No confirmation',
   'payments.default_method.card.label': 'Online card payment',
-  'payments.default_method.card.instructions': 'Online card payment will be available soon.',
+  'payments.default_method.card.instructions':
+    'Participants pay by card with the “Pay” button on the event panel in Discord. Payments are recorded automatically once Stripe confirms them.',
   'payments.default_method.cash.label': 'Cash at reception',
   'payments.default_method.cash.instructions': 'Please pay at reception at the venue.',
   'payments.default_method.paypay.label': 'PayPay',
@@ -722,7 +727,8 @@ export const en = {
   'payments.waive_body': 'Waive the fee for {name}?',
   'payments.waive_reason': 'Reason',
   'payments.waive_submit': 'Confirm waiver',
-  'payments.coming_with_settlement': 'Online settlement actions arrive in the next release.',
+  'payments.checkout_open_until':
+    'Checkout is open (valid until {time}). While it is open, this registration is not cancelled as overdue.',
   'payments.success_create': 'The collection was created.',
   'payments.success_update': 'The collection settings were saved.',
   'payments.success_status': 'The collection status was updated.',

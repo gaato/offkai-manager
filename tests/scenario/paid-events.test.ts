@@ -108,7 +108,11 @@ function participant(eventId: string) {
   interaction.member!.user = { ...interaction.member!.user, id: '200000000000000002' };
   return interaction;
 }
-function participantAction(eventId: string, id: string, action: 'join' | 'status' = 'join') {
+function participantAction(
+  eventId: string,
+  id: string,
+  action: 'join' | 'status' | 'pay' = 'join'
+) {
   const interaction = makeComponent(`om1:${action}:${eventId}`);
   interaction.member!.user = { ...interaction.member!.user, id };
   return interaction;
@@ -512,4 +516,39 @@ it('runs pending fee through opening, deadline cancellation, and paid additional
   expect(
     client.db.select().from(registrations).where(eq(registrations.id, additional.id)).get()?.status
   ).toBe('confirmed');
+});
+
+it('the panel pay button joins newcomers, opens Checkout for the unpaid and confirms the paid', async () => {
+  const fixture = await paidEvent(client, 'pay_later');
+  const transport = recordingRest();
+  vi.spyOn(restModule, 'getInteractionRest').mockReturnValue(transport.rest);
+  const reply = async () => {
+    const offset = transport.calls.length;
+    await callInteraction(
+      participantAction(fixture.event.id, '200000000000000002', 'pay'),
+      signingKey.privateKey
+    );
+    await vi.waitFor(() =>
+      expect(
+        transport.calls
+          .slice(offset)
+          .some((c) => c.method === 'PATCH' && c.url.includes('/webhooks/'))
+      ).toBe(true)
+    );
+    return JSON.stringify(
+      transport.calls
+        .slice(offset)
+        .find((c) => c.method === 'PATCH' && c.url.includes('/webhooks/'))!.body
+    );
+  };
+  // Someone who has not joined yet is taken through joining, then straight to payment.
+  const first = await reply();
+  expect(client.db.select().from(registrations).get()?.status).toBe('confirmed');
+  expect(first).toContain('https://checkout.stripe.test/cs_gated');
+  expect(await reply()).toContain('https://checkout.stripe.test/cs_gated');
+  client.db.update(paymentRequests).set({ status: 'paid' }).run();
+  const paid = await reply();
+  expect(paid).toContain(translator('en')('payment.paid'));
+  expect(paid).not.toContain('https://checkout.stripe.test/');
+  expect(client.db.select().from(registrations).all()).toHaveLength(1);
 });

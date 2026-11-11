@@ -150,7 +150,22 @@ export const load: PageServerLoad = async (event) => {
         displayName: row.displayName,
         status: row.request.status,
         methodLabel: localizedMethodText(event, row.method.label),
-        amount: formatMoney(row.request.amountMinor, row.request.currency, event.locals.locale)
+        amount: formatMoney(row.request.amountMinor, row.request.currency, event.locals.locale),
+        // An open Checkout explains why the participant is left out of overdue releases.
+        checkoutOpenUntil:
+          row.request.status === 'payment_pending' &&
+          row.request.checkoutExpiresAt &&
+          row.request.checkoutExpiresAt > new Date()
+            ? formatWallClock(
+                row.request.checkoutExpiresAt,
+                event.locals.locale,
+                config.time.zone,
+                {
+                  dateStyle: 'short',
+                  timeStyle: 'short'
+                }
+              )
+            : null
       })),
       conflicts: dashboard.conflicts.map((row) => ({
         recordId: row.recordId,

@@ -32,7 +32,7 @@ type PanelEvent = Omit<
   priceMinor?: bigint;
 };
 /** The announced overdue rule; empty when the event has no scheduled payment deadline. */
-function overdueRule(
+export function overdueRule(
   event: Pick<PanelEvent, 'paymentDueAt' | 'overdueRelease' | 'overdueGraceDays'>,
   t: ReturnType<typeof translator>
 ): string {
@@ -46,7 +46,7 @@ function overdueRule(
 export const excerpt = (value: string, max: number): string =>
   value.length > max ? value.slice(0, max - 1) + '…' : value;
 const safe = (value: string, max: number) => excerpt(escapeMarkdown(value), max);
-export function actionButton(action: CustomAction, label: string, style: 1 | 2 | 4 = 2) {
+export function actionButton(action: CustomAction, label: string, style: 1 | 2 | 3 | 4 = 2) {
   return new ButtonBuilder().setCustomId(encodeCustomId(action)).setLabel(label).setStyle(style);
 }
 function card(text: string, buttons: ButtonBuilder[] = []): RESTPostAPIChannelMessageJSONBody {
@@ -74,7 +74,13 @@ export function ephemeralCard(
 /** now is data supplied by the shell; rendering never reads the wall clock. */
 export function renderPanel(
   event: PanelEvent,
-  counts: { confirmed: number; now: Date; timeZone?: string; publicBaseUrl?: string },
+  counts: {
+    confirmed: number;
+    now: Date;
+    timeZone?: string;
+    publicBaseUrl?: string;
+    paymentOpen?: boolean;
+  },
   locale: Locale
 ): RESTPostAPIChannelMessageJSONBody {
   const t = translator(locale);
@@ -146,8 +152,15 @@ export function renderPanel(
     header +
     '\n\n' +
     truncatePanelBody(body, messageTextBudget - header.length - 2, t('panel_template.truncated'));
+  const payable =
+    counts.paymentOpen === true &&
+    !event.cancelledAt &&
+    !event.archivedAt &&
+    event.paymentRequirement !== 'none';
   return card(text, [
     actionButton({ action: 'join', args: [event.id] }, t('panel.join'), 1),
+    // Paying is the panel's own action; finding it under "status" was not obvious to participants.
+    ...(payable ? [actionButton({ action: 'pay', args: [event.id] }, t('panel.pay'), 3)] : []),
     actionButton({ action: 'status', args: [event.id] }, t('panel.status')),
     actionButton({ action: 'cancel', args: [event.id] }, t('panel.cancel'), 4),
     ...(event.paymentRequirement !== 'none' && counts.publicBaseUrl

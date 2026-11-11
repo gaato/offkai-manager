@@ -144,7 +144,9 @@
                 paymentDueAt: $errors.paymentDueAt,
                 additionalOpensAt: $errors.additionalOpensAt,
                 roundingUnit: $errors.roundingUnit,
-                holdMinutes: $errors.holdMinutes
+                holdMinutes: $errors.holdMinutes,
+                overdueRelease: $errors.overdueRelease,
+                overdueGraceDays: $errors.overdueGraceDays
               }}
               locale={data.locale}
               {...data.paymentUi}

@@ -31,12 +31,14 @@ export const ja = {
   'door.remind_sent': '{count} 件の案内を送信待ちにしました。',
   'notify.payment_reminder':
     '参加費のお支払いについてのご案内です。イベントのパネルからお支払い方法をご確認ください。お支払い直後の行き違いでしたらご容赦ください。',
-  'notify.payment_open': '参加費のお支払いを開始しました。期限までに参加状況からお支払いください。',
-  'notify.payment_due_soon': '参加費のお支払い期限が近づいています。参加状況からお支払いください。',
+  'notify.payment_open':
+    '参加費のお支払いを開始しました。期限までに、イベントのパネルの「お支払い」からお支払いください。',
+  'notify.payment_due_soon':
+    '参加費のお支払い期限が近づいています。イベントのパネルの「お支払い」からお支払いください。',
   'notify.payment_past_due':
-    '参加費のお支払い期限を過ぎました。参加状況からお支払いください。参加状況に表示されている日時までにお支払いを確認できない場合、参加登録を取り消します。',
+    '参加費のお支払い期限を過ぎました。イベントのパネルの「お支払い」からお支払いください。',
   'notify.payment_past_due_manual':
-    '参加費のお支払い期限を過ぎました。お早めに参加状況からお支払いいただくか、主催者へご連絡ください。',
+    '参加費のお支払い期限を過ぎました。お早めにイベントのパネルの「お支払い」からお支払いいただくか、主催者へご連絡ください。',
   'notify.payment_overdue':
     '期限までに参加費を確認できなかったため、参加登録をキャンセルしました。',
   'roster.title': 'オフライン受付名簿',
@@ -207,10 +209,13 @@ export const ja = {
   'checkout.cancelled': '支払いを中断しました。Discord にお戻りください',
   'checkout.discord': 'Discord に戻る',
   'notify.payment_confirmed': 'お支払いを確認しました。',
-  'notify.hold_expiring': '席の保留期限が近づいています。Discord の参加状況からお支払いください。',
+  'notify.hold_expiring':
+    '席の保留期限が近づいています。イベントのパネルの「お支払い」からお支払いください。',
   'notify.hold_expired': '未払いの席の保留期限が切れました。空席があれば再度申し込めます。',
-  'notify.waitlist_confirmed':
-    '空席が割り当てられました。参加確定・支払い状況を Discord で確認してください。',
+  'notify.waitlist_confirmed': '空席が割り当てられ、参加が確定しました。',
+  'notify.waitlist_held':
+    '空席が割り当てられました。{deadline} まで席を確保しています。それまでにイベントのパネルの「お支払い」からお支払いがない場合、席の確保を取り消します。',
+  'notify.open_panel': 'パネルを開く',
   'participant.unreachable': '通知未達',
 
   'event.discord_nav': 'Discord',
@@ -316,6 +321,7 @@ export const ja = {
   'panel.failed': 'パネルを投稿できませんでした。もう一度お試しください。',
   'panel.rate_limit': 'Discord が混雑しています。少し待ってから再度お試しください。',
   'panel.join': '参加する',
+  'panel.pay': 'お支払い',
   'panel.status': '参加状況',
   'panel.cancel': '参加を取り消す',
   'panel.capacity': '参加確定: {count}/{capacity}',
@@ -673,7 +679,7 @@ export const ja = {
   'payments.confirmation.none': '確認なし',
   'payments.default_method.card.label': 'オンラインカード決済',
   'payments.default_method.card.instructions':
-    'オンラインカード決済は近日中に利用できるようになります。',
+    '参加者は Discord のイベントのパネルの「お支払い」からカードで支払います。入金は Stripe の確認後に自動で反映されます。',
   'payments.default_method.cash.label': '受付で現金払い',
   'payments.default_method.cash.instructions': '当日、受付スタッフへお支払いください。',
   'payments.default_method.paypay.label': 'PayPay',
@@ -712,7 +718,8 @@ export const ja = {
   'payments.waive_body': '{name}さんの参加費を免除しますか？',
   'payments.waive_reason': '理由',
   'payments.waive_submit': '免除を確定',
-  'payments.coming_with_settlement': 'オンライン決済の操作は次のリリースで追加します。',
+  'payments.checkout_open_until':
+    '決済画面を開いています（{time} まで有効）。開いている間は、期限切れの未払いとして取り消しません。',
   'payments.success_create': '集金を作成しました。',
   'payments.success_update': '集金の設定を保存しました。',
   'payments.success_status': '受付状況を更新しました。',

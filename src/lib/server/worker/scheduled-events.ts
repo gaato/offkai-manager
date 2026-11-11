@@ -1,13 +1,14 @@
 import { DiscordAPIError } from '@discordjs/rest';
 import { z } from 'zod';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { REST } from '@discordjs/rest';
 import { read, write, type DatabaseClient } from '../db/client';
-import { events, eventDiscordIntegrations, discordPanels } from '../db/schema';
+import { events, eventDiscordIntegrations } from '../db/schema';
 import type { Clock } from '../clock';
 import type { DiscordGateway } from '../domain/discord/gateway';
 import { guildPermissions, hasPermissions } from '../domain/discord/permissions';
 import { scheduledPermissions } from '../domain/discord/scheduled';
+import { findEventPanel, panelJumpUrl } from '../domain/discord/panels';
 import { appendAudit } from '../domain/audit';
 import { translator } from '$lib/i18n';
 const intentSchema = z.object({
@@ -39,12 +40,7 @@ export async function syncScheduledEvent(
       .from(eventDiscordIntegrations)
       .where(eq(eventDiscordIntegrations.eventId, eventId))
       .get();
-    const panel = tx
-      .select()
-      .from(discordPanels)
-      .where(and(eq(discordPanels.eventId, eventId), isNull(discordPanels.deletedAt)))
-      .orderBy(asc(discordPanels.createdAt))
-      .get();
+    const panel = findEventPanel(tx, eventId, integration?.guildId);
     return { event, integration, panel };
   });
   if (!row.event || !row.integration) return;
@@ -92,7 +88,7 @@ export async function syncScheduledEvent(
       guildId: integration.guildId,
       intent: {
         name: event.title.slice(0, 100),
-        description: `${event.description.slice(0, 700)}\nhttps://discord.com/channels/${panel.guildId}/${panel.channelId}/${panel.messageId}`,
+        description: `${event.description.slice(0, 700)}\n${panelJumpUrl(panel)}`,
         entity_type: 3,
         privacy_level: 2,
         scheduled_start_time: event.startsAt.toISOString(),
@@ -176,7 +172,7 @@ export async function syncScheduledEvent(
     const body = {
       ...state.intent,
       name: event.title.slice(0, 100),
-      description: `${event.description.slice(0, 700)}\nhttps://discord.com/channels/${panel.guildId}/${panel.channelId}/${panel.messageId}`,
+      description: `${event.description.slice(0, 700)}\n${panelJumpUrl(panel)}`,
       scheduled_start_time: event.startsAt.toISOString(),
       scheduled_end_time: event.endsAt.toISOString(),
       entity_metadata: {

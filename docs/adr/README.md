@@ -13,6 +13,7 @@ For setup and day-to-day use, start with [configuration](../configuration.md) an
 | [0005](0005-discord-reception.md) | Reception, manual receipts, reminder previews, disclosure and native event projection | Accepted |
 | [0006](0006-payment-schedule.md) | Deferred fee decisions, scheduled collection and additional recruitment | Accepted, partly superseded by 0007 |
 | [0007](0007-overdue-policy.md) | Organizer-chosen overdue release and a single vacancy rule | Accepted |
+| [0008](0008-payment-path.md) | A pay button on the panel and payment notices that link to it | Accepted |
 
 Add decisions here when their context, tradeoffs and consequences need to remain reviewable,
 rather than leaving rationale only in implementation reports or task prompts.

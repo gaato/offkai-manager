@@ -17,6 +17,76 @@ import { notificationRoute } from '$lib/server/domain/notifications/route';
 import { notificationKinds } from '$lib/server/domain/notifications/outbox';
 import { translator } from '$lib/i18n';
 import { appendAudit } from '$lib/server/domain/audit';
+import { findEventPanel, panelJumpUrl } from '$lib/server/domain/discord/panels';
+import { overdueRule } from '$lib/server/interactions/renderers';
+import { time } from '@discordjs/formatters';
+
+type NotificationKind = (typeof notificationKinds)[number];
+type NotificationRow = {
+  registration: typeof registrations.$inferSelect;
+  event: typeof events.$inferSelect;
+};
+
+/** Kinds that ask the participant to pay, so the message links to where the pay button is. */
+const payableKinds: ReadonlySet<NotificationKind> = new Set([
+  'payment_reminder',
+  'payment_open',
+  'payment_due_soon',
+  'payment_past_due',
+  'payment_past_due_manual',
+  'hold_expiring'
+]);
+
+/**
+ * One message body for the DM and the private-thread fallback alike, so the two routes cannot
+ * drift. Text follows the registration's state at send time: a promotion that left the seat held
+ * states its hold deadline, and only messages that ask for payment carry the panel link.
+ */
+export function renderNotification(
+  kind: NotificationKind,
+  row: NotificationRow,
+  panelUrl: string | undefined,
+  mention?: string
+) {
+  const t = translator(row.registration.locale);
+  const { registration, event } = row;
+  const held = registration.status === 'held' && registration.holdExpiresAt;
+  const main =
+    kind === 'waitlist_confirmed' && held
+      ? t('notify.waitlist_held', { deadline: time(registration.holdExpiresAt!, 'F') })
+      : t(`notify.${kind}`);
+  const detail =
+    (kind === 'payment_open' || kind === 'payment_due_soon') && event.paymentDueAt
+      ? t('payment.schedule_deadline', { due: time(event.paymentDueAt, 'F') })
+      : kind === 'payment_past_due'
+        ? overdueRule(event, t)
+        : kind === 'hold_expiring' && held
+          ? t('payment.hold_countdown', { time: time(registration.holdExpiresAt!, 'F') })
+          : '';
+  const title = event.title.slice(0, 200).replace(/[@*_`~|>]/g, '');
+  const content = [mention, main, detail, title].filter(Boolean).join('\n');
+  const linked = panelUrl && (payableKinds.has(kind) || (kind === 'waitlist_confirmed' && held));
+  return {
+    flags: 32768,
+    allowed_mentions: { parse: [] as string[] },
+    components: [
+      {
+        type: 17,
+        components: [
+          { type: 10, content },
+          ...(linked
+            ? [
+                {
+                  type: 1,
+                  components: [{ type: 2, style: 5, label: t('notify.open_panel'), url: panelUrl }]
+                }
+              ]
+            : [])
+        ]
+      }
+    ]
+  };
+}
 
 export class NotificationRetry extends Error {
   constructor(public retryAfter: number) {
@@ -97,6 +167,18 @@ export async function deliverNotification(
     );
     if (!unpaid) return;
   }
+  // A promotion notice is stale once the seat is gone (withdrawn, or the hold lapsed before the
+  // notice could be delivered); its text follows the current state, so it must not say "confirmed".
+  if (
+    payload.kind === 'waitlist_confirmed' &&
+    !(
+      row.registration.status === 'confirmed' ||
+      (row.registration.status === 'held' &&
+        row.registration.holdExpiresAt &&
+        row.registration.holdExpiresAt > clock.now())
+    )
+  )
+    return;
   // Old warning jobs are obsolete after payment, cancellation, or deadline passage.
   if (
     payload.kind === 'hold_expiring' &&
@@ -163,12 +245,11 @@ export async function deliverNotification(
     : 0;
   if (delay > 0) throw new NotificationRetry(delay);
   const t = translator(row.registration.locale);
-  const content = `${t(`notify.${payload.kind}`)}\n${row.event.title.slice(0, 200).replace(/[@*_`~|>]/g, '')}`;
-  const message = {
-    flags: 32768,
-    allowed_mentions: { parse: [] as string[] },
-    components: [{ type: 17, components: [{ type: 10, content }] }]
-  };
+  const panel = read(client, (tx) =>
+    findEventPanel(tx, row.event.id, row.integration?.guildId, row.registration.locale)
+  );
+  const panelUrl = panel ? panelJumpUrl(panel) : undefined;
+  const message = renderNotification(payload.kind, row, panelUrl);
   try {
     const dm = idSchema.parse(
       await rest.post('/users/@me/channels', { body: { recipient_id: row.user } })
@@ -239,11 +320,8 @@ export async function deliverNotification(
     const sent = idSchema.parse(
       await rest.post(`/channels/${thread.threadId}/messages`, {
         body: {
-          ...message,
-          allowed_mentions: { parse: [], users: [row.user] },
-          components: [
-            { type: 17, components: [{ type: 10, content: `<@${row.user}>\n${content}` }] }
-          ]
+          ...renderNotification(payload.kind, row, panelUrl, `<@${row.user}>`),
+          allowed_mentions: { parse: [], users: [row.user] }
         }
       })
     );

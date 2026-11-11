@@ -19,6 +19,7 @@ import {
   type PaymentConfirmation,
   type PaymentTiming
 } from '$lib/shared/payment';
+import { enqueuePanelRefresh } from '../discord/outbox';
 import { CollectionError } from './errors';
 import { backfillPaymentRequests } from './requests';
 
@@ -513,6 +514,7 @@ export function openMainCollectionInTransaction(
   if (!row) throw new CollectionError('illegal_transition', 'collection changed concurrently');
   const opened = parseCollection(row);
   backfillPaymentRequests(tx, opened, clock);
+  enqueuePanelRefresh(tx, eventId, clock);
   return opened;
 }
 
@@ -562,6 +564,8 @@ async function changeCollectionStatus(
       },
       clock
     );
+    // The panel's pay button follows whether payment is being accepted.
+    enqueuePanelRefresh(tx, input.eventId, clock);
     return updated;
   });
 }

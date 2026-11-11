@@ -47,15 +47,17 @@ export function loadPanelEvent(tx: DatabaseTransaction, eventId: string) {
       and(eq(registrations.eventId, eventId), inArray(registrations.status, ['confirmed', 'held']))
     )
     .get()!.value;
-  const price = tx
+  const collection = tx
     .select()
     .from(collections)
     .where(and(eq(collections.eventId, eventId), ne(collections.status, 'archived')))
-    .get()?.amountMinor;
+    .get();
+  const price = collection?.amountMinor;
   return {
     ...row,
     event: { ...row.event, ...(price ? { priceMinor: price } : {}) },
-    counts: { confirmed },
+    // The panel offers a pay button only while payment is actually being accepted.
+    counts: { confirmed, paymentOpen: collection?.status === 'open' },
     fields: loadActiveFormFields(tx, eventId)
   };
 }
@@ -219,4 +221,38 @@ export function activePanel(client: DatabaseClient, eventId: string, locale: Loc
       )
       .get()
   );
+}
+
+type PanelRow = typeof discordPanels.$inferSelect;
+
+/** Jump link to a posted panel message. */
+export function panelJumpUrl(panel: Pick<PanelRow, 'guildId' | 'channelId' | 'messageId'>): string {
+  return `https://discord.com/channels/${panel.guildId}/${panel.channelId}/${panel.messageId}`;
+}
+
+/**
+ * The live panel participants should be sent to: in the event's current server only (panels left
+ * behind in a previous server are no longer maintained), preferring the given language and
+ * otherwise the oldest remaining panel. Undefined when nothing is posted.
+ */
+export function findEventPanel(
+  tx: DatabaseTransaction,
+  eventId: string,
+  guildId: string | null | undefined,
+  locale?: Locale
+): PanelRow | undefined {
+  if (!guildId) return undefined;
+  const panels = tx
+    .select()
+    .from(discordPanels)
+    .where(
+      and(
+        eq(discordPanels.eventId, eventId),
+        eq(discordPanels.guildId, guildId),
+        isNull(discordPanels.deletedAt)
+      )
+    )
+    .orderBy(asc(discordPanels.createdAt))
+    .all();
+  return panels.find((panel) => panel.locale === locale) ?? panels[0];
 }

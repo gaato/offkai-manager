@@ -734,9 +734,11 @@
                                   </button>
                                 </form>
                               {/if}
-                              {#if request.methodLabel === t('payments.default_method.card.label')}
+                              {#if request.checkoutOpenUntil}
                                 <p class="max-w-56">
-                                  {t('payments.coming_with_settlement')}
+                                  {t('payments.checkout_open_until', {
+                                    time: request.checkoutOpenUntil
+                                  })}
                                 </p>
                               {/if}
                             </div>

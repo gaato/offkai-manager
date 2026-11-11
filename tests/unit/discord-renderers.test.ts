@@ -421,6 +421,35 @@ it.each(['ja', 'en'] as const)(
   }
 );
 
+it.each(['ja', 'en'] as const)(
+  'offers a pay button on the panel only while payment is accepted in %s',
+  (locale) => {
+    const paid = { ...event, paymentRequirement: 'pay_later' as const, priceMinor: 5000n };
+    const counts = { confirmed: 1, now, publicBaseUrl: 'https://example.test' };
+    const buttons = (panel: ReturnType<typeof renderPanel>) =>
+      JSON.stringify(panel)
+        .match(/"custom_id":"om1:[a-z_]+/g)
+        ?.map((id) => id.split(':')[2]) ?? [];
+    const open = renderPanel(paid, { ...counts, paymentOpen: true }, locale);
+    expect(buttons(open)).toEqual(['join', 'pay', 'status', 'cancel']);
+    expect(JSON.stringify(open)).toContain(translator(locale)('panel.pay'));
+    // Join, pay, status, cancel and the disclosure link fit Discord's five-button row.
+    const row = (
+      open.components![0] as { components: { type: number; components?: unknown[] }[] }
+    ).components.find((component) => component.type === 1)!;
+    expect(row.components).toHaveLength(5);
+    expect(buttons(renderPanel(paid, { ...counts, paymentOpen: false }, locale))).not.toContain(
+      'pay'
+    );
+    expect(
+      buttons(renderPanel({ ...paid, cancelledAt: now }, { ...counts, paymentOpen: true }, locale))
+    ).not.toContain('pay');
+    expect(buttons(renderPanel(event, { ...counts, paymentOpen: true }, locale))).not.toContain(
+      'pay'
+    );
+  }
+);
+
 it.each(['ja', 'en'] as const)('links paid panels to the organizer disclosure in %s', (locale) => {
   const panel = renderPanel(
     { ...event, paymentRequirement: 'pay_later', priceMinor: 5000n },
